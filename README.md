@@ -2,7 +2,7 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: phase 1 of the demo slice. A working core with tests. No web UI, no real-model run, no real reports yet.
+Status: phase 2 of the demo slice. Working core, an evaluation harness, and a library of five real public reports. No web UI and no real-model run yet.
 
 ## How an answer is made
 
@@ -13,19 +13,52 @@ Status: phase 1 of the demo slice. A working core with tests. No web UI, no real
 5. **Retry once** with the failure reasons. If nothing survives, the answer is "I could not find this in the selected library", with the closest passages.
 6. **Audit.** Every question, outcome and citation is logged.
 
+## The library and the question set
+
+Five editions of the World Bank Malaysia Economic Monitor (June 2015, October 2023, April 2024, October 2025, April 2026), about 490 pages, downloaded from the World Bank site. They are public documents. The PDFs are not committed (`data/` is ignored). Check each edition's licence before redistributing anything.
+
+`evals/questions.json` holds 22 questions: 12 single-fact, 3 that need two reports, and 7 the library cannot answer. Every answerable question is tied to an anchor sentence that was read in the report. Every unanswerable one was checked: the asked-for fact is not in the library. `python -m ra eval` first checks that every anchor is still found.
+
+Scoring has four outcomes: correct, timid (refused a question it could answer), correct refusal, and wrong-and-confident (answered when it should not, or with the wrong fact, or from the wrong report or page). The target for wrong-and-confident is zero.
+
+```
+uv run --python 3.14 python -m ra --db data/ra.db eval --llm extractive|threshold|claude
+```
+
+## Results so far
+
+Retrieval, 12 passages per question:
+
+| Question type | Right page in the results |
+|---|---|
+| Single report, 12 questions | 12 of 12 |
+| Two reports, 3 questions | 0 of 3 get both pages |
+
+Two things made the difference: reading PDFs in reading order, because layout mode interleaves two-column pages and breaks quotes, and treating "the April 2024 monitor" in a question as a date filter. The cross-report misses need a model to rewrite a comparison into one query per report. That is phase 3. I did not tune further on these 22 questions, because that would overfit.
+
+Baselines with no model, as a floor:
+
+| | Correct | Timid | Correct refusal | Wrong and confident |
+|---|---|---|---|---|
+| extractive: quote the best sentence | 1 of 15 | 0 | 0 of 7 | 21 |
+| threshold: refuse if few question words match | 0 of 15 | 9 | 4 of 7 | 9 |
+
+No model-free approach comes close. The gate cannot catch an answer that is real but irrelevant, so a model has to judge relevance and refuse. The real-model result is not in yet.
+
 ## Run the tests
 
 ```
 uv run --python 3.14 --with pytest pytest -q
 ```
 
-Needs `pdftotext` and `pdfinfo` (poppler). 17 tests. Five rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry.
+Needs `pdftotext` and `pdfinfo` (poppler). 31 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, and four scoring rules.
 
 ## Limits, stated plainly
 
-- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss.
+- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss. Comparisons across reports miss one side today.
 - No OCR. Scanned pages are flagged, not read.
 - The gate checks that a quote is on the page and that numbers match. It does not check that the claim means what the quote means. A reviewer can still disagree with a claim that passes.
 - Numbers written as words are not checked.
 - The Claude adapter (`ra/llm.py`) is tested with a fake client only. It has not been run against the real API.
-- Tests use synthetic one-page PDFs. Nothing has been run on real research reports yet.
+- Unit tests use small synthetic PDFs. The 22-question set is small, so a score on it is a signal, not a measurement of production quality.
+- Everything so far is World Bank economic reports. The client's own research library may differ in layout, language and tables.

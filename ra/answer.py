@@ -31,7 +31,7 @@ def _verify(con, claims, allowed):
     return ok, bad
 
 
-def ask(con, llm, user, question, k=6):
+def ask(con, llm, user, question, k=12):
     """Retrieve, draft, check every claim, retry once on failures, otherwise say not found."""
     passages = retrieve(con, user, question, k)
     allowed = {(p.doc_id, p.page) for p in passages}

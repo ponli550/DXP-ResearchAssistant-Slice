@@ -20,6 +20,11 @@ def main(argv=None):
     q = sub.add_parser("ask")
     q.add_argument("user")
     q.add_argument("question")
+    e = sub.add_parser("eval")
+    e.add_argument("--questions", default="evals/questions.json")
+    e.add_argument("--llm", choices=["extractive", "threshold", "claude"], default="extractive")
+    e.add_argument("--user", default="alice")
+    e.add_argument("--out")
     args = ap.parse_args(argv)
     con = connect(args.db)
     if args.cmd == "ingest":
@@ -30,6 +35,28 @@ def main(argv=None):
     elif args.cmd == "grant":
         con.execute("INSERT OR IGNORE INTO grants(user, library_id) VALUES (?,?)", (args.user, args.library))
         con.commit()
+    elif args.cmd == "eval":
+        import json
+
+        from .baselines import Extractive, Threshold
+        from .evalset import check_questions, load, report, score
+
+        qs = load(args.questions)
+        problems = check_questions(con, qs)
+        if problems:
+            print("\n".join(problems))
+            return 1
+        if args.llm == "claude":
+            from .llm import ClaudeLLM
+
+            llm = ClaudeLLM()
+        else:
+            llm = Extractive() if args.llm == "extractive" else Threshold()
+        res = score(con, llm, qs, args.user)
+        print(report(res, args.llm))
+        if args.out:
+            with open(args.out, "w") as f:
+                json.dump(res, f, indent=2)
     else:
         from .llm import ClaudeLLM
 

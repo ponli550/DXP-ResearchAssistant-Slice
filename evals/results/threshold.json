@@ -1,0 +1,266 @@
+{
+  "questions": 22,
+  "answerable": 15,
+  "unanswerable": 7,
+  "retrieval_hit_rate": 0.8,
+  "correct": 0,
+  "timid": 9,
+  "correct_refusal": 4,
+  "wrong_and_confident": 9,
+  "claims_drafted": 9,
+  "claims_rejected_by_gate": 0,
+  "rows": [
+    {
+      "id": "A01",
+      "q": "What GDP growth did the World Bank project for Malaysia in 2024 in the April 2024 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "Washington, DC: The World Bank. 94 MALAYSIA ECONOMIC MONITOR | APRIL 2024",
+          3,
+          96
+        ]
+      ]
+    },
+    {
+      "id": "A02",
+      "q": "What was Malaysia's full-year GDP growth in 2025, according to the April 2026 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A03",
+      "q": "What GDP growth is projected for Malaysia in 2026?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "balance, GDP growth, and interest rates 45, the debt ratio is projected to reach 67.6 percent by 2030.",
+          5,
+          48
+        ]
+      ]
+    },
+    {
+      "id": "A04",
+      "q": "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A05",
+      "q": "What did the October 2023 monitor forecast for Malaysia's GDP growth in 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia\u2019s economy is expected to expand at a more moderate pace in 2023 and 2024 Malaysia\u2019s GDP growth is forecast to moderate in 2023 and 2024 in the face of slowing external demand (Figure 64).",
+          2,
+          61
+        ]
+      ]
+    },
+    {
+      "id": "A06",
+      "q": "What share of social assistance transfers goes to the B40 households?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A07",
+      "q": "How fast did Malaysia's GDP grow in the second quarter of 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A08",
+      "q": "How much did Malaysia's economy grow in the first half of 2025?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A09",
+      "q": "What was Malaysia's real GDP growth in the fourth quarter of 2025?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A10",
+      "q": "What growth did the October 2025 monitor give for Malaysia in 2024?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A11",
+      "q": "What did the April 2024 monitor give as Malaysia's GDP growth in 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "A policy-induced upside shock to inflation, weaker real disposable income growth, and 62 Recent World Bank staff estimates suggests that a 1 percentage point decline in GDP growth of the G7 economies and China could lower Malaysia\u2019s growth by 1 and 0.7 percentage point, respectively. (Malaysia Economic Monitor, February 2023) 60 MALAYSIA ECONOMIC MONITOR | APRIL 2024",
+          3,
+          62
+        ]
+      ]
+    },
+    {
+      "id": "A12",
+      "q": "What forecast did the October 2023 monitor give for Malaysia's growth in 2024?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia\u2019s economy is expected to expand at a more moderate pace in 2023 and 2024 Malaysia\u2019s GDP growth is forecast to moderate in 2023 and 2024 in the face of slowing external demand (Figure 64).",
+          2,
+          61
+        ]
+      ]
+    },
+    {
+      "id": "C01",
+      "q": "How did the view of Malaysia's 2025 growth change between the October 2025 and April 2026 monitors?",
+      "answerable": true,
+      "retrieval_hit": false,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "C02",
+      "q": "Compare the 2024 growth projection in the October 2023 monitor with the April 2024 monitor.",
+      "answerable": true,
+      "retrieval_hit": false,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "63 See World Bank (2023) \u201cRaising the Tide, Lifting All Boats\u201d Malaysia Economic Monitor (October), World Bank, Washington, DC. (https://documents1.worldbank. org/curated/en/099100623063032359/pdf/P5008500d5060903a093a202e1acb060174.pdf) MALAYSIA ECONOMIC MONITOR | APRIL 2024 61",
+          3,
+          63
+        ]
+      ]
+    },
+    {
+      "id": "C03",
+      "q": "How did Malaysia's quarterly growth compare in the second quarter of 2023 and the fourth quarter of 2025?",
+      "answerable": true,
+      "retrieval_hit": false,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U01",
+      "q": "What growth does the World Bank forecast for Malaysia in 2031?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U02",
+      "q": "What does the monitor say about cryptocurrency regulation in Malaysia?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U03",
+      "q": "What was the average football league attendance in Malaysia in 2025?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U04",
+      "q": "What did the June 2019 monitor forecast for Malaysia's growth in 2020?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "Advanced Economies 2025f 2020 2024f 2019 2023e 2018 World 2025f 2017 2024f 2016 2023e 2015 0 Private Consumption Public Consumption Latest Estimates (January 2024) GFCF Change in Inventory Previous Estimates (June 2023) Net Exports MALAYSIA ECONOMIC MONITOR | APRIL 2024 Real GDP,y/y",
+          3,
+          22
+        ]
+      ]
+    },
+    {
+      "id": "U05",
+      "q": "How many electric vehicles were sold in Malaysia in 2025?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U06",
+      "q": "Who is the chief executive officer of PETRONAS?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "The new agency would be able to establish a professional, dedicated unit, with dedicated Chief Executive Officer, to perform the strategic planning functions as described, and where traditional city units have neither the requisite experience nor the legal jurisdiction to do so.",
+          1,
+          73
+        ]
+      ]
+    },
+    {
+      "id": "U07",
+      "q": "What will Singapore's minimum wage be in 2029?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "wrong_and_confident",
+      "attempts": 1,
+      "answer": [
+        [
+          "In Singapore, the wage requirements for some occupations up until the year 2029 have been published.",
+          2,
+          43
+        ]
+      ]
+    }
+  ]
+}

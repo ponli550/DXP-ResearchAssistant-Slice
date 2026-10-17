@@ -168,3 +168,29 @@ def test_long_block_without_blank_lines_is_split():
     block = "\n".join(f"line {i} " + "word " * 12 for i in range(60))
     parts = split_passages(block)
     assert len(parts) > 3 and all(len(p) < 1800 for p in parts)
+
+
+def test_named_edition_narrows_search_and_each_edition_gets_slots(db, tmp_path):
+    from ra.retrieve import named_documents
+    from .pdfmaker import make_pdf
+
+    a = make_pdf(tmp_path / "a.pdf", [["Growth is projected at 4.3 percent in 2024.", "Palm oil output was steady."]])
+    b = make_pdf(tmp_path / "b.pdf", [["Growth is projected at 5.1 percent in 2025.", "Palm oil output was steady."]])
+    ingest_pdf(db, "public", "Monitor April 2024", a)
+    ingest_pdf(db, "public", "Monitor October 2025", b)
+    ids = named_documents(db, "alice", "What did the April 2024 monitor say about growth?")
+    assert len(ids) == 1
+    hits = retrieve(db, "alice", "What did the April 2024 monitor say about growth?")
+    assert {h.title for h in hits} == {"Monitor April 2024"}
+    both = retrieve(db, "alice", "Compare growth in the April 2024 and October 2025 monitors")
+    assert {h.title for h in both} == {"Monitor April 2024", "Monitor October 2025"}
+
+
+def test_named_edition_never_widens_access(db, tmp_path):
+    from ra.retrieve import named_documents
+    from .pdfmaker import make_pdf
+
+    c = make_pdf(tmp_path / "c.pdf", [["Secret growth plan for the year."]])
+    ingest_pdf(db, "restricted", "Memo April 2024", c)
+    assert named_documents(db, "alice", "What does the April 2024 memo say?") == []
+    assert named_documents(db, "bob", "What does the April 2024 memo say?") != []
