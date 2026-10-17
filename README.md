@@ -2,7 +2,27 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: phase 3 of the demo slice. Working core, an evaluation harness, a library of five real public reports, and a small web demo. No real-model run yet.
+Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. The real-model run has not happened yet, so the number that matters, wrong-and-confident on the question set, is still unmeasured.
+
+| Part | State |
+|---|---|
+| Ingest, retrieval with access control, grounding gate, retry, audit | Built and tested |
+| Evaluation harness and 22-question set | Built. Baselines scored. Real model not run |
+| Web demo: canvas, steps, feedback, review request | Built. Camera maths, hover and drag not exercised |
+| Real-model run | Needs `ANTHROPIC_API_KEY` |
+| Cross-report comparisons | Retrieval misses one side. Needs a query rewrite |
+| Embeddings, OCR, production auth | Not started |
+
+## Repository map
+
+| Path | What it is |
+|---|---|
+| `ra/` | The package: ingest, retrieve, ground (the gate), answer (the loop and trace), llm, baselines, evalset, web |
+| `tests/` | 56 tests, with a small PDF writer so no fixtures are needed |
+| `evals/` | The question set and the baseline results |
+| `tools/` | A stand-in server and a jsdom check for the page. Test tooling, not product code |
+| `docs/` | How the canvas and steps views were derived from reference recordings |
+| `data/` | Ignored. The PDFs and the database |
 
 ## How an answer is made
 
@@ -34,7 +54,7 @@ Retrieval, 12 passages per question:
 | Single report, 12 questions | 12 of 12 |
 | Two reports, 3 questions | 0 of 3 get both pages |
 
-Two things made the difference: reading PDFs in reading order, because layout mode interleaves two-column pages and breaks quotes, and treating "the April 2024 monitor" in a question as a date filter. The cross-report misses need a model to rewrite a comparison into one query per report. That is phase 3. I did not tune further on these 22 questions, because that would overfit.
+Two things made the difference: reading PDFs in reading order, because layout mode interleaves two-column pages and breaks quotes, and treating "the April 2024 monitor" in a question as a date filter. The cross-report misses need a model to rewrite a comparison into one query per report. That is the next step. I did not tune further on these 22 questions, because that would overfit.
 
 Baselines with no model, as a floor:
 
@@ -65,6 +85,7 @@ Movement: the camera eases from node to node as they appear, a left list highlig
 
 A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 
+- The design of the canvas and steps views was derived from observing two reference recordings. Nothing was copied. The method, the limits and the labels deliberately left out are in [docs/DERIVING_THE_UI.md](docs/DERIVING_THE_UI.md).
 - The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.
 - With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
 - Labels say what happened, not "verified". The quote check proves the quote is on the page, not that the claim answers the question, and the page says so.
@@ -77,6 +98,13 @@ uv run --python 3.14 --with pytest pytest -q
 ```
 
 Needs `pdftotext` and `pdfinfo` (poppler). 56 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check, the no-auto-review rule, and the trace (libraries by grant, retry, empty search).
+
+## What comes next
+
+1. Run the real model on the 22 questions. If wrong-and-confident is not zero, fix that before anything else.
+2. Rewrite comparison questions into one query per named report, then re-measure the three cross-report questions without tuning on them.
+3. Add embeddings beside the keyword search, and measure whether they help.
+4. Only then think about authentication, hosting and the client's own reports.
 
 ## Limits, stated plainly
 
