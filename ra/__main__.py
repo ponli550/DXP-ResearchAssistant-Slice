@@ -20,6 +20,8 @@ def main(argv=None):
     q = sub.add_parser("ask")
     q.add_argument("user")
     q.add_argument("question")
+    w = sub.add_parser("serve")
+    w.add_argument("--port", type=int, default=8000)
     e = sub.add_parser("eval")
     e.add_argument("--questions", default="evals/questions.json")
     e.add_argument("--llm", choices=["extractive", "threshold", "claude"], default="extractive")
@@ -35,6 +37,12 @@ def main(argv=None):
     elif args.cmd == "grant":
         con.execute("INSERT OR IGNORE INTO grants(user, library_id) VALUES (?,?)", (args.user, args.library))
         con.commit()
+    elif args.cmd == "serve":
+        import uvicorn
+
+        from .web import create_app
+
+        uvicorn.run(create_app(args.db), host="127.0.0.1", port=args.port)
     elif args.cmd == "eval":
         import json
 

@@ -2,7 +2,7 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: phase 2 of the demo slice. Working core, an evaluation harness, and a library of five real public reports. No web UI and no real-model run yet.
+Status: phase 3 of the demo slice. Working core, an evaluation harness, a library of five real public reports, and a small web demo. No real-model run yet.
 
 ## How an answer is made
 
@@ -45,13 +45,26 @@ Baselines with no model, as a floor:
 
 No model-free approach comes close. The gate cannot catch an answer that is real but irrelevant, so a model has to judge relevance and refuse. The real-model result is not in yet.
 
+## The web demo
+
+```
+uv run --python 3.14 python -m ra --db data/ra.db serve --port 8765
+```
+
+Open http://127.0.0.1:8765. Pick a demo user, ask a question, and click a citation to see the page with the quote highlighted. A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
+
+- The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check.
+- With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
+- Under each answer it says the quote was found on the cited page. That confirms the source, not that the claim answers the question.
+- Tested in headless Chrome as two users on the real library: the restricted memo is invisible to alice and cited for bob, the quote is highlighted, and a 390 px phone width has no horizontal scroll. The Chrome checks were by hand, not in the test suite.
+
 ## Run the tests
 
 ```
 uv run --python 3.14 --with pytest pytest -q
 ```
 
-Needs `pdftotext` and `pdfinfo` (poppler). 31 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, and four scoring rules.
+Needs `pdftotext` and `pdfinfo` (poppler). 42 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, and four scoring rules.
 
 ## Limits, stated plainly
 
