@@ -16,6 +16,7 @@ class Result:
     rejected: list[tuple[Claim, str]] = field(default_factory=list)
     attempts: int = 0
     closest: list[Passage] = field(default_factory=list)
+    audit_id: int | None = None
 
 
 def _page_text(con, doc_id, page):
@@ -46,9 +47,10 @@ def ask(con, llm, user, question, k=12):
                 result.status, result.claims = "answered", ok
                 break
             feedback = [f"'{c.text}' was rejected: {why}" for c, why in bad] or ["no claims were returned"]
-    con.execute(
+    cur = con.execute(
         "INSERT INTO audit(user, question, status, cited) VALUES (?,?,?,?)",
         (user, question, result.status, ";".join(f"{c.doc_id}:{c.page}" for c in result.claims)),
     )
+    result.audit_id = cur.lastrowid
     con.commit()
     return result

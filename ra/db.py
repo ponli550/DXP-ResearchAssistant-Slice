@@ -29,6 +29,22 @@ CREATE TABLE IF NOT EXISTS grants (
     library_id TEXT NOT NULL REFERENCES libraries(id),
     PRIMARY KEY (user, library_id)
 );
+CREATE TABLE IF NOT EXISTS feedback (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    user TEXT NOT NULL,
+    audit_id INTEGER NOT NULL REFERENCES audit(id),
+    rating TEXT NOT NULL CHECK (rating IN ('up','down')),
+    reason TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS reviews (
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    user TEXT NOT NULL,
+    audit_id INTEGER NOT NULL REFERENCES audit(id),
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open'
+);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),

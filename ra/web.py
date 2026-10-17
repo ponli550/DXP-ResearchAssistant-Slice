@@ -1,6 +1,8 @@
-"""A small web demo over the same pipeline. Pick a user, ask a question, click a citation to see the page.
+"""A small web demo over the same pipeline.
 
-The login is a demo picker, not authentication. Access is still enforced in retrieval and on the page route.
+Pick a user, ask a question, and watch the answer built on a canvas: the question, the sources found, the quote
+check on every drafted claim, the answer, and a human-gated next step. The login is a demo picker, not
+authentication. Access is still enforced in retrieval and on the page route.
 """
 import os
 import re
@@ -28,6 +30,19 @@ class AskBody(BaseModel):
     question: str
 
 
+class FeedbackBody(BaseModel):
+    user: str
+    audit_id: int
+    rating: str
+    reason: str = ""
+
+
+class ReviewBody(BaseModel):
+    user: str
+    audit_id: int
+    note: str = ""
+
+
 def quote_span(text, quote):
     """Offsets of the quote inside the page text, ignoring differences in whitespace and case. None if not found."""
     words = quote.split()
@@ -46,6 +61,10 @@ def create_app(db_path, llm_factory=default_llm):
 
     def allowed_libraries(con, user):
         return [r["library_id"] for r in con.execute("SELECT library_id FROM grants WHERE user=?", (user,))]
+
+    def own_audit(con, user, audit_id):
+        if not con.execute("SELECT 1 FROM audit WHERE id=? AND user=?", (audit_id, user)).fetchone():
+            raise HTTPException(403, "That answer does not belong to this user.")
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -77,13 +96,39 @@ def create_app(db_path, llm_factory=default_llm):
         res = ask(con, llm, body.user, question)
         titles = {r["id"]: r["title"] for r in con.execute("SELECT id, title FROM documents")}
         return {
+            "audit_id": res.audit_id,
             "status": res.status,
             "model": model_name,
             "attempts": res.attempts,
+            "retrieved": [{"doc_id": p.doc_id, "title": p.title, "page": p.page, "text": p.text[:700]} for p in res.closest],
             "claims": [{"text": c.text, "doc_id": c.doc_id, "title": titles[c.doc_id], "page": c.page, "quote": c.quote} for c in res.claims],
             "rejected": len(res.rejected),
+            "rejected_claims": [
+                {"text": c.text, "doc_id": c.doc_id, "title": titles.get(c.doc_id, "unknown document"), "page": c.page, "quote": c.quote, "reason": why}
+                for c, why in res.rejected
+            ],
             "closest": [{"title": p.title, "doc_id": p.doc_id, "page": p.page} for p in res.closest[:3]],
         }
+
+    @app.post("/api/feedback")
+    def feedback(body: FeedbackBody):
+        if body.rating not in ("up", "down") or len(body.reason) > 300:
+            raise HTTPException(400, "Rating must be up or down, reason up to 300 characters.")
+        con = db()
+        own_audit(con, body.user, body.audit_id)
+        cur = con.execute("INSERT INTO feedback(user, audit_id, rating, reason) VALUES (?,?,?,?)", (body.user, body.audit_id, body.rating, body.reason.strip()))
+        con.commit()
+        return {"id": cur.lastrowid}
+
+    @app.post("/api/review")
+    def review(body: ReviewBody):
+        if len(body.note) > 500:
+            raise HTTPException(400, "Note up to 500 characters.")
+        con = db()
+        own_audit(con, body.user, body.audit_id)
+        cur = con.execute("INSERT INTO reviews(user, audit_id, note) VALUES (?,?,?)", (body.user, body.audit_id, body.note.strip()))
+        con.commit()
+        return {"id": cur.lastrowid, "status": "open"}
 
     @app.get("/api/page")
     def page(user: str, doc_id: int, p: int, quote: str = ""):
@@ -106,66 +151,140 @@ def create_app(db_path, llm_factory=default_llm):
     return app
 
 
-INDEX_HTML = """<!doctype html>
+INDEX_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Research assistant</title>
 <style>
-:root{color-scheme:light dark;--bg:#f7f6f2;--fg:#1d2327;--muted:#5f6b73;--card:#fff;--line:#d9d6cc;--accent:#0b5c6b;--warn:#8a4b00;--warnbg:#fff3e0;--mark:#ffe58a}
-@media (prefers-color-scheme:dark){:root{--bg:#14181b;--fg:#e8ecee;--muted:#98a4ab;--card:#1d2327;--line:#323a3f;--accent:#5fc4d6;--warn:#ffb866;--warnbg:#3a2a12;--mark:#6b5b00}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,sans-serif}
-main{max-width:1100px;margin:0 auto;padding:1rem 16px 3rem;display:grid;gap:1rem;grid-template-columns:minmax(0,1fr)}
-@media(min-width:900px){main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}header,.banner{grid-column:1/-1}}
-header{display:flex;flex-wrap:wrap;gap:.75rem 1.5rem;align-items:end;justify-content:space-between}
-h1{font-size:1.4rem;margin:0}.sub{color:var(--muted);margin:0;font-size:.9rem}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem}
-.banner{background:var(--warnbg);color:var(--warn);border-radius:8px;padding:.6rem .9rem;font-size:.9rem}
-label{font-size:.85rem;color:var(--muted);display:block;margin-bottom:.25rem}
-select,textarea,button{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.5rem .7rem}
-textarea{width:100%;min-height:4.5rem;resize:vertical}
-button.primary{background:var(--accent);color:#fff;border-color:var(--accent);cursor:pointer}
-button:disabled{opacity:.6;cursor:wait}
-.row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.6rem}
-.chip{border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:999px;padding:.05rem .55rem;font-size:.85rem;cursor:pointer}
-ol{padding-left:1.2rem;margin:.5rem 0}li{margin:.5rem 0}
-.refuse{font-weight:600}.muted{color:var(--muted);font-size:.9rem}
-pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;max-height:60vh;overflow:auto}
-mark{background:var(--mark);color:inherit;border-radius:3px}
-ul.docs{margin:.25rem 0;padding-left:1.1rem;font-size:.9rem}
-</style></head><body><main>
-<header><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
-<div><label for="user">Demo user (not real login)</label><select id="user"></select></div></header>
+:root{color-scheme:light dark;--bg:#f4f3ee;--fg:#1d2327;--muted:#5f6b73;--card:#fff;--line:#d3d0c5;--accent:#0b5c6b;--accent2:#e3f1f4;--ok:#1f6b3a;--okbg:#e6f4ea;--bad:#9b2c2c;--badbg:#fdecec;--warn:#8a4b00;--warnbg:#fff3e0;--mark:#ffe58a;--grid:#e4e1d6;--answer:#e8ecff;--answerline:#9aa8e8}
+@media (prefers-color-scheme:dark){:root{--bg:#14181b;--fg:#e8ecee;--muted:#98a4ab;--card:#1d2327;--line:#323a3f;--accent:#5fc4d6;--accent2:#173238;--ok:#7fd49a;--okbg:#17301f;--bad:#ff9d9d;--badbg:#3a1b1b;--warn:#ffb866;--warnbg:#3a2a12;--mark:#6b5b00;--grid:#1f2529;--answer:#1d2340;--answerline:#4a5aa8}}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;display:flex;flex-direction:column}
+.top{padding:.7rem 16px;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+h1{font-size:1.15rem;margin:0}.sub{color:var(--muted);margin:0;font-size:.82rem}
+.banner{background:var(--warnbg);color:var(--warn);padding:.45rem 16px;font-size:.85rem}
+.askbar{display:flex;gap:.5rem;padding:.6rem 16px;border-bottom:1px solid var(--line);align-items:flex-start}
+textarea,select,button{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.45rem .65rem}
+textarea{flex:1;min-width:0;height:2.7rem;resize:vertical}label{font-size:.75rem;color:var(--muted);display:block}
+button{cursor:pointer}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.6;cursor:wait}
+#stage{position:relative;flex:1;min-height:420px;overflow:hidden;touch-action:none;cursor:grab;background-color:var(--bg);background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:22px 22px}
+#stage.drag{cursor:grabbing}
+#canvas{position:absolute;left:0;top:0;width:min(700px,calc(100% - 24px));transform-origin:0 0;display:flex;flex-direction:column;gap:84px;padding:12px 0 60px}
+#canvas.moving{transition:transform .75s cubic-bezier(.22,1,.36,1)}
+.node{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease}
+.node.in{opacity:1;transform:none}
+.node:not(:last-child)::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:84px;background:var(--line)}
+.tag{display:inline-block;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;font-weight:700;padding:.1rem .45rem;border-radius:5px;background:var(--accent2);color:var(--accent);margin-bottom:.4rem}
+.node h2{font-size:1.02rem;margin:.1rem 0 .5rem}.node.answer{background:var(--answer);border-color:var(--answerline)}
+.muted{color:var(--muted);font-size:.85rem}
+.src{border:1px solid var(--line);border-radius:9px;padding:.5rem .65rem;margin:.4rem 0;background:var(--card);cursor:pointer;transition:border-color .2s,box-shadow .2s}
+.src:hover,.src:focus-visible,.src.open{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2);outline:none}
+.src .more{max-height:0;overflow:hidden;transition:max-height .4s ease}.src:hover .more,.src:focus-visible .more,.src.open .more{max-height:420px}
+.src .more p{margin:.5rem 0;font-size:.85rem;white-space:pre-wrap}
+.snip{color:var(--muted);font-size:.85rem}
+.row{display:flex;gap:.6rem;align-items:flex-start;margin:.5rem 0}.badge{flex:none;font-size:.72rem;font-weight:700;padding:.1rem .45rem;border-radius:5px}
+.badge.ok{background:var(--okbg);color:var(--ok)}.badge.bad{background:var(--badbg);color:var(--bad)}
+.chip{border:1px solid var(--accent);color:var(--accent);background:transparent;border-radius:999px;padding:.05rem .55rem;font-size:.82rem}
+details summary{cursor:pointer;color:var(--accent);font-size:.85rem}blockquote{margin:.4rem 0;padding:.3rem .7rem;border-left:3px solid var(--accent);color:var(--muted);font-size:.88rem}
+ol{padding-left:1.2rem;margin:.4rem 0}li{margin:.6rem 0}
+.fb{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.7rem}.fb input{flex:1;min-width:8rem;font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:.35rem .6rem}
+#spy{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px;z-index:3;touch-action:auto}
+#spy button{border:0;background:transparent;text-align:left;padding:.3rem .6rem;font-size:.82rem;color:var(--muted);border-radius:7px}
+#spy button[aria-current=true]{background:var(--accent2);color:var(--accent);font-weight:700}
+#zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:4px;z-index:3;touch-action:auto}#zoom button{width:2.2rem;padding:.3rem 0;text-align:center}
+#pane{position:fixed;top:0;right:0;height:100%;width:min(520px,100%);background:var(--card);border-left:1px solid var(--line);z-index:10;transform:translateX(102%);transition:transform .5s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:.8rem 1rem}
+#pane.open{transform:none}#pane header{display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.5rem}
+pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;overflow:auto;flex:1}mark{background:var(--mark);color:inherit;border-radius:3px}
+@media (max-width:700px){#spy{flex-direction:row;flex-wrap:wrap;right:56px}}
+@media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}}
+</style></head><body>
+<div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
+<div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div>
 <div id="banner" class="banner" hidden></div>
-<section class="card"><label for="q">Your question</label><textarea id="q" maxlength="500" placeholder="For example: What GDP growth is projected for Malaysia in 2026?"></textarea>
-<div class="row"><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
-<div id="answer" aria-live="polite" style="margin-top:1rem"></div>
-<details style="margin-top:1rem"><summary class="muted">Libraries this user can search</summary><ul id="docs" class="docs"></ul></details></section>
-<section class="card"><div id="pagehead" class="muted">Click a citation to see the page and the quote, highlighted.</div><pre id="pagetext"></pre></section>
-</main><script>
+<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
+<div id="stage" aria-label="Answer canvas">
+<nav id="spy" aria-label="Sections"></nav>
+<div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
+<div id="canvas"></div></div>
+<aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><button id="pclose" aria-label="Close">Close</button></header><pre id="ptext"></pre></aside>
+<script>
 const $=id=>document.getElementById(id);
-const el=(t,props={},...kids)=>{const e=document.createElement(t);Object.assign(e,props);kids.forEach(k=>e.append(k));return e};
-let model="";
+const el=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Object.entries(p)){if(a==="class")e.className=v;else if(a in e)e[a]=v;else e.setAttribute(a,v)}k.flat().forEach(x=>e.append(x));return e};
+const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches||new URLSearchParams(location.search).get("reveal")==="0";  /* ?reveal=0 skips the staged reveal */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const stage=$("stage"),canvas=$("canvas");
+let view={x:0,y:0,s:1},nodes=[],lastAudit=null;
 async function api(path,opts){const r=await fetch(path,opts);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
-async function loadUsers(){const j=await api("/api/users");model=j.model;
-  j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
-  if(model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant.";}
-  await loadDocs()}
-async function loadDocs(){const j=await api("/api/library?user="+encodeURIComponent($("user").value));$("docs").replaceChildren(...j.documents.map(d=>el("li",{textContent:d.title+" ("+d.pages+" pages, "+d.library+")"})));}
-async function showPage(c){try{const u=new URLSearchParams({user:$("user").value,doc_id:c.doc_id,p:c.page,quote:c.quote||""});
-  const j=await api("/api/page?"+u);$("pagehead").textContent=j.title+", page "+j.page;const pre=$("pagetext");pre.replaceChildren();
+const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+/* camera */
+function apply(){canvas.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;spy()}
+function move(animate){canvas.classList.toggle("moving",animate&&!reduced);apply()}
+const fitScale=()=>Math.min(1,(stage.clientWidth-24)/canvas.offsetWidth);
+function focusNode(n){const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
+function overview(){const s=Math.min(fitScale(),(stage.clientHeight-24)/canvas.offsetHeight);view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=12;move(true)}
+function zoomAt(f,cx,cy){const ns=Math.min(2.5,Math.max(.2,view.s*f));view.x=cx-(cx-view.x)*(ns/view.s);view.y=cy-(cy-view.y)*(ns/view.s);view.s=ns;move(false)}
+function spy(){const cy=(stage.clientHeight/2-view.y)/view.s;let best=null,bd=1e9;nodes.forEach(n=>{const d=Math.abs(n.offsetTop+n.offsetHeight/2-cy);if(d<bd){bd=d;best=n}});
+  document.querySelectorAll("#spy button").forEach(b=>b.setAttribute("aria-current",String(!!best&&b.dataset.id===best.id)))}
+let drag=null;
+stage.addEventListener("pointerdown",e=>{if(e.target.closest("button,input,textarea,summary,.src,a"))return;drag={x:e.clientX,y:e.clientY};stage.classList.add("drag");stage.setPointerCapture(e.pointerId)});
+stage.addEventListener("pointermove",e=>{if(!drag)return;view.x+=e.clientX-drag.x;view.y+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};move(false)});
+const endDrag=()=>{drag=null;stage.classList.remove("drag")};stage.addEventListener("pointerup",endDrag);stage.addEventListener("pointercancel",endDrag);
+stage.addEventListener("wheel",e=>{e.preventDefault();const r=stage.getBoundingClientRect();if(e.ctrlKey||e.metaKey)zoomAt(e.deltaY<0?1.1:.9,e.clientX-r.left,e.clientY-r.top);else{view.x-=e.deltaX;view.y-=e.deltaY;move(false)}},{passive:false});
+$("zin").onclick=()=>zoomAt(1.2,stage.clientWidth/2,stage.clientHeight/2);$("zout").onclick=()=>zoomAt(1/1.2,stage.clientWidth/2,stage.clientHeight/2);$("zfit").onclick=overview;
+addEventListener("resize",()=>nodes.length&&spy());
+/* page pane */
+async function showPage(c){try{const u=new URLSearchParams({user:$("user").value,doc_id:c.doc_id,p:c.page,quote:c.quote||""});const j=await api("/api/page?"+u);
+  $("phead").textContent=j.title+", page "+j.page;const pre=$("ptext");pre.replaceChildren();$("pane").classList.add("open");
   if(j.span){pre.append(j.text.slice(0,j.span[0]),el("mark",{textContent:j.text.slice(j.span[0],j.span[1])}),j.text.slice(j.span[1]));const m=pre.querySelector("mark");pre.scrollTop=Math.max(0,m.offsetTop-pre.clientHeight/3)}else pre.textContent=j.text}
-  catch(e){$("pagehead").textContent=e.message;$("pagetext").textContent=""}}
-function chip(c){return el("button",{className:"chip",type:"button",textContent:c.title+", p. "+c.page,onclick:()=>showPage(c)})}
-async function ask(){const q=$("q").value.trim();if(!q)return;$("go").disabled=true;$("status").textContent="Searching and checking quotes...";$("answer").replaceChildren();
-  try{const j=await api("/api/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({user:$("user").value,question:q})});
-    if(j.status==="answered"){$("answer").append(el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c)))),el("div",{className:"muted",textContent:j.rejected?j.rejected+" drafted claim(s) were removed because their quote was not on the cited page.":"Each quote was found on the page it cites. That confirms the source, not that the claim answers your question."}));showPage(j.claims[0])}
-    else{$("answer").append(el("div",{className:"refuse",textContent:"I could not find this in the selected library."}));
-      if(j.closest.length){$("answer").append(el("div",{className:"muted",textContent:"Closest sources:"}),...j.closest.map(c=>el("div",{},chip(c))))}}
+  catch(e){$("phead").textContent=e.message;$("ptext").textContent="";$("pane").classList.add("open")}}
+$("pclose").onclick=()=>$("pane").classList.remove("open");
+/* nodes */
+const chip=(c,label)=>el("button",{class:"chip",type:"button",textContent:label||(c.title+", p. "+c.page),onclick:e=>{e.stopPropagation();showPage(c)}});
+function node(id,tag,title,cls,...kids){return el("section",{id,class:"node "+(cls||"")},el("span",{class:"tag",textContent:tag}),el("h2",{textContent:title}),...kids)}
+function srcCard(p){const more=el("div",{class:"more"},el("p",{textContent:p.text}),chip({doc_id:p.doc_id,page:p.page,quote:""},"Open page "+p.page));
+  const c=el("div",{class:"src",tabIndex:0,role:"button","aria-expanded":"false"},el("div",{},el("strong",{textContent:p.title}),el("span",{class:"muted",textContent:"  p. "+p.page})),el("div",{class:"snip",textContent:p.text.slice(0,140)+(p.text.length>140?"…":"")}),more);
+  c.onclick=()=>c.setAttribute("aria-expanded",String(c.classList.toggle("open")));c.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}};return c}
+function quoteDetails(c){return el("details",{},el("summary",{textContent:"Show the quote"}),el("blockquote",{textContent:c.quote}))}
+function checkRow(c,reason){const ok=!reason;return el("div",{class:"row"},el("span",{class:"badge "+(ok?"ok":"bad"),textContent:ok?"Quote on page "+c.page:"Removed"}),
+  el("div",{},el("div",{textContent:c.text}),el("div",{class:"muted",textContent:ok?c.title:reason+" ("+c.title+", p. "+c.page+")"}),quoteDetails(c)))}
+function feedbackBlock(j){const box=el("div",{class:"fb"});const msg=el("span",{class:"muted"});
+  const send=async(rating,reason)=>{try{await post("/api/feedback",{user:$("user").value,audit_id:j.audit_id,rating,reason});box.replaceChildren(el("span",{class:"muted",textContent:"Thanks, your feedback was recorded."}))}catch(e){msg.textContent=e.message}};
+  const up=el("button",{type:"button","aria-label":"Helpful",textContent:"👍 Helpful",onclick:()=>send("up","")});
+  const down=el("button",{type:"button","aria-label":"Not helpful",textContent:"👎 Not helpful",onclick:()=>{const inp=el("input",{placeholder:"What was wrong? (optional)",maxLength:300});const s=el("button",{type:"button",textContent:"Send",onclick:()=>send("down",inp.value)});box.replaceChildren(inp,s,msg);inp.focus()}});
+  box.append(up,down,msg);return box}
+function reviewBlock(j){const note=el("input",{placeholder:"Why should someone look at this? (optional)",maxLength:500});const out=el("div",{class:"muted"});
+  const btn=el("button",{type:"button",class:"primary",textContent:"Create review request",onclick:async()=>{btn.disabled=true;try{const r=await post("/api/review",{user:$("user").value,audit_id:j.audit_id,note:note.value});out.textContent="Review request #"+r.id+" recorded. Nobody has been notified automatically; this is a log entry for a person to pick up."}catch(e){out.textContent=e.message;btn.disabled=false}}});
+  return [el("p",{class:"muted",textContent:"The assistant never acts on its own. This only happens if you press the button."}),el("div",{class:"fb"},note,btn),out]}
+function build(j,q){const out=[];
+  out.push(node("n-q","Question","Your question","",el("p",{textContent:q}),el("p",{class:"muted",textContent:"Searched as "+$("user").value+", only in libraries this user may see."})));
+  out.push(node("n-src","Sources","Sources found ("+j.retrieved.length+")","",
+    el("p",{class:"muted",textContent:j.retrieved.length?"Hover or tap a source to read the passage. These are candidates, not yet answers.":"Nothing in the libraries this user can search matched the question."}),...j.retrieved.slice(0,6).map(srcCard),
+    j.retrieved.length>6?el("details",{},el("summary",{textContent:"Show "+(j.retrieved.length-6)+" more sources"}),...j.retrieved.slice(6).map(srcCard)):""));
+  const kept=j.claims.length,removed=j.rejected_claims.length;
+  out.push(node("n-chk","Checks","Quote check: "+kept+" kept, "+removed+" removed","",
+    el("p",{class:"muted",textContent:"A plain string check, no model. It confirms the quote is on the cited page and that every number in the claim is in the quote."+(j.attempts>1?" A second attempt was made after the first was rejected.":"")}),
+    ...j.rejected_claims.map(c=>checkRow(c,c.reason)),...j.claims.map(c=>checkRow(c,"")),
+    kept+removed===0?el("p",{textContent:j.retrieved.length?"The model returned no claims.":"No sources, so nothing was drafted."}):""));
+  const ans=j.status==="answered"
+    ?[el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c,c.title+", p. "+c.page),quoteDetails(c)))),
+      el("p",{class:"muted",textContent:"Each quote was found on the page it cites. That confirms the source, not that the claim answers your question."})]
+    :[el("p",{style:"font-weight:600",textContent:"I could not find this in the selected library."}),...(j.closest.length?[el("p",{class:"muted",textContent:"Closest sources:"}),el("div",{},...j.closest.map(c=>chip(c)))]:[])];
+  out.push(node("n-ans","Answer",j.status==="answered"?"Answer":"No answer","answer",...ans,feedbackBlock(j)));
+  out.push(node("n-next","Next step","Flag this answer for review","",...reviewBlock(j)));
+  return out}
+function placeholder(){canvas.replaceChildren(node("n-start","Start","Ask a question","in",el("p",{textContent:"The answer is built here step by step: the sources found, the quote check on every drafted claim, then the answer."}),el("p",{class:"muted",textContent:"Drag to move. Pinch or hold Ctrl and scroll to zoom. Use the list on the left to jump."})));
+  nodes=[canvas.firstChild];$("spy").replaceChildren();setTimeout(()=>focusNode(nodes[0]),0)}
+function buildNav(){$("spy").replaceChildren(...nodes.map(n=>el("button",{type:"button","data-id":n.id,textContent:n.querySelector(".tag").textContent,onclick:()=>focusNode(n)})))}
+async function ask(){const q=$("q").value.trim();if(!q)return;$("go").disabled=true;$("status").textContent="";
+  try{const j=await post("/api/ask",{user:$("user").value,question:q});lastAudit=j.audit_id;nodes=build(j,q);canvas.replaceChildren(...nodes);buildNav();
+    const last=nodes[nodes.length-1],answer=nodes[nodes.length-2];
+    for(const n of nodes.slice(0,-1)){n.classList.add("in");focusNode(n);await sleep(reduced?0:900)}
+    last.classList.add("in");focusNode(answer);  /* the next step appears quietly; the camera stays on the answer */
     $("status").textContent="Model: "+j.model}
   catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
-$("go").onclick=ask;$("user").onchange=loadDocs;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
-loadUsers().then(()=>{const u=new URLSearchParams(location.search);
-  if([...$("user").options].some(o=>o.value===u.get("user"))){$("user").value=u.get("user");loadDocs()}
-  if(u.get("q"))$("q").value=u.get("q").slice(0,500);
-  if(u.get("run")==="1")ask()});
+/* page setup */
+async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
+  if(j.model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant."}}
+$("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
+loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");
+  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask()});
 </script></body></html>
 """

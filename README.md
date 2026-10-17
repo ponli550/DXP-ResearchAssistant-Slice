@@ -51,12 +51,22 @@ No model-free approach comes close. The gate cannot catch an answer that is real
 uv run --python 3.14 python -m ra --db data/ra.db serve --port 8765
 ```
 
-Open http://127.0.0.1:8765. Pick a demo user, ask a question, and click a citation to see the page with the quote highlighted. A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
+Open http://127.0.0.1:8765. Pick a demo user and ask a question. The answer is built on a canvas, one node at a time:
 
-- The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check.
+1. **Question.** What was asked, and as whom.
+2. **Sources.** The passages that were found. Hover or tap one to read it in place, or open the full page.
+3. **Checks.** Every drafted claim, with a green "Quote on page N" or a red "Removed" and the reason. Plain string check, no model.
+4. **Answer.** The kept claims, each with a citation chip and a "Show the quote" link. Click a chip to open the page with the quote highlighted. Thumbs up or down, with a reason for down.
+5. **Next step.** "Create review request" writes a log entry for a person. Nothing happens unless the button is pressed.
+
+Movement: the camera eases from node to node as they appear, a left list highlights where you are and jumps on click, and there are zoom buttons and a show-everything button. Drag to pan, Ctrl or pinch to zoom. `?reveal=0` skips the staged reveal, and reduced-motion settings are respected. The staged reveal is presentation only: the server returns the whole result at once, and every node shows real data from that result.
+
+A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
+
+- The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.
 - With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
-- Under each answer it says the quote was found on the cited page. That confirms the source, not that the claim answers the question.
-- Tested in headless Chrome as two users on the real library: the restricted memo is invisible to alice and cited for bob, the quote is highlighted, and a 390 px phone width has no horizontal scroll. The Chrome checks were by hand, not in the test suite.
+- Labels say what happened, not "verified". The quote check proves the quote is on the page, not that the claim answers the question, and the page says so.
+- Tested in headless Chrome on the real library as two users, with a stand-in model that first fabricates a quote and then quotes for real: the fabricated claim shows as Removed, the camera ends on the answer, and a 390 px phone width is readable with no sideways scroll. Those browser checks were by hand, not part of the test suite. Hover-expand and drag were not exercised.
 
 ## Run the tests
 
@@ -64,7 +74,7 @@ Open http://127.0.0.1:8765. Pick a demo user, ask a question, and click a citati
 uv run --python 3.14 --with pytest pytest -q
 ```
 
-Needs `pdftotext` and `pdfinfo` (poppler). 42 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, and four scoring rules.
+Needs `pdftotext` and `pdfinfo` (poppler). 49 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check and the no-auto-review rule.
 
 ## Limits, stated plainly
 

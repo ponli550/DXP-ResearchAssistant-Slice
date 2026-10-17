@@ -102,3 +102,65 @@ def test_quote_span_ignores_case_and_whitespace_and_misses_cleanly():
 
 def test_page_never_builds_html_from_data():
     assert "innerHTML" not in INDEX_HTML and "textContent" in INDEX_HTML
+
+
+# canvas data, feedback and the human-gated next step
+def ask_as(client, llm, doc, user="alice", responses=None):
+    llm.responses = responses if responses is not None else [[good(doc)]]
+    return client.post("/api/ask", json={"user": user, "question": "How did palm oil output change?"}).json()
+
+
+def test_ask_returns_everything_the_canvas_shows(web):
+    client, llm, doc, *_ = web
+    fake = Claim("Output doubled.", doc, 1, "Palm oil output doubled in 2024")
+    j = ask_as(client, llm, doc, responses=[[fake], [good(doc)]])
+    assert j["audit_id"] and j["attempts"] == 2
+    assert j["retrieved"] and j["retrieved"][0]["title"] == "Sector Outlook 2025"
+    assert j["rejected_claims"][0]["reason"] == "quote is not on the cited page"
+    assert len(j["claims"]) == 1
+
+
+def test_retrieved_sources_never_include_a_library_the_user_cannot_see(web):
+    client, llm, doc, *_ = web
+    j = client.post("/api/ask", json={"user": "alice", "question": "What merger did the board approve with Orion Holdings?"}).json()
+    assert all(p["title"] != "Strategy Memo" for p in j["retrieved"])
+    j2 = client.post("/api/ask", json={"user": "bob", "question": "What merger did the board approve with Orion Holdings?"}).json()
+    assert any(p["title"] == "Strategy Memo" for p in j2["retrieved"])
+
+
+def test_feedback_is_recorded_with_its_reason(web):
+    client, llm, doc, _, path = web
+    j = ask_as(client, llm, doc)
+    r = client.post("/api/feedback", json={"user": "alice", "audit_id": j["audit_id"], "rating": "down", "reason": "wrong year"})
+    assert r.status_code == 200
+    row = connect(path).execute("SELECT user, rating, reason FROM feedback").fetchone()
+    assert (row["user"], row["rating"], row["reason"]) == ("alice", "down", "wrong year")
+
+
+def test_feedback_rejects_bad_rating_and_overlong_reason(web):
+    client, llm, doc, *_ = web
+    j = ask_as(client, llm, doc)
+    base = {"user": "alice", "audit_id": j["audit_id"]}
+    assert client.post("/api/feedback", json={**base, "rating": "meh"}).status_code == 400
+    assert client.post("/api/feedback", json={**base, "rating": "up", "reason": "x" * 301}).status_code == 400
+
+
+def test_a_user_cannot_rate_or_flag_someone_elses_answer(web):
+    client, llm, doc, *_ = web
+    j = ask_as(client, llm, doc, user="alice")
+    assert client.post("/api/feedback", json={"user": "bob", "audit_id": j["audit_id"], "rating": "up"}).status_code == 403
+    assert client.post("/api/review", json={"user": "bob", "audit_id": j["audit_id"]}).status_code == 403
+
+
+def test_review_request_is_only_a_logged_open_entry(web):
+    client, llm, doc, _, path = web
+    j = ask_as(client, llm, doc)
+    assert connect(path).execute("SELECT COUNT(*) FROM reviews").fetchone()[0] == 0  # nothing happens on its own
+    r = client.post("/api/review", json={"user": "alice", "audit_id": j["audit_id"], "note": "check the year"}).json()
+    row = connect(path).execute("SELECT status, note FROM reviews WHERE id=?", (r["id"],)).fetchone()
+    assert r["status"] == "open" and row["status"] == "open" and row["note"] == "check the year"
+
+
+def test_page_labels_say_what_was_checked_not_verified():
+    assert "VERIFIED" not in INDEX_HTML.upper().replace("UNVERIFIED", "")
+    assert "Quote on page" in INDEX_HTML and "innerHTML" not in INDEX_HTML
