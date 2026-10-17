@@ -14,12 +14,16 @@ def page_count(pdf_path):
 
 
 def extract_pages(pdf_path):
-    """Return a list of page texts, index 0 is page 1. Page numbers stay attached to the text."""
+    """Return a list of page texts, index 0 is page 1. Page numbers stay attached to the text.
+
+    Reading-order mode, not layout mode: layout mode interleaves the lines of two-column pages,
+    which would break any quote that runs across a line.
+    """
     n = page_count(pdf_path)
     pages = []
     for p in range(1, n + 1):
         out = subprocess.run(
-            ["pdftotext", "-layout", "-f", str(p), "-l", str(p), str(pdf_path), "-"],
+            ["pdftotext", "-f", str(p), "-l", str(p), str(pdf_path), "-"],
             capture_output=True, text=True, check=True,
         ).stdout
         pages.append(out)
@@ -28,8 +32,22 @@ def extract_pages(pdf_path):
 
 def split_passages(page_text):
     """Split a page into passages along blank lines, merging short paragraphs up to a target size."""
-    paras = [re.sub(r"[ \t]+", " ", p).strip() for p in re.split(r"\n\s*\n", page_text)]
-    paras = [p for p in paras if p]
+    paras = []
+    for block in re.split(r"\n\s*\n", page_text):
+        block = re.sub(r"[ \t]+", " ", block).strip()
+        if len(block) <= TARGET_PASSAGE_CHARS * 1.5:
+            if block:
+                paras.append(block)
+            continue
+        cur = ""  # a long block without blank lines: cut it on line breaks
+        for line in block.split("\n"):
+            if cur and len(cur) + len(line) > TARGET_PASSAGE_CHARS:
+                paras.append(cur)
+                cur = line
+            else:
+                cur = f"{cur}\n{line}" if cur else line
+        if cur:
+            paras.append(cur)
     out, cur = [], ""
     for p in paras:
         if cur and len(cur) + len(p) > TARGET_PASSAGE_CHARS:

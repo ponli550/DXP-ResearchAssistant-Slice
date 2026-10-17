@@ -1,6 +1,9 @@
 import json
 
 from ra.answer import ask
+from ra.db import connect
+from ra.ingest import ingest_pdf, split_passages
+from .pdfmaker import make_pdf_positioned
 from ra.ground import Claim, check_claim
 from ra.llm import ClaudeLLM, ScriptedLLM, parse_claims
 from ra.retrieve import retrieve
@@ -145,3 +148,23 @@ def test_claude_adapter_builds_prompt_and_parses_reply(db):
     claims = llm.draft("q?", retrieve(db, "alice", "palm oil output"))
     assert claims and "ONLY the passages" in Client.messages.kw["system"]
     assert "doc_id=" in Client.messages.kw["messages"][0]["content"]
+
+
+# real-report lessons
+def test_two_column_page_keeps_a_sentence_that_runs_across_lines_contiguous(tmp_path):
+    left = [(50, 780 - 14 * i, t) for i, t in enumerate(["The reform will lower costs for households and", "small firms across the country over time."])]
+    right = [(320, 780 - 14 * i, t) for i, t in enumerate(["Exports rose 3.1 percent in the", "second half of the year."])]
+    pdf = make_pdf_positioned(tmp_path / "cols.pdf", left + right)
+    con = connect()
+    ingest_pdf(con, "lib", "Two columns", pdf)
+    page = con.execute("SELECT text FROM pages").fetchone()["text"]
+    quote = "The reform will lower costs for households and small firms across the country over time"
+    from ra.ground import normalise
+
+    assert normalise(quote) in normalise(page)
+
+
+def test_long_block_without_blank_lines_is_split():
+    block = "\n".join(f"line {i} " + "word " * 12 for i in range(60))
+    parts = split_passages(block)
+    assert len(parts) > 3 and all(len(p) < 1800 for p in parts)
