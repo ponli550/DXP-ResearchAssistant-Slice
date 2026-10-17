@@ -59,6 +59,8 @@ Open http://127.0.0.1:8765. Pick a demo user and ask a question. The answer is b
 4. **Answer.** The kept claims, each with a citation chip and a "Show the quote" link. Click a chip to open the page with the quote highlighted. Thumbs up or down, with a reason for down.
 5. **Next step.** "Create review request" writes a log entry for a person. Nothing happens unless the button is pressed.
 
+A second tab, **Investigation steps**, shows how the answer was found, as a log in the same order it happened: the search (which libraries, the exact query, any edition the question selected, how many passages in which documents), each model call, each quote check with the reasons for removals, a retry if there was one, and a conclusion. Every step says whether it was a **Model call** or **Plain code** and how long it took, and empty results are shown too ("No passage matched. Nothing was drafted."). Steps are one line each, expand on click, and "Expand 6 steps" opens them all. "Show how it was found" on any claim jumps to the exact source card in step 1. The steps never name a library the user cannot search. `?tab=steps&expand=1` opens it directly.
+
 Movement: the camera eases from node to node as they appear, a left list highlights where you are and jumps on click, and there are zoom buttons and a show-everything button. Drag to pan, Ctrl or pinch to zoom. `?reveal=0` skips the staged reveal, and reduced-motion settings are respected. The staged reveal is presentation only: the server returns the whole result at once, and every node shows real data from that result.
 
 A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
@@ -66,7 +68,7 @@ A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 - The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.
 - With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
 - Labels say what happened, not "verified". The quote check proves the quote is on the page, not that the claim answers the question, and the page says so.
-- Tested in headless Chrome on the real library as two users, with a stand-in model that first fabricates a quote and then quotes for real: the fabricated claim shows as Removed, the camera ends on the answer, and a 390 px phone width is readable with no sideways scroll. Those browser checks were by hand, not part of the test suite. Hover-expand and drag were not exercised.
+- Tested in headless Chrome on the real library as two users, with a stand-in model that first fabricates a quote and then quotes for real: the fabricated claim shows as Removed, the camera ends on the answer, and a 390 px phone width is readable with no sideways scroll. Those screenshots were checked by hand. The interactions (source cards, nav, Show how it was found, expand all, thumbs, review request) were run against the real page script in jsdom with `tools/dom_check.mjs`, 18 checks, on a copy of the database. jsdom has no layout, so camera maths, hover and drag were not exercised.
 
 ## Run the tests
 
@@ -74,7 +76,7 @@ A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 uv run --python 3.14 --with pytest pytest -q
 ```
 
-Needs `pdftotext` and `pdfinfo` (poppler). 49 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check and the no-auto-review rule.
+Needs `pdftotext` and `pdfinfo` (poppler). 56 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check, the no-auto-review rule, and the trace (libraries by grant, retry, empty search).
 
 ## Limits, stated plainly
 

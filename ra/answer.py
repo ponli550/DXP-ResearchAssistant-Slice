@@ -1,8 +1,10 @@
+import time
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol
 
 from .ground import Claim, check_claim
-from .retrieve import Passage, retrieve
+from .retrieve import Passage, fts_query, named_documents, retrieve
 
 
 class LLM(Protocol):
@@ -17,6 +19,7 @@ class Result:
     attempts: int = 0
     closest: list[Passage] = field(default_factory=list)
     audit_id: int | None = None
+    trace: list = field(default_factory=list)
 
 
 def _page_text(con, doc_id, page):
@@ -32,21 +35,55 @@ def _verify(con, claims, allowed):
     return ok, bad
 
 
+def _ms(t):
+    return round((time.perf_counter() - t) * 1000, 1)
+
+
+def _libraries(con, user):
+    return [r["name"] for r in con.execute("SELECT l.name FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user = ? ORDER BY l.name", (user,))]
+
+
+def _titles(con, ids):
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    return [r["title"] for r in con.execute(f"SELECT title FROM documents WHERE id IN ({marks}) ORDER BY title", ids)]
+
+
 def ask(con, llm, user, question, k=12):
-    """Retrieve, draft, check every claim, retry once on failures, otherwise say not found."""
+    """Retrieve, draft, check every claim, retry once on failures, otherwise say not found.
+
+    Every step is recorded in result.trace with what it did and how long it took, including the steps that
+    found nothing. The trace only names libraries the user holds a grant for.
+    """
+    trace = []
+    t = time.perf_counter()
     passages = retrieve(con, user, question, k)
+    trace.append({
+        "kind": "search", "tag": "Plain code", "query": (fts_query(question) or "").replace('"', ""),
+        "libraries": _libraries(con, user), "editions": _titles(con, named_documents(con, user, question)),
+        "limit": k, "found": len(passages), "documents": dict(Counter(p.title for p in passages)), "ms": _ms(t),
+    })
     allowed = {(p.doc_id, p.page) for p in passages}
-    result = Result(status="not_found", closest=passages)
+    result = Result(status="not_found", closest=passages, trace=trace)
     if passages:
         feedback = None
         for attempt in (1, 2):
             result.attempts = attempt
-            ok, bad = _verify(con, llm.draft(question, passages, feedback), allowed)
+            if attempt == 2:
+                trace.append({"kind": "retry", "tag": "Plain code", "feedback": feedback})
+            t = time.perf_counter()
+            drafted = llm.draft(question, passages, feedback)
+            trace.append({"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)})
+            t = time.perf_counter()
+            ok, bad = _verify(con, drafted, allowed)
+            trace.append({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
             result.rejected.extend(bad)
             if ok:
                 result.status, result.claims = "answered", ok
                 break
             feedback = [f"'{c.text}' was rejected: {why}" for c, why in bad] or ["no claims were returned"]
+    trace.append({"kind": "outcome", "status": result.status, "claims": len(result.claims), "found": len(passages)})
     cur = con.execute(
         "INSERT INTO audit(user, question, status, cited) VALUES (?,?,?,?)",
         (user, question, result.status, ";".join(f"{c.doc_id}:{c.page}" for c in result.claims)),

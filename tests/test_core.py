@@ -194,3 +194,48 @@ def test_named_edition_never_widens_access(db, tmp_path):
     ingest_pdf(db, "restricted", "Memo April 2024", c)
     assert named_documents(db, "alice", "What does the April 2024 memo say?") == []
     assert named_documents(db, "bob", "What does the April 2024 memo say?") != []
+
+
+# the trace: what the Steps view shows
+def kinds(res):
+    return [s["kind"] for s in res.trace]
+
+
+def test_trace_of_a_first_attempt_answer(db):
+    d = doc_id(db, "Sector Outlook 2025")
+    res = ask(db, ScriptedLLM([GOOD(d)]), "alice", "How did palm oil output change?")
+    assert kinds(res) == ["search", "draft", "check", "outcome"]
+    search = res.trace[0]
+    assert search["found"] > 0 and search["documents"]["Sector Outlook 2025"] > 0 and "palm" in search["query"]
+    assert res.trace[1]["tag"] == "Model call" and res.trace[2]["tag"] == "Plain code"
+    assert res.trace[2]["kept"] == 1 and res.trace[2]["removed"] == 0
+    assert all(isinstance(s["ms"], float) and s["ms"] >= 0 for s in res.trace if "ms" in s)
+
+
+def test_trace_records_the_retry_and_why(db):
+    d = doc_id(db, "Sector Outlook 2025")
+    bad = Claim("Output doubled.", d, 1, "Palm oil output doubled in 2024")
+    res = ask(db, ScriptedLLM([bad], [GOOD(d)]), "alice", "How did palm oil output change?")
+    assert kinds(res) == ["search", "draft", "check", "retry", "draft", "check", "outcome"]
+    assert res.trace[2]["reasons"] == ["quote is not on the cited page"] and res.trace[2]["removed"] == 1
+    assert "rejected" in res.trace[3]["feedback"][0]
+
+
+def test_trace_keeps_the_empty_result(db):
+    res = ask(db, ScriptedLLM(), "alice", "What merger did the board approve with Orion Holdings?")
+    assert kinds(res) == ["search", "outcome"] and res.trace[0]["found"] == 0 and res.trace[1]["status"] == "not_found"
+
+
+def test_trace_never_names_a_library_the_user_cannot_see(db):
+    alice = ask(db, ScriptedLLM(), "alice", "palm oil").trace[0]
+    bob = ask(db, ScriptedLLM(), "bob", "palm oil").trace[0]
+    assert alice["libraries"] == ["public"] and bob["libraries"] == ["public", "restricted"]
+    assert "Strategy Memo" not in alice["documents"]
+
+
+def test_trace_names_the_edition_a_question_selects(db, tmp_path):
+    from .pdfmaker import make_pdf
+
+    ingest_pdf(db, "public", "Monitor April 2024", make_pdf(tmp_path / "a.pdf", [["Growth is projected at 4.3 percent in 2024."]]))
+    res = ask(db, ScriptedLLM(), "alice", "What did the April 2024 monitor project for growth?")
+    assert res.trace[0]["editions"] == ["Monitor April 2024"]

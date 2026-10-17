@@ -108,6 +108,7 @@ def create_app(db_path, llm_factory=default_llm):
                 for c, why in res.rejected
             ],
             "closest": [{"title": p.title, "doc_id": p.doc_id, "page": p.page} for p in res.closest[:3]],
+            "trace": [{**st, "model": model_name} if st["kind"] == "draft" else st for st in res.trace],
         }
 
     @app.post("/api/feedback")
@@ -193,17 +194,36 @@ ol{padding-left:1.2rem;margin:.4rem 0}li{margin:.6rem 0}
 #pane{position:fixed;top:0;right:0;height:100%;width:min(520px,100%);background:var(--card);border-left:1px solid var(--line);z-index:10;transform:translateX(102%);transition:transform .5s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:.8rem 1rem}
 #pane.open{transform:none}#pane header{display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.5rem}
 pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;overflow:auto;flex:1}mark{background:var(--mark);color:inherit;border-radius:3px}
+#tabs{display:flex;gap:.25rem;padding:.35rem 16px 0;border-bottom:1px solid var(--line)}
+#tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:.35rem .8rem;color:var(--muted)}
+#tabs button[aria-selected=true]{color:var(--accent);border-color:var(--accent);font-weight:700}
+#steps{flex:1;overflow:auto;position:relative}
+#steps .grid{max-width:900px;margin:0 auto;padding:1rem 16px 3rem;display:grid;grid-template-columns:120px minmax(0,1fr);gap:0 1rem}
+#rail{position:sticky;top:1rem;align-self:start;display:flex;flex-direction:column;gap:.1rem;border-left:2px solid var(--line);padding-left:.7rem}
+#rail button{border:0;background:transparent;text-align:left;color:var(--muted);font-size:.8rem;padding:.15rem 0;position:relative}
+#rail button::before{content:"";position:absolute;left:calc(-.7rem - 5px);top:.45rem;width:8px;height:8px;border-radius:50%;background:var(--line)}
+#rail button[aria-current=true]{color:var(--accent);font-weight:700}#rail button[aria-current=true]::before{background:var(--accent)}
+.step{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;margin:.7rem 0}
+.stephead{display:flex;justify-content:space-between;align-items:center;font-weight:700}
+.stepline{width:100%;display:flex;justify-content:space-between;gap:.6rem;text-align:left;margin-top:.5rem;background:var(--bg)}
+.stepbody{margin-top:.5rem}.stepbody ul{margin:.3rem 0;padding-left:1.1rem}.stepbody li{margin:.2rem 0}
+.foot{display:flex;justify-content:space-between;gap:.5rem;color:var(--muted);font-size:.78rem;margin-top:.6rem}
+.kind{font-weight:700;color:var(--accent)}.toggle{display:block;margin:.4rem auto;background:transparent;color:var(--muted);border-style:dashed}
+.flash{animation:flash 1.8s ease}@keyframes flash{0%,60%{background:var(--accent2)}100%{background:var(--card)}}
+@media (max-width:700px){#rail{display:none}#steps .grid{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:700px){#spy{flex-direction:row;flex-wrap:wrap;right:56px}}
-@media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}}
+@media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}.flash{animation:none}}
 </style></head><body>
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
 <div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div>
 <div id="banner" class="banner" hidden></div>
 <div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
+<div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button></div>
 <div id="stage" aria-label="Answer canvas">
 <nav id="spy" aria-label="Sections"></nav>
 <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
 <div id="canvas"></div></div>
+<div id="steps" hidden aria-label="Investigation steps"><div class="grid"><nav id="rail" aria-label="Steps"></nav><div id="steplist"><p class="muted">Ask a question to see how the answer was found.</p></div></div></div>
 <aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><button id="pclose" aria-label="Close">Close</button></header><pre id="ptext"></pre></aside>
 <script>
 const $=id=>document.getElementById(id);
@@ -211,14 +231,14 @@ const el=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Obje
 const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches||new URLSearchParams(location.search).get("reveal")==="0";  /* ?reveal=0 skips the staged reveal */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const stage=$("stage"),canvas=$("canvas");
-let view={x:0,y:0,s:1},nodes=[],lastAudit=null;
+let view={x:0,y:0,s:1},nodes=[],lastAudit=null,current=null;
 async function api(path,opts){const r=await fetch(path,opts);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
 const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
 /* camera */
 function apply(){canvas.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;spy()}
 function move(animate){canvas.classList.toggle("moving",animate&&!reduced);apply()}
 const fitScale=()=>Math.min(1,(stage.clientWidth-24)/canvas.offsetWidth);
-function focusNode(n){const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
+function focusNode(n){current=n;const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
 function overview(){const s=Math.min(fitScale(),(stage.clientHeight-24)/canvas.offsetHeight);view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=12;move(true)}
 function zoomAt(f,cx,cy){const ns=Math.min(2.5,Math.max(.2,view.s*f));view.x=cx-(cx-view.x)*(ns/view.s);view.y=cy-(cy-view.y)*(ns/view.s);view.s=ns;move(false)}
 function spy(){const cy=(stage.clientHeight/2-view.y)/view.s;let best=null,bd=1e9;nodes.forEach(n=>{const d=Math.abs(n.offsetTop+n.offsetHeight/2-cy);if(d<bd){bd=d;best=n}});
@@ -241,8 +261,8 @@ const chip=(c,label)=>el("button",{class:"chip",type:"button",textContent:label|
 function node(id,tag,title,cls,...kids){return el("section",{id,class:"node "+(cls||"")},el("span",{class:"tag",textContent:tag}),el("h2",{textContent:title}),...kids)}
 function srcCard(p){const more=el("div",{class:"more"},el("p",{textContent:p.text}),chip({doc_id:p.doc_id,page:p.page,quote:""},"Open page "+p.page));
   const c=el("div",{class:"src",tabIndex:0,role:"button","aria-expanded":"false"},el("div",{},el("strong",{textContent:p.title}),el("span",{class:"muted",textContent:"  p. "+p.page})),el("div",{class:"snip",textContent:p.text.slice(0,140)+(p.text.length>140?"…":"")}),more);
-  c.onclick=()=>c.setAttribute("aria-expanded",String(c.classList.toggle("open")));c.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}};return c}
-function quoteDetails(c){return el("details",{},el("summary",{textContent:"Show the quote"}),el("blockquote",{textContent:c.quote}))}
+  c.dataset.key=p.doc_id+":"+p.page;c.onclick=()=>c.setAttribute("aria-expanded",String(c.classList.toggle("open")));c.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}};return c}
+function quoteDetails(c,found){return el("details",{},el("summary",{textContent:"Show the quote"}),el("blockquote",{textContent:c.quote}),found?el("button",{type:"button",class:"chip",textContent:"Show how it was found",onclick:()=>showHow(c)}):"")}
 function checkRow(c,reason){const ok=!reason;return el("div",{class:"row"},el("span",{class:"badge "+(ok?"ok":"bad"),textContent:ok?"Quote on page "+c.page:"Removed"}),
   el("div",{},el("div",{textContent:c.text}),el("div",{class:"muted",textContent:ok?c.title:reason+" ("+c.title+", p. "+c.page+")"}),quoteDetails(c)))}
 function feedbackBlock(j){const box=el("div",{class:"fb"});const msg=el("span",{class:"muted"});
@@ -264,7 +284,7 @@ function build(j,q){const out=[];
     ...j.rejected_claims.map(c=>checkRow(c,c.reason)),...j.claims.map(c=>checkRow(c,"")),
     kept+removed===0?el("p",{textContent:j.retrieved.length?"The model returned no claims.":"No sources, so nothing was drafted."}):""));
   const ans=j.status==="answered"
-    ?[el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c,c.title+", p. "+c.page),quoteDetails(c)))),
+    ?[el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c,c.title+", p. "+c.page),quoteDetails(c,true)))),
       el("p",{class:"muted",textContent:"Each quote was found on the page it cites. That confirms the source, not that the claim answers your question."})]
     :[el("p",{style:"font-weight:600",textContent:"I could not find this in the selected library."}),...(j.closest.length?[el("p",{class:"muted",textContent:"Closest sources:"}),el("div",{},...j.closest.map(c=>chip(c)))]:[])];
   out.push(node("n-ans","Answer",j.status==="answered"?"Answer":"No answer","answer",...ans,feedbackBlock(j)));
@@ -274,17 +294,56 @@ function placeholder(){canvas.replaceChildren(node("n-start","Start","Ask a ques
   nodes=[canvas.firstChild];$("spy").replaceChildren();setTimeout(()=>focusNode(nodes[0]),0)}
 function buildNav(){$("spy").replaceChildren(...nodes.map(n=>el("button",{type:"button","data-id":n.id,textContent:n.querySelector(".tag").textContent,onclick:()=>focusNode(n)})))}
 async function ask(){const q=$("q").value.trim();if(!q)return;$("go").disabled=true;$("status").textContent="";
-  try{const j=await post("/api/ask",{user:$("user").value,question:q});lastAudit=j.audit_id;nodes=build(j,q);canvas.replaceChildren(...nodes);buildNav();
+  try{const j=await post("/api/ask",{user:$("user").value,question:q});lastAudit=j.audit_id;switchTab("canvas");renderSteps(j,q);nodes=build(j,q);canvas.replaceChildren(...nodes);buildNav();
     const last=nodes[nodes.length-1],answer=nodes[nodes.length-2];
     for(const n of nodes.slice(0,-1)){n.classList.add("in");focusNode(n);await sleep(reduced?0:900)}
     last.classList.add("in");focusNode(answer);  /* the next step appears quietly; the camera stays on the answer */
     $("status").textContent="Model: "+j.model}
   catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
+/* tabs and the steps view */
+function switchTab(t){$("stage").hidden=t!=="canvas";$("steps").hidden=t!=="steps";$("tab-canvas").setAttribute("aria-selected",String(t==="canvas"));$("tab-steps").setAttribute("aria-selected",String(t==="steps"));
+  if(t==="canvas"&&nodes.length)requestAnimationFrame(()=>focusNode(current||nodes[0]))}
+$("tab-canvas").onclick=()=>switchTab("canvas");$("tab-steps").onclick=()=>switchTab("steps");
+const fmtMs=ms=>ms<1000?ms+" ms":(ms/1000).toFixed(1)+" s";
+function stepLine(s){
+  if(s.kind==="search")return "Searched "+(s.libraries.join(", ")||"no libraries")+" for: "+(s.query||"no usable words");
+  if(s.kind==="draft")return "Attempt "+s.attempt+": "+s.model+" drafted "+s.claims+" claim"+(s.claims===1?"":"s");
+  if(s.kind==="check")return "Quote check, attempt "+s.attempt+": "+s.kept+" kept, "+s.removed+" removed";
+  return "Retried once, with the reasons the first attempt failed"}
+function stepBody(s,j){
+  if(s.kind==="search"){const items=[];
+    if(s.editions.length)items.push(el("li",{textContent:"Limited to "+s.editions.join(" and ")+", because the question names "+(s.editions.length>1?"them":"it")+"."}));
+    items.push(el("li",{textContent:s.found?"Found "+s.found+" passage"+(s.found===1?"":"s")+" in "+Object.entries(s.documents).map(([t,n])=>t+" ("+n+")").join(", ")+".":"No passage matched. Nothing was drafted."}));
+    return [el("ul",{},...items),...j.retrieved.slice(0,6).map(srcCard)]}
+  if(s.kind==="draft")return [el("p",{class:"muted",textContent:"The model sees only the retrieved passages. It must return an exact quote for every claim. It never sees libraries the user cannot search."})];
+  if(s.kind==="check")return [s.reasons.length?el("ul",{},...s.reasons.map(r=>el("li",{textContent:"Removed: "+r})) ):el("p",{class:"muted",textContent:"Every quote was found on its cited page, and every number in a claim was in its quote."}),el("p",{class:"muted",textContent:"Plain string check. No model is involved."})];
+  return [el("ul",{},...(s.feedback||[]).map(f=>el("li",{textContent:f})))]}
+function renderSteps(j,q){
+  const steps=j.trace.filter(s=>s.kind!=="outcome"),out=j.trace.find(s=>s.kind==="outcome");
+  const list=$("steplist"),cards=[],bodies=[];
+  const trigger=el("div",{class:"step",id:"st-trigger"},el("div",{class:"stephead"},el("span",{textContent:"Question"}),el("span",{class:"tag",textContent:"Trigger"})),el("p",{textContent:q}),el("p",{class:"muted",textContent:"Asked as "+$("user").value+"."}));
+  const toggle=el("button",{type:"button",class:"toggle",textContent:"Expand "+steps.length+" steps",onclick:()=>{const open=bodies.every(b=>!b.hidden);bodies.forEach(b=>{b.hidden=open});toggle.textContent=(open?"Expand ":"Collapse ")+steps.length+" steps"}});
+  steps.forEach((s,i)=>{const body=el("div",{class:"stepbody",hidden:true},...stepBody(s,j));bodies.push(body);
+    const line=el("button",{type:"button",class:"stepline","aria-expanded":"false",onclick:()=>{body.hidden=!body.hidden;line.setAttribute("aria-expanded",String(!body.hidden))}},el("span",{textContent:stepLine(s)}),el("span",{textContent:"▾"}));
+    const card=el("div",{class:"step",id:"st-"+i,"data-kind":s.kind},el("div",{class:"stephead"},el("span",{textContent:"Investigation step"}),el("span",{class:"tag",textContent:"Step "+(i+1)})),line,body,
+      el("div",{class:"foot"},el("span",{class:"kind",textContent:s.tag}),el("span",{textContent:s.ms!=null?"Duration "+fmtMs(s.ms):""})));cards.push(card)});
+  const status=j.status==="answered"?"Answered with "+out.claims+" claim"+(out.claims===1?"":"s")+" that passed the quote check":(out.found?"No answer: nothing survived the quote check":"No answer: no passage matched");
+  const concl=el("div",{class:"step",id:"st-end"},el("span",{class:"tag",textContent:"Conclusion"}),el("h2",{style:"font-size:1.02rem;margin:.2rem 0",textContent:status}),
+    el("p",{class:"muted",textContent:"The quote check proves each quote is on its cited page. It does not prove the claim answers the question."}));
+  list.replaceChildren(trigger,toggle,...cards,concl);
+  const rail=$("rail");rail.replaceChildren(...[["Question",trigger],...cards.map((c,i)=>["Step "+(i+1),c]),["Conclusion",concl]].map(([t,target])=>el("button",{type:"button","data-t":target.id,textContent:t,onclick:()=>target.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"})})));
+  if(stepsIO)stepsIO.disconnect();
+  stepsIO=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)rail.querySelectorAll("button").forEach(b=>b.setAttribute("aria-current",String(b.dataset.t===e.target.id)))})},{root:$("steps"),rootMargin:"-30% 0px -55% 0px"});
+  [trigger,...cards,concl].forEach(c=>stepsIO.observe(c))}
+function showHow(c){switchTab("steps");const first=$("st-0");if(!first)return;const body=first.querySelector(".stepbody"),line=first.querySelector(".stepline");body.hidden=false;line.setAttribute("aria-expanded","true");
+  const card=[...first.querySelectorAll(".src")].find(x=>x.dataset.key===c.doc_id+":"+c.page);
+  const target=card||first;if(card)card.classList.add("open");target.classList.remove("flash");void target.offsetWidth;target.classList.add("flash");target.scrollIntoView({behavior:reduced?"auto":"smooth",block:"center"})}
+let stepsIO=null;
 /* page setup */
 async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
   if(j.model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant."}}
 $("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
 loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");
-  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask()});
+  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """

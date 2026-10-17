@@ -164,3 +164,15 @@ def test_review_request_is_only_a_logged_open_entry(web):
 def test_page_labels_say_what_was_checked_not_verified():
     assert "VERIFIED" not in INDEX_HTML.upper().replace("UNVERIFIED", "")
     assert "Quote on page" in INDEX_HTML and "innerHTML" not in INDEX_HTML
+
+
+def test_ask_returns_the_trace_with_the_model_name(web):
+    client, llm, doc, *_ = web
+    j = ask_as(client, llm, doc)
+    assert [s["kind"] for s in j["trace"]] == ["search", "draft", "check", "outcome"]
+    assert j["trace"][1]["model"] == "scripted" or j["trace"][1]["model"] == "ScriptedLLM"
+    assert j["trace"][0]["libraries"] == ["public"]
+
+
+def test_steps_view_is_present_and_still_builds_no_html_from_data():
+    assert "Investigation steps" in INDEX_HTML and "Show how it was found" in INDEX_HTML and "innerHTML" not in INDEX_HTML
