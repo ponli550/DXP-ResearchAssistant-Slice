@@ -18,10 +18,10 @@ Status: a working demo slice. It has the core pipeline, an evaluation harness, f
 | Path | What it is |
 |---|---|
 | `ra/` | The package: ingest, retrieve, ground (the gate), answer (the loop and trace), llm, baselines, evalset, web |
-| `tests/` | 56 tests, with a small PDF writer so no fixtures are needed |
+| `tests/` | 58 tests, with a small PDF writer so no fixtures are needed |
 | `evals/` | The question set and the baseline results |
 | `tools/` | A stand-in server and a jsdom check for the page. Test tooling, not product code |
-| `docs/` | How the canvas and steps views were derived from reference recordings |
+| `docs/` | `TECH_STACK.md`: the stack, versions, what differs from the proposal, and code examples checked by a test. `DERIVING_THE_UI.md`: how the canvas and steps views were derived from reference recordings |
 | `data/` | Ignored. The PDFs and the database |
 
 ## How an answer is made
@@ -85,6 +85,7 @@ Movement: the camera eases from node to node as they appear, a left list highlig
 
 A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 
+- The stack and real code examples are in [docs/TECH_STACK.md](docs/TECH_STACK.md).
 - The design of the canvas and steps views was derived from observing two reference recordings. Nothing was copied. The method, the limits and the labels deliberately left out are in [docs/DERIVING_THE_UI.md](docs/DERIVING_THE_UI.md).
 - The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.
 - With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
@@ -97,7 +98,7 @@ A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 uv run --python 3.14 --with pytest pytest -q
 ```
 
-Needs `pdftotext` and `pdfinfo` (poppler). 56 tests. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check, the no-auto-review rule, and the trace (libraries by grant, retry, empty search).
+Needs `pdftotext` and `pdfinfo` (poppler). 58 tests, including one that fails if a code example in `docs/TECH_STACK.md` stops matching the file it names. Rules were broken one at a time to confirm the tests catch them: access join, quote check, number check, citable pages, retry, the two-column fix, four scoring rules, and the feedback owner check, rating check, the no-auto-review rule, and the trace (libraries by grant, retry, empty search).
 
 ## What comes next
 
