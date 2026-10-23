@@ -6,3 +6,10 @@ __pycache__/
 data/
 .env
 .env.*
+
+# dropped Cloudflare container attempt, kept local only
+deploy/
+.dockerignore
+node_modules/
+.wrangler/
+.dev.vars
