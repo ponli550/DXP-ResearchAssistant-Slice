@@ -242,26 +242,27 @@
     // ---------- 3 WHAT EXISTS ----------
     { sec: "WHAT EXISTS", theme: "panel", html:
       title("What runs today: a working demo slice") +
-      '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 58 automated tests. Not a prototype on your documents yet.</p>' +
+      '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 60 automated tests. Not a prototype on your documents yet.</p>' +
       table("wrap", ["Part", "State", "Note"], [
         ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "Core pipeline. No runtime dependencies beyond the standard library."],
-        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Real model not yet run."],
+        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Real model run four times, see next slide."],
         ["Web demo: canvas, steps view, feedback, review request", "{ok}Built", "Checked in headless Chrome and jsdom. Camera and drag not exercised."],
-        ["Real-model run on the question set", "{warn}Not run", "Needs an API key. The number that matters is still unmeasured."],
+        ["Real-model run on the question set", "{ok}Run, four times", "Qwen 3.8 27B. Wrong-and-confident 0 in every run. Refuses about half of what it could answer."],
         ["Cross-report comparison questions", "{danger}Fails", "Retrieval misses one side. Needs a query rewrite per report."],
         ["Embeddings, OCR, production login", "{danger}Not started", "Weeks 2 to 6 of the plan."]]) +
-      '<p class="dim" style="font-size:14px">Status as of 22 October 2026</p>',
+      '<p class="dim" style="font-size:14px">Status as of 24 October 2026</p>',
       note: "Do not oversell. It proves the design works end to end on real reports. It does not prove answer quality and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
 
     { sec: "WHAT EXISTS", html:
       title("Results so far: what is measured, what is not") +
       '<div class="cols side"><div class="stack" style="gap:14px">' +
-      '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{danger}0 of 3 get both pages"]]) +
-      '<p class="dim" style="font-size:15px">Two fixes made the difference: reading PDFs in reading order, and treating a named edition in the question as a date filter. Nothing was tuned on these 22 questions.</p>' +
+      '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{danger}0 of 3 get both pages"]]) + '<p class="dim" style="font-size:15px">Right page in the top 12 across the set: 0.867.</p>' +
+      '<p class="dim" style="font-size:15px">Reading order and the edition filter made the difference. Nothing was tuned on these questions; 19 anchors were added after checking pages by hand, because the reports repeat forecasts in the summary.</p>' +
       '<h3>Model-free baselines, as a floor</h3>' + table("sm wrap", ["Baseline", "Correct", "Timid", "Wrong and confident"], [["Quote the best sentence", "1 of 15", "0", "{danger}21 of 22"], ["Refuse on weak match", "0 of 15", "9", "{danger}9 of 22"]]) + '</div>' +
-      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">The number that matters</div><div class="num">Unmeasured</div><p>Wrong-and-confident with the real model has not been run. It is the first task of week 1, before any other work.</p>') +
-      card("panel", '<p>Four outcomes are scored: correct, timid, correct refusal, wrong-and-confident. A right number on the wrong page counts as wrong.</p><p class="dim" style="margin-top:6px">22 questions is a signal, not a measurement. The pilot set is 60 to 100, written with your research staff.</p>') + '</div></div>',
-      note: "Lead with the right-hand panel. The baselines prove a model-free approach cannot work: the gate cannot catch an answer that is real but irrelevant. The cross-report miss is a known gap with a known fix." },
+      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">Wrong and confident, real model, four runs</div><div class="num">0 of 60</div><p>Qwen 3.8 27B on the 22 questions, four runs, 15 answerable each. It never stated a false figure as fact. Every miss was a refusal.</p>') +
+      table("sm", ["Run", "Correct", "Timid", "Refused right", "Wrong"], [["1", "9 of 15", "6", "7 of 7", "{ok}0"], ["2", "5 of 15", "10", "7 of 7", "{ok}0"], ["3", "7 of 15", "8", "7 of 7", "{ok}0"], ["4", "8 of 15", "7", "7 of 7", "{ok}0"]]) +
+      card("warn", '<p><b>Timid is the real failure.</b> About half the answerable questions are refused, and all three cross-report questions every time. Results vary run to run at temperature zero, so quote three runs, never one.</p>') + '</div></div>',
+      note: "Lead with the zero, then say what it does not mean: the model refuses a lot, and cross-report questions always. The model measured is Qwen 3.8 27B through Nous Research, not the Claude in the original proposal; say so if asked. The baselines prove a model-free approach cannot work." },
 
     // ---------- 4 TECHNOLOGY ----------
     { sec: "TECHNOLOGY", html:
@@ -270,7 +271,7 @@
         ["Back end", "Python, FastAPI", "Strong PDF and evaluation libraries, typed API, easy to test", "{ok}Same"],
         ["Store and search", "PostgreSQL with pgvector and full-text search", "One store for passages, vectors, grants and audit, so the access rule lives in the query", "{warn}SQLite FTS5, keyword only"],
         ["PDF reading", "poppler page extraction, OCR fallback, table extraction", "Keeps page numbers, which citations need; reading-order mode handles two-column pages", "{warn}poppler only, OCR flagged not run"],
-        ["Model", "Claude Sonnet 5.5 via API, behind a thin interface", "Quality at a sane price; one file to swap provider or region. Decided with you in week 1", "{ok}Adapter built, untested on live API"],
+        ["Model", "Any Anthropic or OpenAI-compatible model, behind a thin interface", "Provider, region and retention decided with you in week 1. One adapter file to swap", "{ok}Measured on Qwen 3.8 27B. Claude adapter built, not yet run"],
         ["Front end", "React web app", "Chat, page viewer and admin screens need component state and accessibility work", "{warn}One plain HTML page"],
         ["Files", "Private object storage", "Original PDFs, page images, retention rules", "{warn}Local files"],
         ["Login", "Your single sign-on, else email login", "Matches how your customers already sign in", "{danger}Demo user picker"],
@@ -407,7 +408,7 @@
       '<div class="stack" style="gap:14px"><div class="kicker">To close</div><h1 style="font-size:60px;max-width:1100px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' +
       '<div class="cols c3">' +
       card("ink2", '<div class="lbl">We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
-      card("ink2", '<div class="lbl">You get at the end of week 1</div><p>The measured wrong-and-confident rate, and your own reports running in the demo.</p>') +
+      card("ink2", '<div class="lbl">You get at the end of week 1</div><p>Your own reports running in the demo, and the same four-run measurement on them.</p>') +
       card("accent", '<div class="lbl">At week 10</div><p>A go or no-go decision on your numbers, not ours.</p>') + '</div>' +
       '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali</p>',
       note: "End on the three boxes and stop talking. Then ask for the sponsor’s name and the date for the five sample reports before the meeting ends." }
