@@ -254,3 +254,39 @@ def test_openai_compat_adapter_parses_and_strips_thinking():
     claims = llm.draft("q", [], None)
     assert [c.quote for c in claims] == ["full-year growth to 5.2 percent"]
     assert seen["model"] == "Hermes-4-70B" and seen["messages"][0]["role"] == "system"
+
+
+def test_edition_words_leave_the_query_once_they_filter(db, tmp_path):
+    from ra.ingest import ingest_pdf
+    from ra.retrieve import search_terms
+
+    from .pdfmaker import make_pdf
+
+    # A page stuffed with the edition's own name would outrank the forecast if "october" and "2025" stayed in the query.
+    pdf = make_pdf(tmp_path / "oct.pdf", [
+        ["October 2025 monitor. October 2025 edition. Published October 2025. See the October 2025 monitor."],
+        ["Growth is projected to ease to 4.1 percent in 2025."]])
+    ingest_pdf(db, "public", "Monitor October 2025", pdf)
+    q = "What growth did the October 2025 monitor project for 2025?"
+    assert "october" not in search_terms(q, [1]).lower() and "monitor" not in search_terms(q, [1]).lower()
+    assert search_terms(q, []) == q
+    top = retrieve(db, "alice", q, k=1)[0]
+    assert top.page == 2
+
+
+def test_a_comparison_with_no_edition_named_sees_every_report(db, tmp_path):
+    from ra.ingest import ingest_pdf
+    from ra.retrieve import DOC_FLOOR
+
+    from .pdfmaker import make_pdf
+
+    # One report says "growth" on every page; the other says it once. Without a floor the second never appears.
+    loud = make_pdf(tmp_path / "loud.pdf", [[f"Growth growth growth, page {i} on growth."] for i in range(1, 7)])
+    quiet = make_pdf(tmp_path / "quiet.pdf", [["Weather was mild."], ["Growth in the fourth quarter was 6.3 percent."]])
+    ingest_pdf(db, "public", "Loud Report", loud)
+    ingest_pdf(db, "public", "Quiet Report", quiet)
+    got = retrieve(db, "alice", "How did growth compare between the reports?", k=4)
+    titles = {p.title for p in got}
+    assert "Quiet Report" in titles and "Loud Report" in titles
+    assert sum(1 for p in got if p.title == "Loud Report") <= 4 - 1  # the quiet report kept a slot
+    assert DOC_FLOOR >= 1

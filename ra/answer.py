@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from .ground import Claim, check_claim
-from .retrieve import Passage, fts_query, named_documents, retrieve
+from .retrieve import Passage, fts_query, named_documents, retrieve, search_terms
 
 
 class LLM(Protocol):
@@ -60,7 +60,7 @@ def ask(con, llm, user, question, k=12):
     t = time.perf_counter()
     passages = retrieve(con, user, question, k)
     trace.append({
-        "kind": "search", "tag": "Plain code", "query": (fts_query(question) or "").replace('"', ""),
+        "kind": "search", "tag": "Plain code", "query": (fts_query(search_terms(question, named_documents(con, user, question))) or "").replace('"', ""),
         "libraries": _libraries(con, user), "editions": _titles(con, named_documents(con, user, question)),
         "limit": k, "found": len(passages), "documents": dict(Counter(p.title for p in passages)), "ms": _ms(t),
     })

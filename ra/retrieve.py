@@ -61,19 +61,56 @@ def _rows(con, user, q, k, doc_id=None):
     return [Passage(r["id"], r["doc_id"], r["title"], r["page"], r["text"], r["score"]) for r in con.execute(sql, args)]
 
 
+def search_terms(question, named):
+    """The question with its edition words removed once they have become a document filter.
+
+    "October 2025" and "monitor" rank every dated page in the edition above the forecast the question is
+    about, so they are stripped from the text query when they are already applied as a filter.
+    """
+    if not named:
+        return question
+    q = EDITION_RE.sub(" ", question)
+    return re.sub(r"\bmonitors?\b", " ", q, flags=re.I)
+
+
+DOC_FLOOR = 2  # slots every document with a match keeps when no edition is named
+
+
+def _granted_docs(con, user):
+    return [r["id"] for r in con.execute(
+        "SELECT d.id FROM documents d JOIN grants g ON g.library_id = d.library_id AND g.user = ? ORDER BY d.id", (user,))]
+
+
+def _diversify(per_doc, k):
+    """Each document's top DOC_FLOOR passages first, then the rest by score, up to k.
+
+    Without this, a comparison that names no edition sees only the reports with the most matching words,
+    and the other side of the comparison never reaches the model.
+    """
+    picked, rest = [], []
+    for rows in per_doc:
+        picked += rows[:DOC_FLOOR]
+        rest += rows[DOC_FLOOR:]
+    picked.sort(key=lambda p: p.score)
+    rest.sort(key=lambda p: p.score)
+    return (picked + rest)[:k]
+
+
 def retrieve(con, user, question, k=12):
     """Top passages for a question, limited to libraries the user holds a grant for.
 
     The access rule is part of the SQL, so a passage the user may not see is never returned,
     never reaches the model, and can never be cited. When the question names editions, each named
-    edition gets its own k slots, so a comparison across reports sees every report.
+    edition gets its own k slots and the edition words leave the text query. When it names none,
+    every granted document keeps a floor of slots so a comparison sees both of its sides.
     """
-    q = fts_query(question)
+    docs = named_documents(con, user, question)
+    q = fts_query(search_terms(question, docs))
     if q is None:
         return []
-    docs = named_documents(con, user, question)
-    if not docs:
-        return _rows(con, user, q, k)
-    docs = docs[:MAX_NAMED]
-    merged = [p for d in docs for p in _rows(con, user, q, k, d)]
-    return sorted(merged, key=lambda p: p.score)
+    if docs:
+        docs = docs[:MAX_NAMED]
+        merged = [p for d in docs for p in _rows(con, user, q, k, d)]
+        return sorted(merged, key=lambda p: p.score)
+    per_doc = [_rows(con, user, q, k, d) for d in _granted_docs(con, user)]
+    return _diversify([r for r in per_doc if r], k)
