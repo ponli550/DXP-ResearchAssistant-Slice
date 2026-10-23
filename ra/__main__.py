@@ -22,9 +22,10 @@ def main(argv=None):
     q.add_argument("question")
     w = sub.add_parser("serve")
     w.add_argument("--port", type=int, default=8000)
+    w.add_argument("--host", default="127.0.0.1")
     e = sub.add_parser("eval")
     e.add_argument("--questions", default="evals/questions.json")
-    e.add_argument("--llm", choices=["extractive", "threshold", "claude"], default="extractive")
+    e.add_argument("--llm", choices=["extractive", "threshold", "claude", "hermes"], default="extractive")
     e.add_argument("--user", default="alice")
     e.add_argument("--out")
     args = ap.parse_args(argv)
@@ -42,7 +43,7 @@ def main(argv=None):
 
         from .web import create_app
 
-        uvicorn.run(create_app(args.db), host="127.0.0.1", port=args.port)
+        uvicorn.run(create_app(args.db), host=args.host, port=args.port)
     elif args.cmd == "eval":
         import json
 
@@ -58,6 +59,10 @@ def main(argv=None):
             from .llm import ClaudeLLM
 
             llm = ClaudeLLM()
+        elif args.llm == "hermes":
+            from .llm import OpenAICompatLLM
+
+            llm = OpenAICompatLLM()
         else:
             llm = Extractive() if args.llm == "extractive" else Threshold()
         res = score(con, llm, qs, args.user)

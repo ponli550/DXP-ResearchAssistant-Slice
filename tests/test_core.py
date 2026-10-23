@@ -239,3 +239,18 @@ def test_trace_names_the_edition_a_question_selects(db, tmp_path):
     ingest_pdf(db, "public", "Monitor April 2024", make_pdf(tmp_path / "a.pdf", [["Growth is projected at 4.3 percent in 2024."]]))
     res = ask(db, ScriptedLLM(), "alice", "What did the April 2024 monitor project for growth?")
     assert res.trace[0]["editions"] == ["Monitor April 2024"]
+
+
+def test_openai_compat_adapter_parses_and_strips_thinking():
+    from ra.llm import OpenAICompatLLM
+
+    seen = {}
+
+    def fake_post(body):
+        seen.update(body)
+        return {"choices": [{"message": {"content": '<think>musing</think>{"claims":[{"text":"GDP grew 5.2 percent","doc_id":5,"page":10,"quote":"full-year growth to 5.2 percent"}]}'}}]}
+
+    llm = OpenAICompatLLM(model="Hermes-4-70B", api_key="x", post=fake_post)
+    claims = llm.draft("q", [], None)
+    assert [c.quote for c in claims] == ["full-year growth to 5.2 percent"]
+    assert seen["model"] == "Hermes-4-70B" and seen["messages"][0]["role"] == "system"

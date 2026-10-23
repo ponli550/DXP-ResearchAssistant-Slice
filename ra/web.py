@@ -17,11 +17,16 @@ from .db import connect
 
 
 def default_llm():
-    """Claude when a key is set, otherwise the extractive baseline, and say which one."""
+    """Claude or an OpenAI-compatible model when a key is set, otherwise the extractive baseline, and say which one."""
     if os.environ.get("ANTHROPIC_API_KEY"):
         from .llm import ClaudeLLM
 
         return ClaudeLLM(), "claude"
+    if os.environ.get("HERMES_API_KEY"):
+        from .llm import OpenAICompatLLM
+
+        llm = OpenAICompatLLM()
+        return llm, llm.name
     return Extractive(), "extractive baseline (no model key set)"
 
 

@@ -95,3 +95,18 @@ def test_right_number_on_an_unrelated_page_is_not_correct(db, tmp_path):
     assert (d, 2) in {(h.doc_id, h.page) for h in retrieve(db, "alice", q["q"])}
     assert run(db, q, [wrong_page])["correct"] == 0
     assert run(db, q, [right_page])["correct"] == 1
+
+
+def test_a_fact_stated_on_two_pages_accepts_either_page(db, tmp_path):
+    from ra.ingest import ingest_pdf
+    from .pdfmaker import make_pdf
+
+    p = make_pdf(tmp_path / "two.pdf", [["Summary: palm oil output rose 4.2 percent in 2024."], ["In detail, palm oil output grew 4.2 percent in 2024 on better yields."]])
+    ingest_pdf(db, "public", "Twice Stated", p)
+    d = db.execute("SELECT id FROM documents WHERE title='Twice Stated'").fetchone()["id"]
+    q = {"id": "D", "q": "How did palm oil output change in Twice Stated?", "facts": [{"doc": "Twice Stated", "must": "4.2 percent",
+         "anchor": ["palm oil output rose 4.2 percent in 2024", "palm oil output grew 4.2 percent in 2024"]}]}
+    assert check_questions(db, [q]) == []
+    assert run(db, q, [Claim("Output grew 4.2 percent.", d, 2, "palm oil output grew 4.2 percent in 2024")])["correct"] == 1
+    bad = dict(q, facts=[dict(q["facts"][0], anchor=["palm oil output rose 4.2 percent in 2024", "not in the report"])])
+    assert len(check_questions(db, [bad])) == 1

@@ -1,0 +1,260 @@
+{
+  "questions": 22,
+  "answerable": 15,
+  "unanswerable": 7,
+  "retrieval_hit_rate": 0.867,
+  "correct": 8,
+  "timid": 7,
+  "correct_refusal": 7,
+  "wrong_and_confident": 0,
+  "claims_drafted": 8,
+  "claims_rejected_by_gate": 0,
+  "rows": [
+    {
+      "id": "A01",
+      "q": "What GDP growth did the World Bank project for Malaysia in 2024 in the April 2024 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "The World Bank projected Malaysia's GDP growth to be 4.3 percent in 2024.",
+          3,
+          16
+        ]
+      ]
+    },
+    {
+      "id": "A02",
+      "q": "What was Malaysia's full-year GDP growth in 2025, according to the April 2026 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's full-year GDP growth in 2025 was 5.2 percent.",
+          5,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "A03",
+      "q": "What GDP growth is projected for Malaysia in 2026?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia\u2019s GDP growth is projected to be 4.4 percent in 2026.",
+          5,
+          10
+        ]
+      ]
+    },
+    {
+      "id": "A04",
+      "q": "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's GDP growth is projected to be 4.1 percent in 2025 in the October 2025 monitor.",
+          4,
+          53
+        ]
+      ]
+    },
+    {
+      "id": "A05",
+      "q": "What did the October 2023 monitor forecast for Malaysia's GDP growth in 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A06",
+      "q": "What share of social assistance transfers goes to the B40 households?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 2,
+      "answer": [
+        [
+          "Only 49 percent of social assistance transfers goes to the B40 households.",
+          2,
+          19
+        ]
+      ]
+    },
+    {
+      "id": "A07",
+      "q": "How fast did Malaysia's GDP grow in the second quarter of 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's GDP grew at 2.9 percent in the second quarter of 2023.",
+          2,
+          27
+        ]
+      ]
+    },
+    {
+      "id": "A08",
+      "q": "How much did Malaysia's economy grow in the first half of 2025?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia\u2019s economy grew by 4.4 percent in the first half of 2025.",
+          4,
+          11
+        ]
+      ]
+    },
+    {
+      "id": "A09",
+      "q": "What was Malaysia's real GDP growth in the fourth quarter of 2025?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A10",
+      "q": "What growth did the October 2025 monitor give for Malaysia in 2024?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "A11",
+      "q": "What did the April 2024 monitor give as Malaysia's GDP growth in 2023?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "The April 2024 monitor gave Malaysia's GDP growth in 2023 as 3.7 percent.",
+          3,
+          16
+        ]
+      ]
+    },
+    {
+      "id": "A12",
+      "q": "What forecast did the October 2023 monitor give for Malaysia's growth in 2024?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "C01",
+      "q": "How did the view of Malaysia's 2025 growth change between the October 2025 and April 2026 monitors?",
+      "answerable": true,
+      "retrieval_hit": false,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "C02",
+      "q": "Compare the 2024 growth projection in the October 2023 monitor with the April 2024 monitor.",
+      "answerable": true,
+      "retrieval_hit": false,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "C03",
+      "q": "How did Malaysia's quarterly growth compare in the second quarter of 2023 and the fourth quarter of 2025?",
+      "answerable": true,
+      "retrieval_hit": true,
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U01",
+      "q": "What growth does the World Bank forecast for Malaysia in 2031?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U02",
+      "q": "What does the monitor say about cryptocurrency regulation in Malaysia?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U03",
+      "q": "What was the average football league attendance in Malaysia in 2025?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U04",
+      "q": "What did the June 2019 monitor forecast for Malaysia's growth in 2020?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U05",
+      "q": "How many electric vehicles were sold in Malaysia in 2025?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U06",
+      "q": "Who is the chief executive officer of PETRONAS?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    },
+    {
+      "id": "U07",
+      "q": "What will Singapore's minimum wage be in 2029?",
+      "answerable": false,
+      "retrieval_hit": null,
+      "outcome": "correct_refusal",
+      "attempts": 2,
+      "answer": []
+    }
+  ]
+}

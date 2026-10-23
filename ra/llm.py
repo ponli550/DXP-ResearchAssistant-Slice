@@ -61,6 +61,48 @@ class ClaudeLLM:
         return parse_claims("".join(b.text for b in msg.content if getattr(b, "type", "") == "text"))
 
 
+class OpenAICompatLLM:
+    """Adapter for any OpenAI-compatible chat endpoint (Nous Research Hermes, OpenRouter, a local server).
+
+    Standard library only. Reads HERMES_API_KEY, HERMES_BASE_URL and HERMES_MODEL unless given explicitly.
+    `post` can be replaced in tests so no network is needed.
+    """
+
+    def __init__(self, model=None, base_url=None, api_key=None, post=None):
+        self.model = model or os.environ.get("HERMES_MODEL", "qwen/qwen3.8-27b")
+        self.base_url = (base_url or os.environ.get("HERMES_BASE_URL", "https://inference-api.nousresearch.com/v1")).rstrip("/")
+        self.api_key = api_key or os.environ.get("HERMES_API_KEY", "")
+        self.name = self.model
+        self.post = post or self._post
+
+    def _post(self, body):
+        import urllib.request
+
+        req = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", "Authorization": "Bearer " + self.api_key},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.load(r)
+
+    def draft(self, question, passages, feedback=None):
+        body = {
+            "model": self.model,
+            "max_tokens": 1500,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": build_prompt(question, passages, feedback)},
+            ],
+        }
+        data = self.post(body)
+        text = data["choices"][0]["message"].get("content") or ""
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
+        return parse_claims(text)
+
+
 class ScriptedLLM:
     """For tests and offline demos: returns queued claim lists, one per call."""
 

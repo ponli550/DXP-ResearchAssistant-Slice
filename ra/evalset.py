@@ -17,16 +17,28 @@ def load(path):
         return json.load(f)
 
 
+def anchors(fact):
+    """A fact's anchor is one sentence, or a list of sentences when the report states the fact on several pages."""
+    a = fact["anchor"]
+    return [a] if isinstance(a, str) else list(a)
+
+
 def resolve(con, fact):
-    """Doc id and every page of that doc where the anchor sentence appears. None if it cannot be found."""
+    """Doc id and every page of that doc where any anchor sentence appears. Empty if an anchor cannot be found.
+
+    Every anchor must be found somewhere, so a mistyped second anchor is caught by check_questions rather than silently
+    narrowing the accepted pages.
+    """
     row = con.execute("SELECT id FROM documents WHERE title=?", (fact["doc"],)).fetchone()
     if not row:
         return None, set()
-    pages = {
-        r["page"]
-        for r in con.execute("SELECT page, text FROM pages WHERE doc_id=?", (row["id"],))
-        if normalise(fact["anchor"]) in normalise(r["text"])
-    }
+    texts = [(r["page"], normalise(r["text"])) for r in con.execute("SELECT page, text FROM pages WHERE doc_id=?", (row["id"],))]
+    pages = set()
+    for a in anchors(fact):
+        found = {pg for pg, t in texts if normalise(a) in t}
+        if not found:
+            return row["id"], set()
+        pages |= found
     return row["id"], pages
 
 
