@@ -242,13 +242,13 @@
     // ---------- 3 WHAT EXISTS ----------
     { sec: "WHAT EXISTS", theme: "panel", html:
       title("What runs today: a working demo slice") +
-      '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 60 automated tests. Not a prototype on your documents yet.</p>' +
+      '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 62 automated tests. Not a prototype on your documents yet.</p>' +
       table("wrap", ["Part", "State", "Note"], [
         ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "Core pipeline. No runtime dependencies beyond the standard library."],
-        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Real model run four times, see next slide."],
+        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Real model run five times, see next slide."],
         ["Web demo: canvas, steps view, feedback, review request", "{ok}Built", "Checked in headless Chrome and jsdom. Camera and drag not exercised."],
-        ["Real-model run on the question set", "{ok}Run, four times", "Qwen 3.8 27B. Wrong-and-confident 0 in every run. Refuses about half of what it could answer."],
-        ["Cross-report comparison questions", "{danger}Fails", "Retrieval misses one side. Needs a query rewrite per report."],
+        ["Real-model run on the question set", "{ok}Run, five times", "Qwen 3.8 27B. Wrong-and-confident 0 in every run. Refuses about half of what it could answer."],
+        ["Cross-report comparison questions", "{warn}Retrieved, refused", "Both reports now reach the model. It declines to compare. A prompt problem, next on the list."],
         ["Embeddings, OCR, production login", "{danger}Not started", "Weeks 2 to 6 of the plan."]]) +
       '<p class="dim" style="font-size:14px">Status as of 24 October 2026</p>',
       note: "Do not oversell. It proves the design works end to end on real reports. It does not prove answer quality and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
@@ -256,12 +256,12 @@
     { sec: "WHAT EXISTS", html:
       title("Results so far: what is measured, what is not") +
       '<div class="cols side"><div class="stack" style="gap:14px">' +
-      '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{danger}0 of 3 get both pages"]]) + '<p class="dim" style="font-size:15px">Right page in the top 12 across the set: 0.867.</p>' +
-      '<p class="dim" style="font-size:15px">Reading order and the edition filter made the difference. Nothing was tuned on these questions; 19 anchors were added after checking pages by hand, because the reports repeat forecasts in the summary.</p>' +
+      '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{ok}3 of 3 get both pages"]]) + '<p class="dim" style="font-size:15px">Right page in the top 12 across the set: 1.0, up from 0.867 after the edition words left the query and every report kept two slots.</p>' +
+      '<p class="dim" style="font-size:15px">Nothing was tuned on these questions; 19 anchors were added after checking pages by hand, because the reports repeat forecasts in the summary.</p>' +
       '<h3>Model-free baselines, as a floor</h3>' + table("sm wrap", ["Baseline", "Correct", "Timid", "Wrong and confident"], [["Quote the best sentence", "1 of 15", "0", "{danger}21 of 22"], ["Refuse on weak match", "0 of 15", "9", "{danger}9 of 22"]]) + '</div>' +
-      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">Wrong and confident, real model, four runs</div><div class="num">0 of 60</div><p>Qwen 3.8 27B on the 22 questions, four runs, 15 answerable each. It never stated a false figure as fact. Every miss was a refusal.</p>') +
-      table("sm", ["Run", "Correct", "Timid", "Refused right", "Wrong"], [["1", "9 of 15", "6", "7 of 7", "{ok}0"], ["2", "5 of 15", "10", "7 of 7", "{ok}0"], ["3", "7 of 15", "8", "7 of 7", "{ok}0"], ["4", "8 of 15", "7", "7 of 7", "{ok}0"]]) +
-      card("warn", '<p><b>Timid is the real failure.</b> About half the answerable questions are refused, and all three cross-report questions every time. Results vary run to run at temperature zero, so quote three runs, never one.</p>') + '</div></div>',
+      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">Wrong and confident, real model, five runs</div><div class="num">0 of 75</div><p>Qwen 3.8 27B on the 22 questions, five runs, 15 answerable each. It never stated a false figure as fact. Every miss was a refusal.</p>') +
+      table("sm", ["Run", "Correct", "Timid", "Refused right", "Wrong"], [["1 to 4", "5 to 9 of 15", "6 to 10", "7 of 7", "{ok}0"], ["5, after the retrieval fix", "8 of 15", "7", "7 of 7", "{ok}0"]]) +
+      card("warn", '<p><b>Timid is the real failure.</b> Half the answerable questions are refused, and every comparison, even with both reports in front of the model. Runs vary at temperature zero: quote three, never one.</p>') + '</div></div>',
       note: "Lead with the zero, then say what it does not mean: the model refuses a lot, and cross-report questions always. The model measured is Qwen 3.8 27B through Nous Research, not the Claude in the original proposal; say so if asked. The baselines prove a model-free approach cannot work." },
 
     // ---------- 4 TECHNOLOGY ----------

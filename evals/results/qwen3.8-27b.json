@@ -2,13 +2,13 @@
   "questions": 22,
   "answerable": 15,
   "unanswerable": 7,
-  "retrieval_hit_rate": 0.867,
+  "retrieval_hit_rate": 1.0,
   "correct": 8,
   "timid": 7,
   "correct_refusal": 7,
   "wrong_and_confident": 0,
-  "claims_drafted": 8,
-  "claims_rejected_by_gate": 0,
+  "claims_drafted": 10,
+  "claims_rejected_by_gate": 2,
   "rows": [
     {
       "id": "A01",
@@ -19,7 +19,7 @@
       "attempts": 1,
       "answer": [
         [
-          "The World Bank projected Malaysia's GDP growth to be 4.3 percent in 2024.",
+          "The World Bank projected Malaysia's GDP growth to pick up to 4.3 percent in 2024.",
           3,
           16
         ]
@@ -30,30 +30,18 @@
       "q": "What was Malaysia's full-year GDP growth in 2025, according to the April 2026 monitor?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia's full-year GDP growth in 2025 was 5.2 percent.",
-          5,
-          10
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A03",
       "q": "What GDP growth is projected for Malaysia in 2026?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia\u2019s GDP growth is projected to be 4.4 percent in 2026.",
-          5,
-          10
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A04",
@@ -64,7 +52,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia's GDP growth is projected to be 4.1 percent in 2025 in the October 2025 monitor.",
+          "Malaysia's GDP growth is projected to be 4.1 percent in 2025.",
           4,
           53
         ]
@@ -85,10 +73,10 @@
       "answerable": true,
       "retrieval_hit": true,
       "outcome": "correct",
-      "attempts": 2,
+      "attempts": 1,
       "answer": [
         [
-          "Only 49 percent of social assistance transfers goes to the B40 households.",
+          "49 percent of social assistance transfers goes to B40 households.",
           2,
           19
         ]
@@ -103,7 +91,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia's GDP grew at 2.9 percent in the second quarter of 2023.",
+          "Malaysia's GDP grew by 2.9 percent in the second quarter of 2023.",
           2,
           27
         ]
@@ -118,7 +106,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia\u2019s economy grew by 4.4 percent in the first half of 2025.",
+          "Malaysia's economy grew by 4.4 percent in the first half of 2025.",
           4,
           11
         ]
@@ -129,48 +117,60 @@
       "q": "What was Malaysia's real GDP growth in the fourth quarter of 2025?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's real GDP growth in Q4 2025 was 6.3 percent year-on-year.",
+          5,
+          11
+        ]
+      ]
     },
     {
       "id": "A10",
       "q": "What growth did the October 2025 monitor give for Malaysia in 2024?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "The October 2025 Malaysia Economic Monitor reported Malaysia's 2024 growth at 5.1 percent.",
+          4,
+          53
+        ]
+      ]
     },
     {
       "id": "A11",
       "q": "What did the April 2024 monitor give as Malaysia's GDP growth in 2023?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "The April 2024 monitor gave Malaysia's GDP growth in 2023 as 3.7 percent.",
-          3,
-          16
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A12",
       "q": "What forecast did the October 2023 monitor give for Malaysia's growth in 2024?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "The monitor forecast Malaysia's growth to edge up modestly to 4.3 percent in 2024.",
+          2,
+          61
+        ]
+      ]
     },
     {
       "id": "C01",
       "q": "How did the view of Malaysia's 2025 growth change between the October 2025 and April 2026 monitors?",
       "answerable": true,
-      "retrieval_hit": false,
+      "retrieval_hit": true,
       "outcome": "timid",
       "attempts": 2,
       "answer": []
@@ -179,7 +179,7 @@
       "id": "C02",
       "q": "Compare the 2024 growth projection in the October 2023 monitor with the April 2024 monitor.",
       "answerable": true,
-      "retrieval_hit": false,
+      "retrieval_hit": true,
       "outcome": "timid",
       "attempts": 2,
       "answer": []

@@ -2,15 +2,15 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. The real-model run has not happened yet, so the number that matters, wrong-and-confident on the question set, is still unmeasured.
+Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. A real model has been run on the question set five times: wrong-and-confident was zero in every run. The model refuses about half of what it could answer, and every cross-report comparison.
 
 | Part | State |
 |---|---|
 | Ingest, retrieval with access control, grounding gate, retry, audit | Built and tested |
-| Evaluation harness and 22-question set | Built. Baselines scored. Real model not run |
+| Evaluation harness and 22-question set | Built. Baselines scored. Real model run five times |
 | Web demo: canvas, steps, feedback, review request | Built. Camera maths, hover and drag not exercised |
-| Real-model run | Needs `ANTHROPIC_API_KEY` |
-| Cross-report comparisons | Retrieval misses one side. Needs a query rewrite |
+| Real-model run | Done with Qwen 3.8 27B through an OpenAI-compatible API. Claude adapter built, not yet run |
+| Cross-report comparisons | Retrieval now finds both sides. The model still refuses them |
 | Embeddings, OCR, production auth | Not started |
 
 ## Repository map
@@ -18,7 +18,7 @@ Status: a working demo slice. It has the core pipeline, an evaluation harness, f
 | Path | What it is |
 |---|---|
 | `ra/` | The package: ingest, retrieve, ground (the gate), answer (the loop and trace), llm, baselines, evalset, web |
-| `tests/` | 58 tests, with a small PDF writer so no fixtures are needed |
+| `tests/` | 62 tests, with a small PDF writer so no fixtures are needed |
 | `evals/` | The question set and the baseline results |
 | `tools/` | A stand-in server and a jsdom check for the page. Test tooling, not product code |
 | `docs/` | `TECH_STACK.md`: the stack, versions, what differs from the proposal, and code examples checked by a test. `DERIVING_THE_UI.md`: how the canvas and steps views were derived from reference recordings |
@@ -52,9 +52,9 @@ Retrieval, 12 passages per question:
 | Question type | Right page in the results |
 |---|---|
 | Single report, 12 questions | 12 of 12 |
-| Two reports, 3 questions | 0 of 3 get both pages |
+| Two reports, 3 questions | 3 of 3 get both pages |
 
-Two things made the difference: reading PDFs in reading order, because layout mode interleaves two-column pages and breaks quotes, and treating "the April 2024 monitor" in a question as a date filter. The cross-report misses need a model to rewrite a comparison into one query per report. That is the next step. I did not tune further on these 22 questions, because that would overfit.
+Four things made the difference: reading PDFs in reading order, because layout mode interleaves two-column pages and breaks quotes; treating "the April 2024 monitor" in a question as a date filter; dropping the edition's own words from the text query once they have become that filter, because "October 2025" otherwise outranks the forecast inside the report; and, when no edition is named, keeping two slots for every report that matches, so a comparison sees both of its sides. The last two were chosen from the ranks a diagnosis printed, each has a synthetic test, and nothing was tuned on the 22 questions.
 
 Baselines with no model, as a floor:
 
@@ -63,7 +63,22 @@ Baselines with no model, as a floor:
 | extractive: quote the best sentence | 1 of 15 | 0 | 0 of 7 | 21 |
 | threshold: refuse if few question words match | 0 of 15 | 9 | 4 of 7 | 9 |
 
-No model-free approach comes close. The gate cannot catch an answer that is real but irrelevant, so a model has to judge relevance and refuse. The real-model result is not in yet.
+No model-free approach comes close. The gate cannot catch an answer that is real but irrelevant, so a model has to judge relevance and refuse.
+
+A real model, Qwen 3.8 27B through Nous Research's OpenAI-compatible API, temperature 0, 12 passages per question:
+
+| Run | Retrieval | Correct | Timid | Correct refusal | Wrong and confident |
+|---|---|---|---|---|---|
+| 1 to 4, before the retrieval fix | 0.867 | 5 to 9 of 15 | 6 to 10 | 7 of 7 | 0 |
+| 5, after it | 1.0 | 8 of 15 | 7 | 7 of 7 | 0 |
+
+Three things to read into that. First, the model never stated a false figure as fact in 75 answerable attempts, and the gate removed 2 of 10 drafted claims in run 5, so the design holds. Second, timid is the failure mode: the model refuses about half the answerable questions, and all three comparisons in every run even now that both reports are in front of it. That is a prompting and model problem, not retrieval. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
+
+The first runs reported one to three wrong-and-confident. Every one was checked against the page: right report, right figure, right context, and the gate had verified the quote. They were scored wrong because the question set anchored a single page and these reports repeat forecasts in the executive summary. A fact may now carry several anchor sentences, every anchor must resolve, and 19 were added after reading each page. That is label correction, declared here. The rule that a right number on an unrelated page is wrong still stands and still has a test.
+
+```
+HERMES_API_KEY=... HERMES_MODEL=qwen/qwen3.8-27b uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/qwen3.8-27b.json
+```
 
 ## The web demo
 
@@ -88,7 +103,7 @@ A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 - The stack and real code examples are in [docs/TECH_STACK.md](docs/TECH_STACK.md).
 - The design of the canvas and steps views was derived from observing two reference recordings. Nothing was copied. The method, the limits and the labels deliberately left out are in [docs/DERIVING_THE_UI.md](docs/DERIVING_THE_UI.md).
 - The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.
-- With `ANTHROPIC_API_KEY` set it uses Claude. Without it, it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
+- With `ANTHROPIC_API_KEY` set it uses Claude; with `HERMES_API_KEY` set it uses any OpenAI-compatible endpoint (`HERMES_BASE_URL`, `HERMES_MODEL`). With neither it uses the extractive baseline and shows a banner saying so. That baseline is often irrelevant. Do not present it as the real assistant.
 - Labels say what happened, not "verified". The quote check proves the quote is on the page, not that the claim answers the question, and the page says so.
 - Tested in headless Chrome on the real library as two users, with a stand-in model that first fabricates a quote and then quotes for real: the fabricated claim shows as Removed, the camera ends on the answer, and a 390 px phone width is readable with no sideways scroll. Those screenshots were checked by hand. The interactions (source cards, nav, Show how it was found, expand all, thumbs, review request) were run against the real page script in jsdom with `tools/dom_check.mjs`, 18 checks, on a copy of the database. jsdom has no layout, so camera maths, hover and drag were not exercised.
 
@@ -102,17 +117,17 @@ Needs `pdftotext` and `pdfinfo` (poppler). 58 tests, including one that fails if
 
 ## What comes next
 
-1. Run the real model on the 22 questions. If wrong-and-confident is not zero, fix that before anything else.
-2. Rewrite comparison questions into one query per named report, then re-measure the three cross-report questions without tuning on them.
+1. Bring the timid rate down without raising wrong-and-confident: the system prompt tells the model to return nothing when unsure, and a 27B model takes that literally on comparisons. Try asking for one claim per report, and re-measure over three runs.
+2. Run the Claude adapter on the same set so the two models can be compared.
 3. Add embeddings beside the keyword search, and measure whether they help.
 4. Only then think about authentication, hosting and the client's own reports.
 
 ## Limits, stated plainly
 
-- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss. Comparisons across reports miss one side today.
+- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss. Comparisons across reports are retrieved but the model refuses to answer them.
 - No OCR. Scanned pages are flagged, not read.
 - The gate checks that a quote is on the page and that numbers match. It does not check that the claim means what the quote means. A reviewer can still disagree with a claim that passes.
 - Numbers written as words are not checked.
-- The Claude adapter (`ra/llm.py`) is tested with a fake client only. It has not been run against the real API.
+- The Claude adapter (`ra/llm.py`) is tested with a fake client only. It has not been run against the real API. The OpenAI-compatible adapter has.
 - Unit tests use small synthetic PDFs. The 22-question set is small, so a score on it is a signal, not a measurement of production quality.
 - Everything so far is World Bank economic reports. The client's own research library may differ in layout, language and tables.
