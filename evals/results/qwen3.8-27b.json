@@ -3,28 +3,21 @@
   "answerable": 15,
   "unanswerable": 7,
   "retrieval_hit_rate": 1.0,
-  "correct": 5,
-  "timid": 10,
+  "correct": 6,
+  "timid": 9,
   "correct_refusal": 7,
   "wrong_and_confident": 0,
   "claims_drafted": 9,
-  "claims_rejected_by_gate": 4,
+  "claims_rejected_by_gate": 3,
   "rows": [
     {
       "id": "A01",
       "q": "What GDP growth did the World Bank project for Malaysia in 2024 in the April 2024 monitor?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia\u2019s GDP growth was projected to pick up to 4.3 percent in 2024.",
-          3,
-          16,
-          "Malaysia\u2019s GDP growth is projected to pick up to 4.3 percent in 2024"
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A02",
@@ -49,9 +42,16 @@
       "q": "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's GDP growth is projected to be 4.1 percent in 2025.",
+          4,
+          14,
+          "Malaysia\u2019s economy is projected to expand\nby 4.1 percent in 2025, moderating from 5.1\npercent in 2024."
+        ]
+      ]
     },
     {
       "id": "A05",
@@ -71,7 +71,7 @@
       "attempts": 1,
       "answer": [
         [
-          "49 percent of social assistance transfers goes to the B40 households.",
+          "49 percent of social assistance transfers goes to B40 households.",
           2,
           19,
           "Consequently, only 49 percent of transfers goes to the B40."
@@ -83,16 +83,9 @@
       "q": "How fast did Malaysia's GDP grow in the second quarter of 2023?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia's GDP grew by 2.9 percent in the second quarter of 2023.",
-          2,
-          27,
-          "The Malaysian economy grew at a more moderate rate of 2.9 percent in Q2 2023 (Q1 2023: 5.6 percent) (Figure 3)."
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A08",
@@ -115,9 +108,16 @@
       "q": "What was Malaysia's real GDP growth in the fourth quarter of 2025?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "Malaysia's real GDP rose by 6.3 percent in Q4 2025.",
+          5,
+          21,
+          "Real GDP rose by 6.3 percent in Q4 2025,"
+        ]
+      ]
     },
     {
       "id": "A10",
@@ -128,10 +128,10 @@
       "attempts": 1,
       "answer": [
         [
-          "The October 2025 monitor gave Malaysia's 2024 growth as 5.1 percent.",
+          "The October 2025 Malaysia Economic Monitor reported that Malaysia's economy grew by 5.1 percent in 2024.",
           4,
           53,
-          "percent in 2025 (2024: 5.1 percent) (Figure 52)."
+          "The Malaysian economy is projected to grow by 4.1 percent in 2025 (2024: 5.1 percent) (Figure 52)."
         ]
       ]
     },
@@ -149,9 +149,16 @@
       "q": "What forecast did the October 2023 monitor give for Malaysia's growth in 2024?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
+      "outcome": "correct",
       "attempts": 2,
-      "answer": []
+      "answer": [
+        [
+          "The monitor forecast Malaysia\u2019s growth to edge up modestly to 4.3 percent in 2024.",
+          2,
+          61,
+          "Malaysia\u2019s growth is forecast to edge up modestly to 4.3 percent in 2024, as the likely recovery of global growth and the easing of global financial conditions are expected to offset the impact of China slowing down."
+        ]
+      ]
     },
     {
       "id": "C01",

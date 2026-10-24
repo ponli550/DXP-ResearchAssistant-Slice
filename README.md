@@ -2,15 +2,15 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. A real model has been run on the question set five times: wrong-and-confident was zero in every run. The model refuses about half of what it could answer, and every cross-report comparison.
+Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. Two real models have been run on the question set sixteen times. The smaller one has never stated a wrong answer and refuses about half of what it could answer. The larger one answers nearly everything and, after two plain-code rules added from its runs, answers beside the point once or twice a run, always with a true figure for a different reading of the question.
 
 | Part | State |
 |---|---|
 | Ingest, retrieval with access control, grounding gate, retry, audit | Built and tested |
-| Evaluation harness and 22-question set | Built. Baselines scored. Real model run five times |
+| Evaluation harness and 22-question set | Built. Baselines scored. Two real models, sixteen runs |
 | Web demo: canvas, steps, feedback, review request | Built. Camera maths, hover and drag not exercised |
-| Real-model run | Done with Qwen 3.8 27B through an OpenAI-compatible API. Claude adapter built, not yet run |
-| Cross-report comparisons | Retrieval now finds both sides. The model still refuses them |
+| Real-model run | Qwen 3.8 27B and Gemini 4 Argon through an OpenAI-compatible API. Claude adapter built, not yet run |
+| Cross-report comparisons | Retrieval finds both sides. The small model refuses them; the large one answers two of three |
 | Embeddings, OCR, production auth | Not started |
 
 ## Repository map
@@ -18,7 +18,7 @@ Status: a working demo slice. It has the core pipeline, an evaluation harness, f
 | Path | What it is |
 |---|---|
 | `ra/` | The package: ingest, retrieve, ground (the gate), answer (the loop and trace), llm, baselines, evalset, web |
-| `tests/` | 62 tests, with a small PDF writer so no fixtures are needed |
+| `tests/` | 73 tests, with a small PDF writer so no fixtures are needed |
 | `evals/` | The question set and the baseline results |
 | `tools/` | A stand-in server and a jsdom check for the page. Test tooling, not product code |
 | `docs/` | `TECH_STACK.md`: the stack, versions, what differs from the proposal, and code examples checked by a test. `DERIVING_THE_UI.md`: how the canvas and steps views were derived from reference recordings. `DESIGN.md`: the rules the admin board follows and where each came from |
@@ -73,10 +73,12 @@ A real model, Qwen 3.8 27B through Nous Research's OpenAI-compatible API, temper
 | Qwen 3.8 27B, runs 5 to 9, after it | 1.0 | 5 to 8 of 15 | 7 to 10 | 7 of 7 | 0 |
 | Gemini 4 Argon, 3 runs, old gate | 1.0 | 12 to 13 of 15 | 0 to 1 | 6 to 7 of 7 | 2 to 3 |
 | Gemini 4 Argon, 3 runs, figure-label rule in the gate | 1.0 | 11 to 12 of 15 | 0 to 2 | 6 to 7 of 7 | 2 to 4 |
+| Gemini 4 Argon, 3 runs, plus the figure-question rule | 1.0 | 10 to 12 of 15 | 2 to 3 | 7 of 7 | 1 to 2 |
+| Qwen 3.8 27B, run 10, same gate | 1.0 | 6 of 15 | 9 | 7 of 7 | 0 |
 
-The second model answers nearly everything and the gate removes a third of what it drafts. Its first runs exposed a gap: it quoted a chart's axis text ("5.1 4.4 3.6 3.3 4.1 2025f") and the number check passed because 4.4 was in the blob. The gate now requires a number to appear on a line with at least three words, so figure labels do not count; that claim is removed and the test that proves it is in `tests/test_core.py`. Its remaining wrong-and-confident answers were each checked against their quotes: none states a false figure. They are true, verified sentences that answer a different question (first-half actual growth when the full-year projection was asked; quarter-on-quarter when year-on-year was anchored) or that reply to an unanswerable question with related facts. The gate cannot catch a true quote that answers the wrong question. That is the model's job, or a reviewer's, and the brief counts a confident irrelevant answer as a failure, so the scorer keeps counting it.
+The second model answers nearly everything and the gate removes a third of what it drafts. Its first runs exposed a gap: it quoted a chart's axis text ("5.1 4.4 3.6 3.3 4.1 2025f") and the number check passed because 4.4 was in the blob. The gate now requires a number to appear on a line with at least three words, so figure labels do not count; that claim is removed and the test that proves it is in `tests/test_core.py`. Its remaining wrong-and-confident answers were each checked against their quotes: none states a false figure. They are true, verified sentences that answer a different question (first-half actual growth when the full-year projection was asked; quarter-on-quarter when year-on-year was anchored) or that reply to an unanswerable question with related facts. The gate cannot judge relevance in general, but one case is plain: a question that asks for a figure (growth, share, how many, a rate) answered by a set of claims none of which states one. The gate now removes that whole set, with the reason, and the retry asks for the figure; years and quarter marks do not count as figures. On three runs that took the larger model's wrong-and-confident from 2 to 4 down to 1 to 2 and every unanswerable question to a correct refusal, at the cost of one more timid answer. What is left is one kind: a true figure for a different reading of the question, every run on the cross-report question about 2025 (it gives the first-half actual instead of the full-year projection) and once on the fourth-quarter question (quarter-on-quarter instead of year-on-year). Plain code cannot see that. The brief counts a confident irrelevant answer as a failure, so the scorer keeps counting it, and it is a reviewer's job or a sharper question.
 
-Three things to read into that. First, neither model stated a false figure as fact in any run, 135 answerable attempts across both, and the gate removed between 2 of 10 and 17 of 47 drafted claims, so the design holds. Second, the two models fail in opposite directions. The smaller one refuses about half the answerable questions and every comparison; the larger one answers almost everything and two to four times a run answers confidently beside the point. Coverage and zero-false pull against each other, and the brief ranks zero-false first. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
+Three things to read into that. First, neither model stated a false figure as fact in any run, 240 answerable attempts across both, and the gate removed between 2 of 10 and 18 of 42 drafted claims, so the design holds. Second, the two models fail in opposite directions. The smaller one refuses about half the answerable questions and every comparison; the larger one answers almost everything and once or twice a run answers confidently beside the point. Coverage and zero-false pull against each other, and the brief ranks zero-false first. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
 
 The first runs reported one to three wrong-and-confident. Every one was checked against the page: right report, right figure, right context, and the gate had verified the quote. They were scored wrong because the question set anchored a single page and these reports repeat forecasts in the executive summary. A fact may now carry several anchor sentences, every anchor must resolve, and 19 were added after reading each page. That is label correction, declared here. The rule that a right number on an unrelated page is wrong still stands and still has a test.
 
@@ -126,14 +128,14 @@ Needs `pdftotext` and `pdfinfo` (poppler). 58 tests, including one that fails if
 
 ## What comes next
 
-1. Close the gap between the two models. The smaller one is timid and never wrong; the larger one covers the set and answers beside the point two to four times a run. Loosening the smaller model's prompt was tried and reverted (it raised wrong-and-confident without lowering timid). The next plain-code rule to try on the larger model: when the question asks for a figure and no surviving claim carries one, refuse instead of answering with prose. That would have caught two of its three failure kinds. The third, a true figure for a different reading of the question, needs a reviewer or the question set. Run the Claude adapter on the same set, three runs.
+1. Close the gap between the two models. The smaller one is timid and never wrong; the larger one covers the set and answers beside the point once or twice a run. Loosening the smaller model's prompt was tried and reverted (it raised wrong-and-confident without lowering timid). The figure-question rule was tried and kept (it removed two of the larger model's three failure kinds). The one left, a true figure for a different reading of the question, is not a plain-code problem: it needs a reviewer, or questions that name the reading they want.
 2. Run the Claude adapter on the same set so the two models can be compared.
 3. Add embeddings beside the keyword search, and measure whether they help.
 4. Only then think about authentication, hosting and the client's own reports.
 
 ## Limits, stated plainly
 
-- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss. Comparisons across reports are retrieved but the model refuses to answer them.
+- Keyword search only. No embeddings yet, so a question phrased with different words than the report may miss. Comparisons across reports are retrieved; the small model refuses them and the large one answers two of three.
 - No OCR. Scanned pages are flagged, not read.
 - The gate checks that a quote is on the page and that numbers match. It does not check that the claim means what the quote means. A reviewer can still disagree with a claim that passes.
 - Numbers written as words are not checked.

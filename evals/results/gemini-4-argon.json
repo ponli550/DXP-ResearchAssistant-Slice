@@ -3,12 +3,12 @@
   "answerable": 15,
   "unanswerable": 7,
   "retrieval_hit_rate": 1.0,
-  "correct": 11,
+  "correct": 12,
   "timid": 2,
   "correct_refusal": 7,
-  "wrong_and_confident": 2,
-  "claims_drafted": 26,
-  "claims_rejected_by_gate": 9,
+  "wrong_and_confident": 1,
+  "claims_drafted": 37,
+  "claims_rejected_by_gate": 17,
   "rows": [
     {
       "id": "A01",
@@ -28,7 +28,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia's full-year GDP growth in 2025 was 5.2 percent.",
+          "Malaysia's full-year economic growth in 2025 was 5.2 percent.",
           5,
           10,
           "Despite a challenging external environment,\nMalaysia\u2019s growth outperformed projections in the\nsecond half of 2025, lifting full-year growth to 5.2\npercent."
@@ -40,16 +40,9 @@
       "q": "What GDP growth is projected for Malaysia in 2026?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "wrong_and_confident",
+      "outcome": "timid",
       "attempts": 2,
-      "answer": [
-        [
-          "Malaysia's growth is expected to ease and moderate in 2026 after an upside surprise in 2025.",
-          5,
-          50,
-          "Malaysia\u2019s growth is expected to ease in 2026\nafter an upside surprise in 2025\nFIGURE 48\nMalaysia\u2019s growth is projected to moderate in 2026"
-        ]
-      ]
+      "answer": []
     },
     {
       "id": "A04",
@@ -63,13 +56,7 @@
           "The Malaysian economy is projected to grow by 4.1 percent in 2025.",
           4,
           53,
-          "The Malaysian economy is projected to grow by 4.1 percent in 2025 (2024: 5.1 percent) (Figure 52)."
-        ],
-        [
-          "This 2025 projection represents an upward revision of 0.2 percentage point from the April 2025 forecast.",
-          4,
-          53,
-          "This marks an upward revision of 0.2 percentage point from the April 2025 forecast, underpinned by strongerthan-expected private investment and continued export growth in the first half of 2025, alongside additional fiscal and monetary policy support."
+          "The Malaysian economy is projected to grow by 4.1\npercent in 2025 (2024: 5.1 percent) (Figure 52)."
         ]
       ]
     },
@@ -82,7 +69,7 @@
       "attempts": 1,
       "answer": [
         [
-          "The October 2023 Malaysia Economic Monitor projected Malaysia's economy to expand by 3.9 percent in 2023, which is 0.4 percentage points lower than its previous forecast.",
+          "The October 2023 Malaysia Economic Monitor projected that Malaysia's GDP growth would moderate to 3.9 percent in 2023, which is 0.4 percentage points lower than the previous forecast.",
           2,
           61,
           "Following a strong recovery in\n2022, Malaysia\u2019s economy is projected to expand at\n3.9 percent in 2023 (2022: 8.7 percent), 0.4 percentage\npoints lower than in the previous forecast, on account\nof weaker-than-assumed quarterly GDP growth in 2Q\n2023 and weakening momentum in global goods trade."
@@ -100,8 +87,8 @@
         [
           "Only 49 percent of social assistance transfers goes to the B40 households.",
           2,
-          78,
-          "Consequently, only 49 percent of transfers goes to the B40 while 14 percent goes to the T20 and 7 percent to the richest decile (Figure 77)."
+          19,
+          "Consequently, only 49 percent of transfers goes to the B40."
         ]
       ]
     },
@@ -114,7 +101,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia's GDP grew by 2.9 percent in the second quarter of 2023.",
+          "Malaysia's GDP grew by 2.9 percent in Q2 2023.",
           2,
           11,
           "Malaysia\u2019s\nGDP growth slowed to 2.9 percent in Q2 2023 (Q1\n2023: 5.6 percent), consistent with those in the more\ntrade-dependent EAP economies (Figure ES1)."
@@ -130,7 +117,7 @@
       "attempts": 1,
       "answer": [
         [
-          "Malaysia's economy grew by 4.4 percent in the first half of 2025, which was supported by resilient private consumption and investment.",
+          "Malaysia's economy grew by 4.4 percent in the first half of 2025.",
           4,
           11,
           "Malaysia\u2019s economy grew by 4.4 percent in the\nfirst half of 2025, supported by resilient private\nconsumption and investment."
@@ -146,13 +133,13 @@
       "attempts": 1,
       "answer": [
         [
-          "In the fourth quarter of 2025, Malaysia's real GDP grew by 6.3 percent year-on-year.",
+          "Malaysia's real GDP grew by 6.3 percent year-on-year in the fourth quarter of 2025.",
           5,
           11,
           "Real GDP grew by 6.3 percent year-on-year (y/y) in Q4 2025 (compared to 5.4 percent in Q3 2025), the strongest quarterly performance in three years (Figure ES1)."
         ],
         [
-          "On a quarter-on-quarter, seasonally adjusted basis, growth moderated to 0.8 percent in Q4 2025.",
+          "On a quarter-on-quarter, seasonally adjusted basis, Malaysia's growth moderated to 0.8 percent in the fourth quarter of 2025.",
           5,
           11,
           "On a quarter-on-quarter, seasonally adjusted basis, growth moderated to 0.8 percent in Q4 (Q3 2025: 2.7 percent), suggesting some easing in momentum after several quarters of robust expansion."
@@ -171,7 +158,7 @@
           "The October 2025 Malaysia Economic Monitor reported that the Malaysian economy grew by 5.1 percent in 2024.",
           4,
           53,
-          "The Malaysian economy is projected to grow by 4.1 percent in 2025 (2024: 5.1 percent) (Figure 52)."
+          "The Malaysian economy is projected to grow by 4.1\npercent in 2025 (2024: 5.1 percent) (Figure 52)."
         ]
       ]
     },
@@ -184,7 +171,7 @@
       "attempts": 2,
       "answer": [
         [
-          "Malaysia's overall growth in 2023 was 3.7 percent.",
+          "Malaysia's overall economic growth was 3.7 percent in 2023.",
           3,
           11,
           "The Malaysian economy moderated further to 3.0\npercent in Q4 2023 (Q3 2023: 3.3 percent), bringing\nthe overall growth to 3.7 percent in 2023 (2022:\n8.7 percent)."
@@ -197,13 +184,13 @@
       "answerable": true,
       "retrieval_hit": true,
       "outcome": "correct",
-      "attempts": 1,
+      "attempts": 2,
       "answer": [
         [
-          "Malaysia's growth is forecast to edge up modestly to 4.3 percent in 2024.",
+          "Malaysia\u2019s growth was forecast to edge up modestly to 4.3 percent in 2024.",
           2,
           61,
-          "Malaysia\u2019s growth is forecast to edge up modestly to 4.3 percent in 2024, as the likely recovery of global growth and the easing of global financial conditions are expected to offset the impact of China slowing down."
+          "Malaysia\u2019s growth is forecast to edge up modestly to\n4.3 percent in 2024, as the likely recovery of global\ngrowth and the easing of global financial conditions\nare expected to offset the impact of China slowing\ndown."
         ]
       ]
     },
@@ -216,7 +203,7 @@
       "attempts": 1,
       "answer": [
         [
-          "In the October 2025 monitor, the Malaysian economy was reported to have expanded by 4.4 percent in H1 2025, sustained largely by domestic demand.",
+          "In the October 2025 monitor, it was reported that the Malaysian economy grew by 4.4 percent during the first half of 2025, largely sustained by domestic demand.",
           4,
           23,
           "The Malaysian economy expanded by 4.4 percent in H1 2025, sustained largely by domestic demand"
@@ -228,9 +215,40 @@
       "q": "Compare the 2024 growth projection in the October 2023 monitor with the April 2024 monitor.",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "timid",
-      "attempts": 2,
-      "answer": []
+      "outcome": "correct",
+      "attempts": 1,
+      "answer": [
+        [
+          "In the April 2024 monitor, Malaysia's economy is also projected to expand by 4.3 percent in 2024, while private consumption is expected to grow by 5.2 percent and public consumption is forecasted to grow at 2.8 percent in 2024.",
+          3,
+          61,
+          "After experiencing weaker-than-expected growth outcomes in 2023, Malaysia\u2019s economy is projected to expand at a higher rate of 4.3 percent in 2024 (2023: 3.7 percent) (Figure 49). Domestic demand will remain the main growth driver throughout the forecast period (Figure 50). Private consumption is expected to see a modest increase in growth to 5.2 percent this year (2023: 4.7 percent), supported by continued improvement in labor market conditions and wage growth, as well as household income support from the government, including the Sumbangan Tunai Rahmah (STR) cash aid. Meanwhile, public consumption is forecasted to grow at a rate of 2.8 percent this year (2023: 3.9 percent)."
+        ],
+        [
+          "In the October 2023 monitor, global growth is projected to edge up to 2.4 percent in 2024.",
+          2,
+          19,
+          "Global growth is projected to moderate to 2.1 percent in 2023 before edging up to 2.4 percent in 2024 (2022e: 3.1 percent)."
+        ],
+        [
+          "In the April 2024 monitor, global growth is projected to slow to 2.4 percent in 2024.",
+          3,
+          16,
+          "Global growth is set to slow to 2.4 percent in 2024 (2023: 2.6 percent), marking the third consecutive year of deceleration."
+        ],
+        [
+          "In the October 2023 monitor, growth in the EAP region is projected to slow to 4.5 percent in 2024, while China's growth is expected to slow to 4.4 percent and growth in the rest of developing EAP is projected to edge up to 4.7 percent in 2024.",
+          2,
+          60,
+          "Growth in the developing EAP region is projected to strengthen to 5.0 percent in 2023 before slowing to 4.5 percent in 2024 (Figure 63). China\u2019s growth is expected to slow to 4.4 percent in 2024 after reaching 5.1 percent in 2023 (2022: 3.0 percent), as the rebound from the re-opening of the economy fades, while elevated debt, weakness in the property sector, and longer-term structural factors weigh on growth. Meanwhile, growth in the rest of developing EAP is projected to slow to 4.6 percent in 2023 amid softening global growth and tightening financial conditions (2022: 5.8 percent), before edging up to 4.7 percent in 2024."
+        ],
+        [
+          "In the April 2024 monitor, growth in the EAP region is projected to slow to 4.5 percent in 2024, while growth in China is expected to decline to 4.5 percent and growth in the rest of the region is projected to pick up to 4.6 percent in 2024.",
+          3,
+          16,
+          "In the EAP region, growth is projected to slow to 4.5 percent in 2024 (2023: 5.1 percent), mainly reflecting a further deceleration in economic activity in China. Growth in China is expected to decline further to 4.5 percent in 2024 (2023: 5.2 percent) as the post-pandemic rebound wanes. In the rest of the region, growth is projected to pick up to 4.6 percent in 2024 (2023: 4.4 percent), underpinned by domestic demand and increased government spending in some economies."
+        ]
+      ]
     },
     {
       "id": "C03",
@@ -241,7 +259,7 @@
       "attempts": 1,
       "answer": [
         [
-          "In Q2 2023, the Malaysian economy grew at a rate of 2.9 percent.",
+          "In Q2 2023, the Malaysian economy grew at a moderate rate of 2.9 percent.",
           2,
           27,
           "The Malaysian economy grew at a more moderate rate of 2.9 percent in Q2 2023 (Q1 2023: 5.6 percent) (Figure 3)."
@@ -253,7 +271,7 @@
           "Real GDP grew by 6.3 percent year-on-year (y/y) in Q4 2025 (compared to 5.4 percent in Q3 2025), the strongest quarterly performance in three years (Figure ES1)."
         ],
         [
-          "On a quarter-on-quarter, seasonally adjusted basis, growth moderated to 0.8 percent in Q4 2025.",
+          "On a quarter-on-quarter, seasonally adjusted basis, Malaysia's growth moderated to 0.8 percent in Q4 2025.",
           5,
           11,
           "On a quarter-on-quarter, seasonally adjusted basis, growth moderated to 0.8 percent in Q4 (Q3 2025: 2.7 percent), suggesting some easing in momentum after several quarters of robust expansion."
