@@ -349,9 +349,12 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         if not con.execute("SELECT 1 FROM audit WHERE id=? AND user=?", (audit_id, user)).fetchone():
             raise HTTPException(403, "That answer does not belong to this user.")
 
+    # The pages are the app; a browser that keeps a stale copy shows yesterday's board over today's code.
+    NO_CACHE = {"Cache-Control": "no-store"}
+
     @app.get("/", response_class=HTMLResponse)
     def index():
-        return INDEX_HTML
+        return HTMLResponse(INDEX_HTML, headers=NO_CACHE)
 
     @app.get("/api/users")
     def users():
@@ -441,7 +444,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
 
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard_page():
-        return DASHBOARD_HTML
+        return HTMLResponse(DASHBOARD_HTML, headers=NO_CACHE)
 
     def admin(x_token):
         if not x_token or x_token != admin_token:

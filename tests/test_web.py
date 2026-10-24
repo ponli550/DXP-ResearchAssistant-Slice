@@ -312,3 +312,9 @@ def test_dashboard_page_builds_its_grid_from_the_layout(web):
     assert '<div class="grid skel" id="grid"' in page and "<h2>To do" not in page  # no static panels left
     for t in ("todo", "timeline", "coverage", "recent", "runs", "users", "people"):
         assert f" {t}:{{title:" in page  # the page's catalogue mirrors the server's
+
+
+def test_pages_are_never_cached(web):
+    client = web[0]
+    for path in ("/", "/dashboard"):
+        assert client.get(path).headers["cache-control"] == "no-store"
