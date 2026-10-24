@@ -737,7 +737,7 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .tabs button[aria-selected=true]{color:var(--fg);border-color:var(--line);background:var(--card)}
 .brief{margin:var(--s3) 0 var(--s3);font:1.08rem/1.4 var(--serif);text-wrap:balance;max-inline-size:90ch}.brief .meta{display:block;margin-top:var(--s1)}
 .brief .why{cursor:help;text-decoration:underline dotted;color:var(--dim)}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--s3)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--s3);grid-auto-flow:dense}
 .panel{grid-column:span var(--span,4);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s2) var(--s3) var(--s3);min-width:0;transition:box-shadow .15s ease-out}
 .panel.w12{grid-column:span 12}.panel[data-x]{grid-column-start:calc(var(--x) + 1)}.panel.open{box-shadow:0 0 0 2px var(--accent) inset}
 @media(max-width:900px){.panel,.panel[data-x]{grid-column:span 12}}
@@ -836,7 +836,7 @@ let LAYOUT=null,CAT={},OWNER="admin";
 function buildGrid(){const g=$("grid");g.textContent="";
  LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
   if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
-  const h=el("h2");h.innerHTML=t.title+" "+t.sub;const b=el("button","exp",w.span===12?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",w.span===12?"true":"false");b.title=w.span===12?"Back to the catalogue width":"Full width; saved to your layout";
+  const h=el("h2");h.innerHTML=t.title+" "+t.sub;const b=el("button","exp",w.span===12?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",w.span===12?"true":"false");b.setAttribute("aria-label",(w.span===12?"Shrink ":"Expand ")+t.title);
   b.onclick=()=>toggle(i);h.appendChild(b);p.appendChild(h);const body=el("div");body.innerHTML=t.body;p.appendChild(body);if(w.span===12)p.classList.add("open");g.appendChild(p);});
  let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
  n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
