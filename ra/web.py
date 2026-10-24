@@ -60,6 +60,27 @@ class ReviewBody(BaseModel):
     note: str = ""
 
 
+class KeyBody(BaseModel):
+    name: str
+    user: str
+
+
+def _hash_key(key):
+    import hashlib
+
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+def user_for_key(con, key):
+    """The user an API key stands for, or None. A key is a credential for one user, so it inherits that user's grants and nothing more."""
+    row = con.execute("SELECT id, user FROM api_keys WHERE key_hash=? AND revoked_at IS NULL", (_hash_key(key),)).fetchone()
+    if not row:
+        return None
+    con.execute("UPDATE api_keys SET last_used=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?", (row["id"],))
+    con.commit()
+    return row["user"]
+
+
 def quote_span(text, quote):
     """Offsets of the quote inside the page text, ignoring differences in whitespace and case. None if not found."""
     words = quote.split()
@@ -274,11 +295,17 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         return {"documents": [dict(r) for r in rows]}
 
     @app.post("/api/ask")
-    def ask_route(body: AskBody):
+    def ask_route(body: AskBody, x_api_key: str = Header(default="")):
         question = body.question.strip()
         if not question or len(question) > 500:
             raise HTTPException(400, "Ask a question of up to 500 characters.")
         con = db()
+        if x_api_key:
+            # An integration asks with a key, not a user name. The key decides the user; the body's user is ignored.
+            user = user_for_key(con, x_api_key)
+            if not user:
+                raise HTTPException(401, "That API key is unknown or revoked.")
+            body.user = user
         if not allowed_libraries(con, body.user):
             raise HTTPException(403, "This user has no library access.")
         res = ask(con, llm, body.user, question)
@@ -341,6 +368,43 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard_page():
         return DASHBOARD_HTML
+
+    def admin(x_token):
+        if not x_token or x_token != admin_token:
+            raise HTTPException(401, "That token is not the admin token.")
+
+    @app.get("/api/admin/keys")
+    def list_keys(x_token: str = Header(default="")):
+        admin(x_token)
+        rows = db().execute("SELECT id, name, user, prefix, created_at, last_used, revoked_at FROM api_keys ORDER BY id DESC").fetchall()
+        return {"keys": [dict(r) for r in rows]}
+
+    @app.post("/api/admin/keys")
+    def make_key(body: KeyBody, x_token: str = Header(default="")):
+        import secrets
+
+        admin(x_token)
+        con = db()
+        name, user = body.name.strip(), body.user.strip()
+        if not name or not user:
+            raise HTTPException(400, "A key needs a name and a user.")
+        if not allowed_libraries(con, user):
+            raise HTTPException(400, "That user holds no library grant, so a key for them could search nothing.")
+        key = "ra_" + secrets.token_urlsafe(24)
+        cur = con.execute("INSERT INTO api_keys(name, user, key_hash, prefix) VALUES (?,?,?,?)", (name, user, _hash_key(key), key[:7]))
+        con.commit()
+        # The key is returned once and never stored; only its hash is.
+        return {"id": cur.lastrowid, "name": name, "user": user, "key": key, "prefix": key[:7]}
+
+    @app.delete("/api/admin/keys/{key_id}")
+    def revoke_key(key_id: int, x_token: str = Header(default="")):
+        admin(x_token)
+        con = db()
+        cur = con.execute("UPDATE api_keys SET revoked_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=? AND revoked_at IS NULL", (key_id,))
+        con.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "No active key with that id.")
+        return {"revoked": key_id}
 
     @app.get("/api/admin/board")
     def admin_board(since: str = "", x_token: str = Header(default="")):
@@ -576,7 +640,7 @@ h2 span{letter-spacing:0;text-transform:none;font-weight:400}
 .cover{display:flex!important;gap:1rem;align-items:center;margin-top:1rem}.ring{width:4.2rem;height:4.2rem;flex:none;transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:3.4}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100}
 .graph{width:100%;height:auto;display:block}.graph text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.graph text.dim{fill:var(--dim)}.graph .lib{fill:var(--card);stroke:var(--accent);stroke-width:1.5}.graph .doc{fill:var(--card);stroke:var(--fg);stroke-width:1}.graph .usr{fill:var(--accent)}
 .graph line.member{stroke:var(--line);stroke-width:1}.graph line.grant{stroke:var(--accent);stroke-width:1;stroke-opacity:.5}.graph line.cited{stroke:var(--accent);stroke-opacity:.85}.graph path.next_edition{stroke:var(--dim);stroke-dasharray:3 3;stroke-width:1}
-.tryform{display:grid!important;grid-template-columns:auto 1fr auto;gap:.5rem}.tryform input,.tryform select{padding:.5rem .6rem}.tryform .sub{grid-column:1/-1}
+.tryform{display:grid!important;grid-template-columns:auto 1fr auto;gap:.5rem}#newkey{grid-template-columns:1fr auto auto}.keyval{font-family:ui-monospace,Menlo,monospace;user-select:all;color:var(--fg)}.tryform input,.tryform select{padding:.5rem .6rem}.tryform .sub{grid-column:1/-1}
 #login{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
 input,button{font:inherit;padding:.55rem .7rem;border-radius:.5rem;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff}button.link{background:none;border:none;color:var(--dim);padding:0;text-decoration:underline;font-size:.8rem;cursor:pointer}
@@ -598,6 +662,9 @@ button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:
 <h2>Sources <span>where the data and the model are, and when last used</span></h2><div id="sources"></div>
 <h2>Try a question <span>as a user, to check an answer after an ingest or a model change</span></h2>
 <form id="try" class="row plain tryform"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button>Ask</button><div class="sub" id="tryOut">The result shows outcome, attempts, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></form>
+<h2>Integrations <span>API keys: each stands for one user and inherits that user’s grants, nothing more</span></h2>
+<form id="newkey" class="row plain tryform"><input id="keyName" maxlength="60" placeholder="What will use this key, for example: MARC Online portal"><select id="keyUser" aria-label="As user"></select><button>Create key</button><div class="sub" id="keyOut">The key is shown once, here, and only its hash is kept. Send it as the <code>X-Api-Key</code> header on <code>POST /api/ask</code>; the body’s user is then ignored.</div></form>
+<div id="keys"></div>
 <h2>Relationships <span>libraries, reports in edition order, users; lines are grants and the citations their answers made</span></h2>
 <div class="row plain graphbox"><svg id="graph" class="graph" role="img" aria-label="Relationships between libraries, reports and users"></svg><div class="sub" id="graphWhy"></div></div>
 <div class="cols"><div>
@@ -638,7 +705,7 @@ function render(d){
  fill("people",ppl,"");
  fill("recent",d.recent.map(r=>row([when(r.at),el("b","",r.user),outcome(r.status)],r.question+" · "+r.citations+" citation"+(r.citations===1?"":"s"))),"No questions yet.");
  fill("runs",d.runs.map(r=>{const w=el("span",r.wrong_and_confident?"pill bad":"pill ok","wrong and confident "+r.wrong_and_confident);return row([el("span","when",r.date),el("b","",r.name),w],"retrieval "+(r.retrieval==null?"—":r.retrieval)+" · correct "+r.correct+" of "+r.answerable+" · timid "+r.timid+" · refused right "+r.correct_refusal+" of "+(r.questions-r.answerable));}),"No saved evaluation run. Nothing says how well answers hold up until the question set is run.");
- drawGraph(d.graph);
+ drawGraph(d.graph);loadKeys();
  $("why").textContent="Board built "+d.now.replace("T"," ")+" UTC. Rows are the audit log; libraries are documents behind grants; runs are the files in evals/results.";
 }
 function drawGraph(g){const svg=$("graph");svg.textContent="";$("graphWhy").textContent="why: "+g.why;
@@ -660,7 +727,15 @@ async function load(tok){let since="";try{since=localStorage.getItem("ra.lastloo
 $("login").onsubmit=e=>{e.preventDefault();const t=$("t").value.trim();if(!t)return;try{sessionStorage.setItem("ra.token",t);}catch(e){}load(t);};
 $("forget").onclick=()=>{try{sessionStorage.removeItem("ra.token");localStorage.removeItem("ra.lastlook");}catch(e){}show("login","Token forgotten on this device.");};
 $("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("explain").hidden=true;};
-(async()=>{try{const j=await (await fetch("/api/users")).json();$("tryUser").textContent="";j.users.forEach(u=>$("tryUser").appendChild(el("option","",u)));}catch(e){}})();
+(async()=>{try{const j=await (await fetch("/api/users")).json();["tryUser","keyUser"].forEach(id=>{$(id).textContent="";j.users.forEach(u=>$(id).appendChild(el("option","",u)));});}catch(e){}})();
+function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
+async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
+ fill("keys",j.keys.map(k=>{const st=el("span",k.revoked_at?"pill bad":"pill ok",k.revoked_at?"revoked":"active");const r=row([el("b","",k.name),el("span","",k.user+" · "+k.prefix+"…"),st],"created "+k.created_at.replace("T"," ").slice(0,16)+(k.last_used?" · last used "+k.last_used.replace("T"," ").slice(0,16):" · never used")+(k.revoked_at?" · revoked "+k.revoked_at.replace("T"," ").slice(0,16):""));
+ if(!k.revoked_at){const b=el("button","link","Revoke");b.onclick=async()=>{if(!confirm("Revoke the key “"+k.name+"”? Anything using it stops working now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};r.appendChild(b);}return r;}),"No API keys yet. The chat page works without one; a key is for another system asking on a user’s behalf.");}
+$("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;
+ const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
+ if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
+ out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));const k=el("span","keyval",j.key);out.appendChild(k);out.appendChild(document.createTextNode(" · copy it now; it cannot be shown again."));$("keyName").value="";loadKeys();};
 $("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("tryQ").value.trim();if(!q)return;const out=$("tryOut");out.textContent="Asking as "+u+"…";
  const r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,question:q})});
  if(!r.ok){out.textContent="Refused ("+r.status+"): "+((await r.json()).detail||"");return;}

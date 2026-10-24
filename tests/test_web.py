@@ -246,3 +246,27 @@ def test_admin_board_graph_links_libraries_documents_and_users_by_citation(web):
     assert cited == [{"a": f"D{doc}", "b": "Ualice", "kind": "cited", "w": 2}]
     assert {e["kind"] for e in g["edges"]} >= {"member", "grant", "cited"}
     assert next(n for n in g["nodes"] if n["id"] == f"D{doc}")["citations"] == 2
+
+
+def test_api_keys_stand_for_one_user_and_can_be_revoked(web):
+    client, llm, doc, memo, path = web
+    h = {"X-Token": "demo"}
+    assert client.post("/api/admin/keys", json={"name": "portal", "user": "alice"}).status_code == 401
+    assert client.post("/api/admin/keys", json={"name": "portal", "user": "nobody"}, headers=h).status_code == 400
+    made = client.post("/api/admin/keys", json={"name": "portal", "user": "alice"}, headers=h).json()
+    key = made["key"]
+    assert key.startswith("ra_") and made["prefix"] == key[:7]
+    listed = client.get("/api/admin/keys", headers=h).json()["keys"]
+    assert listed[0]["name"] == "portal" and listed[0]["user"] == "alice" and listed[0]["last_used"] is None and "key" not in listed[0]
+    # the key asks as alice whatever the body says, and alice cannot see the restricted memo
+    llm.responses = [[good(doc)], []]
+    r = client.post("/api/ask", json={"user": "bob", "question": "How did palm oil output change?"}, headers={"X-Api-Key": key})
+    assert r.status_code == 200 and r.json()["status"] == "answered"
+    assert client.get("/api/audit", params={"user": "alice"}).json()["entries"][0]["question"].startswith("How did palm oil")
+    r = client.post("/api/ask", json={"user": "bob", "question": "merger Orion Holdings"}, headers={"X-Api-Key": key})
+    assert r.json()["status"] == "not_found"
+    assert client.get("/api/admin/keys", headers=h).json()["keys"][0]["last_used"] is not None
+    assert client.post("/api/ask", json={"user": "alice", "question": "anything"}, headers={"X-Api-Key": "ra_wrong"}).status_code == 401
+    assert client.delete(f"/api/admin/keys/{made['id']}", headers=h).json() == {"revoked": made["id"]}
+    assert client.post("/api/ask", json={"user": "alice", "question": "anything"}, headers={"X-Api-Key": key}).status_code == 401
+    assert client.delete(f"/api/admin/keys/{made['id']}", headers=h).status_code == 404
