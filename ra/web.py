@@ -57,7 +57,79 @@ def quote_span(text, quote):
     return [m.start(), m.end()] if m else None
 
 
-def create_app(db_path, llm_factory=default_llm):
+LAYOUT = [
+    # The dashboard is a fixed list of widgets, read by the page in this order. Each says how its numbers are made.
+    {"id": "coverage", "kicker": "Library", "title": "What is searchable", "span": 1,
+     "why": "Documents and pages behind a grant this user holds. A low-text page is one pdftotext could not read; it is flagged, never trusted."},
+    {"id": "usage", "kicker": "Questions", "title": "Asked and answered", "span": 1,
+     "why": "From the audit log of this user. Answered means at least one claim passed the quote check; not found means none did."},
+    {"id": "recent", "kicker": "Recent", "title": "The last questions, with their outcome", "span": 2,
+     "why": "Each row is one audit entry. Citations are report and page pairs that passed the check. Open re-runs the question in the chat."},
+    {"id": "feedback", "kicker": "People", "title": "Ratings and review requests", "span": 1,
+     "why": "Thumbs are given by this user on their own answers. A review request is a log entry for a person; nothing else happens."},
+    {"id": "evaluation", "kicker": "Measured", "title": "The question set, by model", "span": 1,
+     "why": "Each row is one saved evaluation run over the 22-question set. Wrong and confident is the number that matters; the target is zero."},
+]
+
+
+def dashboard_data(con, user, model_name, results_dir="evals/results"):
+    """Everything the dashboard shows, computed from the audit, feedback, reviews and pages tables and the saved eval results.
+
+    Scoped to the user: libraries by grant, questions and ratings by user. The eval results are not user data.
+    """
+    import glob
+    import json
+    import os
+    from collections import defaultdict
+    from datetime import date, timedelta
+
+    libs = con.execute(
+        "SELECT l.id, l.name, COUNT(DISTINCT d.id) AS documents, COALESCE(SUM(d.pages),0) AS pages, "
+        "COALESCE(SUM(d.needs_ocr),0) AS needs_ocr FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user = ? "
+        "LEFT JOIN documents d ON d.library_id = l.id GROUP BY l.id ORDER BY l.name", (user,)).fetchall()
+    low = {r["library_id"]: r["n"] for r in con.execute(
+        "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id "
+        "JOIN grants g ON g.library_id = d.library_id AND g.user = ? WHERE p.low_text = 1 GROUP BY d.library_id", (user,))}
+    coverage = [{"library": r["name"], "documents": r["documents"], "pages": r["pages"], "low_text_pages": low.get(r["id"], 0),
+                 "needs_ocr_documents": r["needs_ocr"]} for r in libs]
+
+    rows = con.execute("SELECT id, at, question, status, cited FROM audit WHERE user=? ORDER BY id DESC", (user,)).fetchall()
+    today = date.today()
+    days = [(today - timedelta(days=i)).isoformat() for i in range(13, -1, -1)]
+    by_day = defaultdict(lambda: {"asked": 0, "answered": 0})
+    for r in rows:
+        d = r["at"][:10]
+        if d in days:
+            by_day[d]["asked"] += 1
+            by_day[d]["answered"] += r["status"] == "answered"
+    usage = {"asked": len(rows), "answered": sum(1 for r in rows if r["status"] == "answered"),
+             "not_found": sum(1 for r in rows if r["status"] != "answered"), "model": model_name,
+             "days": [{"day": d, **by_day[d]} for d in days]}
+
+    recent = [{"audit_id": r["id"], "at": r["at"], "question": r["question"], "status": r["status"],
+               "citations": [c for c in r["cited"].split(",") if c]} for r in rows[:10]]
+
+    fb = con.execute("SELECT rating, reason, at FROM feedback WHERE user=? ORDER BY id DESC", (user,)).fetchall()
+    rv = con.execute("SELECT note, status, at FROM reviews WHERE user=? ORDER BY id DESC", (user,)).fetchall()
+    feedback = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
+                "reasons": [r["reason"] for r in fb if r["rating"] == "down" and r["reason"]][:5],
+                "reviews_open": sum(1 for r in rv if r["status"] == "open"), "reviews": [dict(r) for r in rv[:5]]}
+
+    runs = []
+    for f in sorted(glob.glob(os.path.join(results_dir, "*.json")), key=os.path.getmtime, reverse=True):
+        try:
+            j = json.load(open(f))
+            runs.append({"name": os.path.splitext(os.path.basename(f))[0], "date": date.fromtimestamp(os.path.getmtime(f)).isoformat(),
+                         "questions": j.get("questions"), "answerable": j.get("answerable"), "retrieval": j.get("retrieval_hit_rate"),
+                         "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
+                         "wrong_and_confident": j.get("wrong_and_confident")})
+        except (OSError, ValueError):
+            continue
+
+    return {"user": user, "layout": LAYOUT, "coverage": coverage, "usage": usage, "recent": recent, "feedback": feedback, "evaluation": runs}
+
+
+def create_app(db_path, llm_factory=default_llm, results_dir="evals/results"):
     app = FastAPI(title="Research assistant demo")
     llm, model_name = llm_factory()
 
@@ -154,6 +226,18 @@ def create_app(db_path, llm_factory=default_llm):
         rows = con.execute("SELECT at, question, status, cited FROM audit WHERE user=? ORDER BY id DESC LIMIT 20", (user,)).fetchall()
         return {"entries": [dict(r) for r in rows]}
 
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_page():
+        return DASHBOARD_HTML
+
+    @app.get("/api/dashboard")
+    def dashboard(user: str):
+        con = db()
+        if not allowed_libraries(con, user):
+            raise HTTPException(403, "This user has no library access.")
+        return dashboard_data(con, user, model_name, results_dir)
+
     return app
 
 
@@ -220,7 +304,7 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 @media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}.flash{animation:none}}
 </style></head><body>
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
-<div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div>
+<div style="display:flex;gap:1rem;align-items:end"><a id="dashlink" href="/dashboard" style="font-size:.85rem;color:var(--accent)">Dashboard</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
 <div id="banner" class="banner" hidden></div>
 <div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
 <div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button></div>
@@ -352,3 +436,73 @@ loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("use
   if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """
+
+
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research assistant · dashboard</title>
+<style>
+/* A short paper, not a control room: serif text, small sans labels, hairlines, no shadows. Every number says how it was made. */
+:root{color-scheme:light dark;--ink:#34437f;--teal:#2a8c82;--text:#1f2430;--muted:#6b7185;--line:#e3e6ee;--tint:#f4f5fa;--bg:#fff;--ok:#1f6b3a;--bad:#9b2c2c;--warn:#8a4b00}
+@media (prefers-color-scheme:dark){:root{--ink:#9fb0ff;--teal:#5fd0c3;--text:#e8e9ef;--muted:#9aa0b2;--line:#2a2f3d;--tint:#171a24;--bg:#0f1117;--ok:#7fd49a;--bad:#ff9d9d;--warn:#ffb866}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 Charter,'Iowan Old Style',Georgia,serif;max-width:1060px;margin-inline:auto;padding:28px 22px 64px}
+.sans,h1,h2,.kicker,.meta,.badge,th,.num small,.why,nav,label,select,button,a.open{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+.head{border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:22px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
+.kicker{text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--teal);margin:0 0 4px}
+h1{font:400 26px/1.15 Charter,'Iowan Old Style',Georgia,serif;color:var(--ink);margin:0}
+.standfirst{color:var(--muted);margin:6px 0 0;font-size:15px;max-width:640px}
+nav{font-size:13px;color:var(--muted);display:flex;gap:14px;align-items:center}nav a{color:var(--ink);text-decoration:none}
+label{font-size:11px;color:var(--muted);display:block;text-transform:uppercase;letter-spacing:.08em}
+select{font:14px 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px 28px}
+.w{border-top:1px solid var(--line);padding-top:12px;min-width:0}.w.span2{grid-column:1/-1}
+h2{font:600 13px/1.3 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--ink);margin:0 0 10px}
+h2 .kicker{display:inline;margin-right:8px}
+.num{font:400 40px/1 Charter,'Iowan Old Style',Georgia,serif;color:var(--ink);margin:4px 0 2px}.num small{font-size:12px;color:var(--muted);margin-left:6px;letter-spacing:.04em}
+.row{display:flex;gap:28px;flex-wrap:wrap}
+table{border-collapse:collapse;width:100%;font:13px/1.4 'Helvetica Neue',Helvetica,Arial,sans-serif;margin:6px 0 4px}
+th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--ink);padding:4px 8px 6px}
+td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.q{font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:15px}
+.badge{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.badge.ok{color:var(--ok)}.badge.bad{color:var(--bad)}.badge.warn{color:var(--warn)}
+.why{font-size:12px;color:var(--muted);margin:8px 0 0;border-left:3px solid var(--line);padding-left:10px}
+.meta{font-size:12px;color:var(--muted)}
+a.open{font-size:12px;color:var(--ink);text-decoration:none;font-weight:600}
+.bars{width:100%;height:64px;display:block;margin-top:6px}.bars rect.a{fill:var(--line)}.bars rect.b{fill:var(--teal)}.axis{display:flex;justify-content:space-between;font:11px 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--muted);border-top:1px solid var(--line);padding-top:3px}
+.empty{color:var(--muted);font-style:italic}
+.abstract{background:var(--tint);border-left:3px solid var(--ink);padding:8px 14px;margin:0 0 22px;font-size:15px}
+@media (max-width:760px){.grid{grid-template-columns:1fr}.w.span2{grid-column:auto}}
+</style></head><body>
+<div class="head"><div><p class="kicker">Research assistant · dashboard</p><h1 id="title">Loading</h1><p class="standfirst">What this user can search, what they asked, what came back, and what the question set measures. Numbers only; each block says how it was made.</p></div>
+<nav><a href="/">Back to the chat</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></nav></div>
+<p class="abstract" id="abstract"></p>
+<div class="grid" id="grid"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const badge=s=>s==="answered"?'<span class="badge ok">answered</span>':s==="not_found"?'<span class="badge warn">not found</span>':'<span class="badge">'+esc(s)+'</span>';
+const R={
+ coverage(d){const t=d.coverage.reduce((a,c)=>({d:a.d+c.documents,p:a.p+c.pages,l:a.l+c.low_text_pages}),{d:0,p:0,l:0});
+  return '<div class="row"><div><div class="num">'+t.d+'<small>DOCUMENTS</small></div></div><div><div class="num">'+t.p+'<small>PAGES</small></div></div><div><div class="num">'+t.l+'<small>FLAGGED FOR OCR</small></div></div></div>'+
+  '<table><tr><th>Library</th><th class="n">Documents</th><th class="n">Pages</th><th class="n">Low-text pages</th></tr>'+d.coverage.map(c=>'<tr><td>'+esc(c.library)+'</td><td class="n">'+c.documents+'</td><td class="n">'+c.pages+'</td><td class="n">'+c.low_text_pages+'</td></tr>').join('')+'</table>';},
+ usage(d){const u=d.usage,m=Math.max(1,...u.days.map(x=>x.asked)),w=100/u.days.length;
+  const bars=u.days.map((x,i)=>'<rect class="a" x="'+(i*w+0.6)+'%" width="'+(w-1.2)+'%" y="'+(64-64*x.asked/m)+'" height="'+(64*x.asked/m)+'"/><rect class="b" x="'+(i*w+0.6)+'%" width="'+(w-1.2)+'%" y="'+(64-64*x.answered/m)+'" height="'+(64*x.answered/m)+'"/>').join('');
+  return '<div class="row"><div><div class="num">'+u.asked+'<small>ASKED</small></div></div><div><div class="num">'+u.answered+'<small>ANSWERED</small></div></div><div><div class="num">'+u.not_found+'<small>NOT FOUND</small></div></div></div>'+
+  '<svg class="bars" viewBox="0 0 100 64" preserveAspectRatio="none">'+bars+'</svg><div class="axis"><span>'+esc(u.days[0].day.slice(5))+'</span><span>last 14 days, one bar per day</span><span>'+esc(u.days[u.days.length-1].day.slice(5))+'</span></div>'+
+  '<p class="meta">Totals are all time. Grey is asked, teal is answered. Model now serving: '+esc(u.model)+'.</p>';},
+ recent(d){if(!d.recent.length)return '<p class="empty">No questions yet from this user.</p>';
+  return '<table><tr><th>When</th><th>Question</th><th>Outcome</th><th class="n">Citations</th><th></th></tr>'+d.recent.map(r=>'<tr><td class="meta">'+esc(r.at.replace("T"," ").slice(0,16))+'</td><td class="q">'+esc(r.question)+'</td><td>'+badge(r.status)+'</td><td class="n">'+r.citations.length+'</td><td><a class="open" href="/?user='+encodeURIComponent(d.user)+'&q='+encodeURIComponent(r.question)+'&run=1">Open</a></td></tr>').join('')+'</table>';},
+ feedback(d){const f=d.feedback;return '<div class="row"><div><div class="num">'+f.up+'<small>THUMBS UP</small></div></div><div><div class="num">'+f.down+'<small>THUMBS DOWN</small></div></div><div><div class="num">'+f.reviews_open+'<small>REVIEWS OPEN</small></div></div></div>'+
+  (f.reasons.length?'<p class="meta">Reasons given for thumbs down:</p><ul>'+f.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':'<p class="empty">No reasons recorded.</p>');},
+ evaluation(d){if(!d.evaluation.length)return '<p class="empty">No saved evaluation run found.</p>';
+  return '<table><tr><th>Run</th><th class="n">Retrieval</th><th class="n">Correct</th><th class="n">Timid</th><th class="n">Refused right</th><th class="n">Wrong, confident</th></tr>'+d.evaluation.map(e=>'<tr><td>'+esc(e.name)+'<br><span class="meta">'+esc(e.date)+'</span></td><td class="n">'+(e.retrieval==null?'':e.retrieval)+'</td><td class="n">'+e.correct+' of '+e.answerable+'</td><td class="n">'+e.timid+'</td><td class="n">'+e.correct_refusal+' of '+(e.questions-e.answerable)+'</td><td class="n"><span class="badge '+(e.wrong_and_confident?'bad':'ok')+'">'+e.wrong_and_confident+'</span></td></tr>').join('')+'</table>';}
+};
+async function load(user){const r=await fetch('/api/dashboard?user='+encodeURIComponent(user));if(!r.ok){$('grid').innerHTML='<p class="empty">'+esc((await r.json()).detail||r.status)+'</p>';return;}
+ const d=await r.json();$('title').textContent='Reading room, as '+d.user;
+ $('abstract').textContent=d.usage.asked+' question'+(d.usage.asked===1?'':'s')+' asked, '+d.usage.answered+' answered with checked citations, '+d.usage.not_found+' honestly not found. '+d.coverage.reduce((a,c)=>a+c.documents,0)+' documents searchable across '+d.coverage.length+' librar'+(d.coverage.length===1?'y':'ies')+'.';
+ $('grid').innerHTML=d.layout.map(w=>'<section class="w'+(w.span===2?' span2':'')+'"><h2><span class="kicker">'+esc(w.kicker)+'</span>'+esc(w.title)+'</h2>'+R[w.id](d)+'<p class="why">'+esc(w.why)+'</p></section>').join('');
+ try{history.replaceState(null,'','/dashboard?user='+encodeURIComponent(user));}catch(e){}}
+(async()=>{const j=await (await fetch('/api/users')).json();const sel=$('user');sel.innerHTML=j.users.map(u=>'<option>'+esc(u)+'</option>').join('');
+ const want=new URLSearchParams(location.search).get('user');if(want&&j.users.includes(want))sel.value=want;sel.onchange=()=>load(sel.value);load(sel.value);})();
+</script></body></html>"""

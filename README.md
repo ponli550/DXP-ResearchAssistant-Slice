@@ -100,6 +100,8 @@ Movement: the camera eases from node to node as they appear, a left list highlig
 
 A shareable link can preselect everything: `/?user=bob&q=...&run=1`.
 
+A third page, **/dashboard**, is a short paper rather than a control room: what this user can search (documents, pages, pages flagged for OCR, per library held), what they asked and what came back (all-time totals and a 14-day bar per day, from the audit log), the last ten questions with their outcome and a link that re-runs each in the chat, their ratings and open review requests, and every saved evaluation run with its wrong-and-confident count. Five widgets in a fixed layout declared in `LAYOUT`, each ending with one line on how its numbers were made. Scoped to the user by grant and by audit row; the eval results are not user data.
+
 - The stack and real code examples are in [docs/TECH_STACK.md](docs/TECH_STACK.md).
 - The design of the canvas and steps views was derived from observing two reference recordings. Nothing was copied. The method, the limits and the labels deliberately left out are in [docs/DERIVING_THE_UI.md](docs/DERIVING_THE_UI.md).
 - The user picker is a demo, not a login. Access is still enforced in retrieval and on the page route, which the tests check. Feedback and review requests can only be filed on your own answers.

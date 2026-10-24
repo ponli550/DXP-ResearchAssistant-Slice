@@ -176,3 +176,39 @@ def test_ask_returns_the_trace_with_the_model_name(web):
 
 def test_steps_view_is_present_and_still_builds_no_html_from_data():
     assert "Investigation steps" in INDEX_HTML and "Show how it was found" in INDEX_HTML and "innerHTML" not in INDEX_HTML
+
+
+def test_dashboard_counts_only_this_users_questions_and_libraries(web):
+    client, llm, doc, memo, path = web
+    llm.responses = [[good(doc)], []]
+    client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
+    client.post("/api/ask", json={"user": "alice", "question": "What did the board decide?"})
+    a = client.get("/api/dashboard", params={"user": "alice"}).json()
+    assert a["usage"] == {**a["usage"], "asked": 2, "answered": 1, "not_found": 1}
+    assert [c["library"] for c in a["coverage"]] == ["public"] and a["coverage"][0]["documents"] == 1
+    assert len(a["recent"]) == 2 and a["recent"][0]["status"] == "not_found" and a["recent"][1]["citations"] == [f"{doc}:1"]
+    assert sum(d["asked"] for d in a["usage"]["days"]) == 2
+    b = client.get("/api/dashboard", params={"user": "bob"}).json()
+    assert b["usage"]["asked"] == 0 and sorted(c["library"] for c in b["coverage"]) == ["public", "restricted"]
+    assert [w["id"] for w in b["layout"]] == ["coverage", "usage", "recent", "feedback", "evaluation"]
+    assert client.get("/api/dashboard", params={"user": "nobody"}).status_code == 403
+
+
+def test_dashboard_reads_saved_evaluation_runs(tmp_path, web):
+    import json
+
+    from ra.web import create_app
+
+    client, llm, doc, memo, path = web
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "demo.json").write_text(json.dumps({"questions": 22, "answerable": 15, "retrieval_hit_rate": 1.0, "correct": 8, "timid": 7, "correct_refusal": 7, "wrong_and_confident": 0}))
+    c2 = TestClient(create_app(path, lambda: (llm, "scripted"), results_dir=str(tmp_path / "r")))
+    e = c2.get("/api/dashboard", params={"user": "alice"}).json()["evaluation"]
+    assert e[0]["name"] == "demo" and e[0]["wrong_and_confident"] == 0 and e[0]["correct"] == 8
+
+
+def test_dashboard_page_is_served_and_links_back(web):
+    client, *_ = web
+    html = client.get("/dashboard").text
+    assert "Back to the chat" in html and "/api/dashboard" in html
+    assert 'href="/dashboard"' in client.get("/").text
