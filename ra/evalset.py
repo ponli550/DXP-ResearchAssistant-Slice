@@ -73,7 +73,7 @@ def score(con, llm, questions, user, k=12):
             outcome = "wrong_and_confident" if res.status == "answered" else "correct_refusal"
         rows.append({"id": q["id"], "q": q["q"], "answerable": bool(q["facts"]), "retrieval_hit": hit if q["facts"] else None,
                      "outcome": outcome, "attempts": res.attempts,
-                     "answer": [[c.text, c.doc_id, c.page] for c in res.claims]})
+                     "answer": [[c.text, c.doc_id, c.page, c.quote] for c in res.claims]})
     ans = [r for r in rows if r["answerable"]]
     count = lambda o: sum(1 for r in rows if r["outcome"] == o)
     return {

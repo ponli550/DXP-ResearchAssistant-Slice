@@ -290,3 +290,18 @@ def test_a_comparison_with_no_edition_named_sees_every_report(db, tmp_path):
     assert "Quiet Report" in titles and "Loud Report" in titles
     assert sum(1 for p in got if p.title == "Loud Report") <= 4 - 1  # the quiet report kept a slot
     assert DOC_FLOOR >= 1
+
+
+def test_a_number_that_appears_only_in_figure_labels_is_rejected(db):
+    from ra.ground import check_claim
+
+    d = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    chart = "FIGURE 3\nOutput growth is projected to moderate\nPercent\n6\n5.1\n4.4\n3.6\n4.1\n2025f\n2026f"
+    db.execute("UPDATE pages SET text = text || ? WHERE doc_id=? AND page=1", ("\n" + chart, d))
+    db.commit()
+    page = db.execute("SELECT text FROM pages WHERE doc_id=? AND page=1", (d,)).fetchone()["text"]
+    from_chart = Claim("Growth is projected to moderate to 4.4 percent.", d, 1, chart)
+    v = check_claim(from_chart, page, {(d, 1)})
+    assert not v.ok and "figure label" in v.reason and "4.4" in v.reason
+    in_prose = Claim("Palm oil output rose 4.2 percent in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
+    assert check_claim(in_prose, page, {(d, 1)}).ok

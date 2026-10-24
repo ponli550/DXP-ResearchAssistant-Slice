@@ -33,6 +33,23 @@ def numbers_in(s):
     return {m.group(0).replace(",", "").rstrip(".") for m in NUMBER_RE.finditer(s)}
 
 
+WORD_RE = re.compile(r"[A-Za-z]{3,}")
+MIN_WORDS_ON_LINE = 3
+
+
+def numbers_in_prose(s):
+    """Numbers that appear on a line with at least three words, so a figure's axis labels and tick values do not count.
+
+    A chart's text comes through pdftotext as runs of bare numbers ("5.1 4.4 3.6 3.3 4.1 2025f"). A number read from there
+    is exactly the confident wrong figure the gate exists to stop, so a claim's number must be stated in a sentence.
+    """
+    out = set()
+    for line in s.splitlines():
+        if len(WORD_RE.findall(line)) >= MIN_WORDS_ON_LINE:
+            out |= numbers_in(line)
+    return out
+
+
 def check_claim(claim, page_text, allowed_pages):
     """Accept a claim only if its quote is on the cited page and every number in the claim is in the quote.
 
@@ -50,4 +67,7 @@ def check_claim(claim, page_text, allowed_pages):
     missing = numbers_in(claim.text) - numbers_in(claim.quote)
     if missing:
         return Verdict(False, "number in the claim is not in the quote: " + ", ".join(sorted(missing)))
+    labels_only = numbers_in(claim.text) - numbers_in_prose(claim.quote)
+    if labels_only:
+        return Verdict(False, "number appears in the quote only as a figure label, not in a sentence: " + ", ".join(sorted(labels_only)))
     return Verdict(True)

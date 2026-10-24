@@ -57,6 +57,9 @@ def check_claim(claim, page_text, allowed_pages):
     missing = numbers_in(claim.text) - numbers_in(claim.quote)
     if missing:
         return Verdict(False, "number in the claim is not in the quote: " + ", ".join(sorted(missing)))
+    labels_only = numbers_in(claim.text) - numbers_in_prose(claim.quote)
+    if labels_only:
+        return Verdict(False, "number appears in the quote only as a figure label, not in a sentence: " + ", ".join(sorted(labels_only)))
     return Verdict(True)
 ```
 
