@@ -67,17 +67,22 @@ No model-free approach comes close. The gate cannot catch an answer that is real
 
 A real model, Qwen 3.8 27B through Nous Research's OpenAI-compatible API, temperature 0, 12 passages per question:
 
-| Run | Retrieval | Correct | Timid | Correct refusal | Wrong and confident |
+| Model, runs | Retrieval | Correct | Timid | Correct refusal | Wrong and confident |
 |---|---|---|---|---|---|
-| 1 to 4, before the retrieval fix | 0.867 | 5 to 9 of 15 | 6 to 10 | 7 of 7 | 0 |
-| 5, after it | 1.0 | 8 of 15 | 7 | 7 of 7 | 0 |
+| Qwen 3.8 27B, runs 1 to 4, before the retrieval fix | 0.867 | 5 to 9 of 15 | 6 to 10 | 7 of 7 | 0 |
+| Qwen 3.8 27B, runs 5 to 9, after it | 1.0 | 5 to 8 of 15 | 7 to 10 | 7 of 7 | 0 |
+| Gemini 4 Argon, 3 runs, old gate | 1.0 | 12 to 13 of 15 | 0 to 1 | 6 to 7 of 7 | 2 to 3 |
+| Gemini 4 Argon, 3 runs, figure-label rule in the gate | 1.0 | 11 to 12 of 15 | 0 to 2 | 6 to 7 of 7 | 2 to 4 |
 
-Three things to read into that. First, the model never stated a false figure as fact in 75 answerable attempts, and the gate removed 2 of 10 drafted claims in run 5, so the design holds. Second, timid is the failure mode: the model refuses about half the answerable questions, and all three comparisons in every run even now that both reports are in front of it. That is a prompting and model problem, not retrieval. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
+The second model answers nearly everything and the gate removes a third of what it drafts. Its first runs exposed a gap: it quoted a chart's axis text ("5.1 4.4 3.6 3.3 4.1 2025f") and the number check passed because 4.4 was in the blob. The gate now requires a number to appear on a line with at least three words, so figure labels do not count; that claim is removed and the test that proves it is in `tests/test_core.py`. Its remaining wrong-and-confident answers were each checked against their quotes: none states a false figure. They are true, verified sentences that answer a different question (first-half actual growth when the full-year projection was asked; quarter-on-quarter when year-on-year was anchored) or that reply to an unanswerable question with related facts. The gate cannot catch a true quote that answers the wrong question. That is the model's job, or a reviewer's, and the brief counts a confident irrelevant answer as a failure, so the scorer keeps counting it.
+
+Three things to read into that. First, neither model stated a false figure as fact in any run, 135 answerable attempts across both, and the gate removed between 2 of 10 and 17 of 47 drafted claims, so the design holds. Second, the two models fail in opposite directions. The smaller one refuses about half the answerable questions and every comparison; the larger one answers almost everything and two to four times a run answers confidently beside the point. Coverage and zero-false pull against each other, and the brief ranks zero-false first. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
 
 The first runs reported one to three wrong-and-confident. Every one was checked against the page: right report, right figure, right context, and the gate had verified the quote. They were scored wrong because the question set anchored a single page and these reports repeat forecasts in the executive summary. A fact may now carry several anchor sentences, every anchor must resolve, and 19 were added after reading each page. That is label correction, declared here. The rule that a right number on an unrelated page is wrong still stands and still has a test.
 
 ```
-HERMES_API_KEY=... HERMES_MODEL=qwen/qwen3.8-27b uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/qwen3.8-27b.json
+HERMES_API_KEY=... HERMES_MODEL=qwen/qwen3.8-27b    uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/qwen3.8-27b.json
+HERMES_API_KEY=... HERMES_MODEL=google/gemini-4-argon uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/gemini-4-argon.json
 ```
 
 ## The web demo
@@ -121,7 +126,7 @@ Needs `pdftotext` and `pdfinfo` (poppler). 58 tests, including one that fails if
 
 ## What comes next
 
-1. Bring the timid rate down without raising wrong-and-confident. Loosening the prompt was tried and reverted: three runs with "one claim per report, a partial answer beats none, refuse only when no passage mentions the subject" left timid at 7 to 9 and produced the first real wrong-and-confident, an unanswerable question answered from an unrelated passage. The strict refusal rule is doing its job. The next lever is the model, not the instruction: run the same set on a stronger model and on the Claude adapter, three runs each.
+1. Close the gap between the two models. The smaller one is timid and never wrong; the larger one covers the set and answers beside the point two to four times a run. Loosening the smaller model's prompt was tried and reverted (it raised wrong-and-confident without lowering timid). The next plain-code rule to try on the larger model: when the question asks for a figure and no surviving claim carries one, refuse instead of answering with prose. That would have caught two of its three failure kinds. The third, a true figure for a different reading of the question, needs a reviewer or the question set. Run the Claude adapter on the same set, three runs.
 2. Run the Claude adapter on the same set so the two models can be compared.
 3. Add embeddings beside the keyword search, and measure whether they help.
 4. Only then think about authentication, hosting and the client's own reports.

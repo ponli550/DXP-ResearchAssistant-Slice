@@ -3,12 +3,12 @@
   "answerable": 15,
   "unanswerable": 7,
   "retrieval_hit_rate": 1.0,
-  "correct": 8,
-  "timid": 7,
+  "correct": 5,
+  "timid": 10,
   "correct_refusal": 7,
   "wrong_and_confident": 0,
-  "claims_drafted": 10,
-  "claims_rejected_by_gate": 2,
+  "claims_drafted": 9,
+  "claims_rejected_by_gate": 4,
   "rows": [
     {
       "id": "A01",
@@ -19,9 +19,10 @@
       "attempts": 1,
       "answer": [
         [
-          "The World Bank projected Malaysia's GDP growth to pick up to 4.3 percent in 2024.",
+          "Malaysia\u2019s GDP growth was projected to pick up to 4.3 percent in 2024.",
           3,
-          16
+          16,
+          "Malaysia\u2019s GDP growth is projected to pick up to 4.3 percent in 2024"
         ]
       ]
     },
@@ -48,15 +49,9 @@
       "q": "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia's GDP growth is projected to be 4.1 percent in 2025.",
-          4,
-          53
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A05",
@@ -76,9 +71,10 @@
       "attempts": 1,
       "answer": [
         [
-          "49 percent of social assistance transfers goes to B40 households.",
+          "49 percent of social assistance transfers goes to the B40 households.",
           2,
-          19
+          19,
+          "Consequently, only 49 percent of transfers goes to the B40."
         ]
       ]
     },
@@ -93,7 +89,8 @@
         [
           "Malaysia's GDP grew by 2.9 percent in the second quarter of 2023.",
           2,
-          27
+          27,
+          "The Malaysian economy grew at a more moderate rate of 2.9 percent in Q2 2023 (Q1 2023: 5.6 percent) (Figure 3)."
         ]
       ]
     },
@@ -108,7 +105,8 @@
         [
           "Malaysia's economy grew by 4.4 percent in the first half of 2025.",
           4,
-          11
+          11,
+          "Malaysia\u2019s economy grew by 4.4 percent in the first half of 2025, supported by resilient private consumption and investment."
         ]
       ]
     },
@@ -117,15 +115,9 @@
       "q": "What was Malaysia's real GDP growth in the fourth quarter of 2025?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "Malaysia's real GDP growth in Q4 2025 was 6.3 percent year-on-year.",
-          5,
-          11
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "A10",
@@ -136,9 +128,10 @@
       "attempts": 1,
       "answer": [
         [
-          "The October 2025 Malaysia Economic Monitor reported Malaysia's 2024 growth at 5.1 percent.",
+          "The October 2025 monitor gave Malaysia's 2024 growth as 5.1 percent.",
           4,
-          53
+          53,
+          "percent in 2025 (2024: 5.1 percent) (Figure 52)."
         ]
       ]
     },
@@ -156,15 +149,9 @@
       "q": "What forecast did the October 2023 monitor give for Malaysia's growth in 2024?",
       "answerable": true,
       "retrieval_hit": true,
-      "outcome": "correct",
-      "attempts": 1,
-      "answer": [
-        [
-          "The monitor forecast Malaysia's growth to edge up modestly to 4.3 percent in 2024.",
-          2,
-          61
-        ]
-      ]
+      "outcome": "timid",
+      "attempts": 2,
+      "answer": []
     },
     {
       "id": "C01",
