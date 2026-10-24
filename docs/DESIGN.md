@@ -51,6 +51,7 @@ The board's grid is built from a JSON layout per owner (`layouts` table; `WIDGET
 
 - The catalogue is code. A layout may choose, order, size and later position widgets; it cannot define one. Unknown types are rejected on write, not skipped on read, so a typo fails loudly.
 - Expand is the only write in the pilot. It is a focus mode, not customisation: it sets `span` to 12 and saves, pushes the other panels down rather than covering them, and always has a way back (the same control, now reading "shrink", and Escape for all). This is the feedback-and-states rule from the saved UI tips.
+- Expanded means more, not wider. A four-row table stretched across twelve columns is wasted width, so an open panel's table keeps its natural width and gains columns: Runs shows the saved date, timid, refused-right and retrieval figures that were a hover title at the small size; Recent shows the whole question with headers. Detail that only lives in a tooltip is detail that gets clipped at the viewport edge, which the screenshot of the first version showed.
 - Width is a CSS variable (`--span`) on the panel, so the phone breakpoint still collapses everything to one column; a layout cannot break the small screen.
 - `x`, `y`, `h` and `settings` are validated and stored but not yet interpreted. They exist so a builder is a front end over the same document, not a schema change.
 - The layout note under the grid says where the arrangement came from (catalogue default, or saved and when) and offers reset. Status in words, not colour alone.

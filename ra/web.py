@@ -739,6 +739,7 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .panel.w12{grid-column:span 12}.panel[data-x]{grid-column-start:calc(var(--x) + 1)}.panel.open{box-shadow:0 0 0 2px var(--accent) inset}
 @media(max-width:900px){.panel,.panel[data-x]{grid-column:span 12}}
 h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);font:inherit;letter-spacing:0;text-transform:none;padding:0 var(--s1);cursor:pointer;margin-left:auto}h2 .exp:hover{border-color:var(--line)}h2 .exp[aria-pressed=true]{color:var(--accent)}
+.panel.open table{width:auto;min-width:60%}.panel.open table:has(td.wrap){width:100%}td.wrap{white-space:normal}
 .layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
 h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
@@ -844,6 +845,7 @@ async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CA
 async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:{"X-Token":tok()}});if(r.ok){LAYOUT=await r.json();buildGrid();if(LAST)render(LAST);}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();if(LAST)render(LAST);saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
+function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===type&&w.span===12));}
 function render(d){LAST=d;
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
@@ -858,8 +860,10 @@ function render(d){LAST=d;
  setT("covText",d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR");
  fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries.");
  setT("recentN","last "+d.recent.length);
- fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td("q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations)])),null,"No questions yet.");
- fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run.");
+ fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td(isOpen("recent")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")])),isOpen("recent")?["at","user","question","outcome",">cited"]:null,"No questions yet.");
+ // Expanded, the table gains columns instead of stretching: the detail that was a hover title becomes figures.
+ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run.");
+ else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run.");
  setT("usersN",d.usage.users.length);
  fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet.");
  const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open");
