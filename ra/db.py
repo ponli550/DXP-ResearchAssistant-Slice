@@ -55,6 +55,11 @@ CREATE TABLE IF NOT EXISTS api_keys (
     last_used TEXT,
     revoked_at TEXT
 );
+CREATE TABLE IF NOT EXISTS layouts (
+    owner TEXT PRIMARY KEY,
+    doc TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),

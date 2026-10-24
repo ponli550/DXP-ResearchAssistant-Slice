@@ -43,3 +43,14 @@ The board at `/dashboard` follows rules that were already written down, not tast
 ## How to check it
 
 Screenshot in headless Chrome at 1280×760, light and dark, after any change. Count accent-coloured elements on screen; if it is more than the to-do counts, the rule on the brief, the primary button and the user segments, something has drifted.
+
+
+## The layout is a document
+
+The board's grid is built from a JSON layout per owner (`layouts` table; `WIDGETS`, `default_layout`, `validate_layout` in `ra/web.py`). Rules it follows:
+
+- The catalogue is code. A layout may choose, order, size and later position widgets; it cannot define one. Unknown types are rejected on write, not skipped on read, so a typo fails loudly.
+- Expand is the only write in the pilot. It is a focus mode, not customisation: it sets `span` to 12 and saves, pushes the other panels down rather than covering them, and always has a way back (the same control, now reading "shrink", and Escape for all). This is the feedback-and-states rule from the saved UI tips.
+- Width is a CSS variable (`--span`) on the panel, so the phone breakpoint still collapses everything to one column; a layout cannot break the small screen.
+- `x`, `y`, `h` and `settings` are validated and stored but not yet interpreted. They exist so a builder is a front end over the same document, not a schema change.
+- The layout note under the grid says where the arrangement came from (catalogue default, or saved and when) and offers reset. Status in words, not colour alone.

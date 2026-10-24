@@ -4,6 +4,7 @@ Pick a user, ask a question, and watch the answer built on a canvas: the questio
 check on every drafted claim, the answer, and a human-gated next step. The login is a demo picker, not
 authentication. Access is still enforced in retrieval and on the page route.
 """
+import json
 import os
 import re
 
@@ -63,6 +64,11 @@ class ReviewBody(BaseModel):
 class KeyBody(BaseModel):
     name: str
     user: str
+
+
+class LayoutBody(BaseModel):
+    owner: str = "admin"
+    layout: dict
 
 
 def _hash_key(key):
@@ -259,6 +265,74 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
             "sources": sources, "libraries": libraries, "usage": usage, "recent": recent, "people": people, "runs": runs, "graph": graph}
 
 
+
+# The board is a document, not markup. Each owner has one; the page builds its grid from it, and the only thing
+# the pilot writes back is a width when a panel is expanded. The fields a builder would need (x, y, h) exist from
+# day one so that adding one later is a front end, not a schema change. The widget catalogue is code: a document
+# may arrange and configure what exists, never invent a type.
+WIDGETS = {
+    "todo": {"title": "To do", "span": 4},
+    "timeline": {"title": "Reports by edition", "span": 8},
+    "coverage": {"title": "Coverage", "span": 4},
+    "recent": {"title": "Recent", "span": 5},
+    "runs": {"title": "Runs", "span": 3},
+    "users": {"title": "Users", "span": 4},
+    "people": {"title": "People", "span": 8},
+}
+LAYOUT_VERSION = 1
+MAX_WIDGETS = 24
+
+
+def default_layout():
+    return {"version": LAYOUT_VERSION, "widgets": [
+        {"type": t, "span": w["span"], "x": None, "y": None, "h": 1, "settings": {}} for t, w in WIDGETS.items()
+    ]}
+
+
+def validate_layout(doc):
+    """Problems with a layout document, as plain sentences. Empty means it can be stored."""
+    bad = []
+    if not isinstance(doc, dict) or not isinstance(doc.get("widgets"), list):
+        return ["a layout is an object with a widgets list"]
+    if doc.get("version") != LAYOUT_VERSION:
+        bad.append(f"version must be {LAYOUT_VERSION}")
+    ws = doc["widgets"]
+    if not 1 <= len(ws) <= MAX_WIDGETS:
+        bad.append(f"between 1 and {MAX_WIDGETS} widgets")
+    for i, w in enumerate(ws):
+        if not isinstance(w, dict):
+            bad.append(f"widget {i} is not an object")
+            continue
+        if w.get("type") not in WIDGETS:
+            bad.append(f"widget {i}: unknown type {w.get('type')!r}; known: {', '.join(WIDGETS)}")
+        if not (isinstance(w.get("span"), int) and 1 <= w["span"] <= 12):
+            bad.append(f"widget {i}: span must be a whole number from 1 to 12")
+        if w.get("x") is not None and not (isinstance(w["x"], int) and 0 <= w["x"] <= 11):
+            bad.append(f"widget {i}: x must be null or a column from 0 to 11")
+        if w.get("y") is not None and not (isinstance(w["y"], int) and w["y"] >= 0):
+            bad.append(f"widget {i}: y must be null or a row from 0")
+        if not (isinstance(w.get("h", 1), int) and 1 <= w.get("h", 1) <= 6):
+            bad.append(f"widget {i}: h must be a whole number from 1 to 6")
+        if not isinstance(w.get("settings", {}), dict):
+            bad.append(f"widget {i}: settings must be an object")
+    return bad
+
+
+def get_layout(con, owner):
+    row = con.execute("SELECT doc, updated_at FROM layouts WHERE owner=?", (owner,)).fetchone()
+    if not row:
+        return {"owner": owner, "layout": default_layout(), "saved": False, "updated_at": None, "catalogue": WIDGETS}
+    return {"owner": owner, "layout": json.loads(row["doc"]), "saved": True, "updated_at": row["updated_at"], "catalogue": WIDGETS}
+
+
+def put_layout(con, owner, doc):
+    con.execute(
+        "INSERT INTO layouts(owner, doc) VALUES (?,?) ON CONFLICT(owner) DO UPDATE SET doc=excluded.doc, updated_at=strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+        (owner, json.dumps(doc, separators=(",", ":"))),
+    )
+    con.commit()
+
+
 def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None):
     app = FastAPI(title="Research assistant demo")
     llm, model_name = llm_factory()
@@ -405,6 +479,29 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         if not cur.rowcount:
             raise HTTPException(404, "No active key with that id.")
         return {"revoked": key_id}
+
+    @app.get("/api/admin/layout")
+    def read_layout(owner: str = "admin", x_token: str = Header(default="")):
+        admin(x_token)
+        return get_layout(db(), owner.strip() or "admin")
+
+    @app.put("/api/admin/layout")
+    def write_layout(body: LayoutBody, x_token: str = Header(default="")):
+        admin(x_token)
+        problems = validate_layout(body.layout)
+        if problems:
+            raise HTTPException(400, "; ".join(problems))
+        owner = body.owner.strip() or "admin"
+        put_layout(db(), owner, body.layout)
+        return get_layout(db(), owner)
+
+    @app.delete("/api/admin/layout")
+    def reset_layout(owner: str = "admin", x_token: str = Header(default="")):
+        admin(x_token)
+        con = db()
+        con.execute("DELETE FROM layouts WHERE owner=?", (owner.strip() or "admin",))
+        con.commit()
+        return get_layout(con, owner.strip() or "admin")
 
     @app.get("/api/admin/board")
     def admin_board(since: str = "", x_token: str = Header(default="")):
@@ -638,9 +735,11 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .brief{margin:var(--s3) 0 var(--s3);font:1.08rem/1.4 var(--serif);text-wrap:balance;max-inline-size:90ch}.brief .meta{display:block;margin-top:var(--s1)}
 .brief .why{cursor:help;text-decoration:underline dotted;color:var(--dim)}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--s3)}
-.panel{grid-column:span 4;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s2) var(--s3) var(--s3);min-width:0}
-.panel.w8{grid-column:span 8}.panel.w5{grid-column:span 5}.panel.w3{grid-column:span 3}.panel.w12{grid-column:span 12}
-@media(max-width:900px){.panel,.panel.w8,.panel.w5,.panel.w3{grid-column:span 12}}
+.panel{grid-column:span var(--span,4);background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s2) var(--s3) var(--s3);min-width:0;transition:box-shadow .15s ease-out}
+.panel.w12{grid-column:span 12}.panel[data-x]{grid-column-start:calc(var(--x) + 1)}.panel.open{box-shadow:0 0 0 2px var(--accent) inset}
+@media(max-width:900px){.panel,.panel[data-x]{grid-column:span 12}}
+h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);font:inherit;letter-spacing:0;text-transform:none;padding:0 var(--s1);cursor:pointer;margin-left:auto}h2 .exp:hover{border-color:var(--line)}h2 .exp[aria-pressed=true]{color:var(--accent)}
+.layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
 h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
 table{border-collapse:collapse;width:100%}td,th{padding:.18rem .3rem;vertical-align:baseline;text-align:left;white-space:nowrap}
@@ -675,15 +774,7 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
 <div class="brief" id="brief"></div>
 <div class="keyrow" id="keyrow"></div>
 <section id="board">
-<div class="grid skel" id="grid">
- <div class="panel"><h2>To do <span id="todoN"></span></h2><table class="todo" id="todo"></table></div>
- <div class="panel w8"><h2>Reports by edition <span>dot size: citations · bar: by user</span></h2><svg class="tl" id="tl" role="img" aria-label="Reports on a timeline per library, sized by citations"></svg><div class="legend" id="legend"></div></div>
- <div class="panel"><h2>Coverage <span id="covN"></span></h2><div class="cover"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="covPct"></div><div class="meta" id="covText"></div></div></div><table id="libs"></table></div>
- <div class="panel w5"><h2>Recent <span id="recentN"></span></h2><table id="recent"></table></div>
- <div class="panel w3"><h2>Runs <span>wrong and confident</span></h2><table id="runs"></table></div>
- <div class="panel"><h2>Users <span id="usersN"></span></h2><table id="users"></table></div>
- <div class="panel w8"><h2>People <span id="peopleN"></span></h2><table id="people"></table></div>
-</div>
+<div class="grid skel" id="grid" aria-live="polite"></div>
 <div class="foot" id="sources"></div>
 </section>
 <section id="tools" hidden>
@@ -705,7 +796,7 @@ function el(tag,cls,t){const e=document.createElement(tag);if(cls)e.className=cl
 function tr(cells){const r=el("tr");cells.forEach(c=>{if(typeof c==="string"||typeof c==="number"){r.appendChild(el("td","",String(c)));}else{r.appendChild(c);}});return r;}
 function td(cls,t,title){const c=el("td",cls,t);if(title)c.title=title;return c;}
 function hm(iso){return iso.replace("T"," ").slice(5,16);}
-function fillT(id,rows,head,emptyText){const t=$(id);t.textContent="";if(head){const h=el("tr");head.forEach(x=>{const c=el("th",x.startsWith(">")?"n":"",x.replace(/^>/,""));h.appendChild(c);});t.appendChild(h);}
+function fillT(id,rows,head,emptyText){const t=$(id);if(!t)return;t.textContent="";if(head){const h=el("tr");head.forEach(x=>{const c=el("th",x.startsWith(">")?"n":"",x.replace(/^>/,""));h.appendChild(c);});t.appendChild(h);}
  if(!rows.length){const r=el("tr");const c=el("td","empty",emptyText);c.colSpan=(head||[1]).length;r.appendChild(c);t.appendChild(r);return;}rows.forEach(r=>t.appendChild(r));}
 function show(name,msg){["login","view"].forEach(n=>$(n).hidden=n!==name);$("msg").textContent=msg||"";}
 const USERC=["#b4531f","#6b665c","#2f7d4f","#a8741a","#3f6fa8"];
@@ -728,7 +819,32 @@ function timeline(g){const svg=$("tl");svg.textContent="";const ns="http://www.w
  if(docs.some(d=>!d.edition[0])){const t=mk("text",{x:W-padR+30,y:H-2,"text-anchor":"middle",class:"dim"});t.textContent="undated";svg.appendChild(t);}
  $("legend").textContent="";users.forEach((u,i)=>{const s=el("span");const sw=el("i");sw.style.background=USERC[i%USERC.length];s.appendChild(sw);s.appendChild(document.createTextNode(u));$("legend").appendChild(s);});
  const s=el("span","","dashed: next edition · hover a dot for the title");$("legend").appendChild(s);}
-function render(d){
+// Widget catalogue, mirrored from WIDGETS in Python: type -> the panel's inner markup. Static strings only, so innerHTML is safe here.
+const T={
+ todo:{title:"To do",sub:'<span id="todoN"></span>',body:'<table class="todo" id="todo"></table>'},
+ timeline:{title:"Reports by edition",sub:'<span>dot size: citations · bar: by user</span>',body:'<svg class="tl" id="tl" role="img" aria-label="Reports on a timeline per library, sized by citations"></svg><div class="legend" id="legend"></div>'},
+ coverage:{title:"Coverage",sub:'<span id="covN"></span>',body:'<div class="cover"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="covPct"></div><div class="meta" id="covText"></div></div></div><table id="libs"></table>'},
+ recent:{title:"Recent",sub:'<span id="recentN"></span>',body:'<table id="recent"></table>'},
+ runs:{title:"Runs",sub:'<span>wrong and confident</span>',body:'<table id="runs"></table>'},
+ users:{title:"Users",sub:'<span id="usersN"></span>',body:'<table id="users"></table>'},
+ people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'}};
+let LAYOUT=null,CAT={},OWNER="admin";
+function buildGrid(){const g=$("grid");g.textContent="";
+ LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
+  if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
+  const h=el("h2");h.innerHTML=t.title+" "+t.sub;const b=el("button","exp",w.span===12?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",w.span===12?"true":"false");b.title=w.span===12?"Back to the catalogue width":"Full width; saved to your layout";
+  b.onclick=()=>toggle(i);h.appendChild(b);p.appendChild(h);const body=el("div");body.innerHTML=t.body;p.appendChild(body);if(w.span===12)p.classList.add("open");g.appendChild(p);});
+ let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
+ n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
+ if(LAYOUT.saved){const r=el("button","link","reset to default");r.type="button";r.onclick=resetLayout;n.appendChild(r);}}
+async function saveLayout(){const r=await fetch("/api/admin/layout",{method:"PUT",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({owner:OWNER,layout:LAYOUT.layout})});
+ if(r.ok){LAYOUT=await r.json();}else{$("msg").textContent="Layout not saved ("+r.status+").";}}
+let LAST=null;
+async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CAT[w.type]?CAT[w.type].span:4):12;buildGrid();if(LAST)render(LAST);await saveLayout();buildGrid();if(LAST)render(LAST);}
+async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:{"X-Token":tok()}});if(r.ok){LAYOUT=await r.json();buildGrid();if(LAST)render(LAST);}}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();if(LAST)render(LAST);saveLayout();}});
+function setT(id,t){const e=$(id);if(e)e.textContent=t;}
+function render(d){LAST=d;
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
@@ -736,26 +852,27 @@ function render(d){
  [[latest?String(latest.wrong_and_confident):"—","wrong and confident, latest run",latest?(latest.wrong_and_confident?"bad":"ok"):""],[share+"%","answered with checked citations",""],[d.coverage.pct+"%","pages searchable",""],[String(d.todo.length),"to do",d.todo.length?"bad":""]]
   .forEach(([v,k,c])=>{const b=el("div");b.appendChild(el("span","v "+c,v));b.appendChild(el("span","k",k));kr.appendChild(b);});
  $("grid").classList.remove("skel");
- $("todoN").textContent=d.todo.length?d.todo.length:"nothing waiting";
+ setT("todoN",d.todo.length?d.todo.length:"nothing waiting");
  fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero.");
- $("ringFill").style.strokeDasharray=d.coverage.pct+" 100";$("covPct").textContent=d.coverage.pct+"%";$("covN").textContent=d.coverage.pages+" pages";
- $("covText").textContent=d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR";
+ if($("ringFill"))$("ringFill").style.strokeDasharray=d.coverage.pct+" 100";setT("covPct",d.coverage.pct+"%");setT("covN",d.coverage.pages+" pages");
+ setT("covText",d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR");
  fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries.");
- $("recentN").textContent="last "+d.recent.length;
+ setT("recentN","last "+d.recent.length);
  fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td("q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations)])),null,"No questions yet.");
  fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run.");
- $("usersN").textContent=d.usage.users.length;
+ setT("usersN",d.usage.users.length);
  fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet.");
- const ppl=d.people;$("peopleN").textContent=ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open";
+ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open");
  const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)])));
  fillT("people",prow,null,"No open review requests and no thumbs-down reasons.");
- timeline(d.graph);
+ if($("tl"))timeline(d.graph);
  const f=$("sources");f.textContent="";d.sources.forEach(x=>{const p=el("div");p.appendChild(el("b","",x.kind+" "));p.appendChild(document.createTextNode(x.name+" · "+x.state+(x.last_used?" · last used "+hm(x.last_used):"")));p.title=x.where;f.appendChild(p);});
  $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · rows are the audit log · libraries are documents behind grants · runs are the files in evals/results.";
 }
 function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
 async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
- const r=await fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":t}});
+ const [r,lr]=await Promise.all([fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":t}}),fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{headers:{"X-Token":t}})]);
+ if(lr.ok){LAYOUT=await lr.json();CAT=LAYOUT.catalogue||{};buildGrid();}
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
  if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
  const d=await r.json();render(d);loadKeys();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}

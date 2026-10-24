@@ -270,3 +270,45 @@ def test_api_keys_stand_for_one_user_and_can_be_revoked(web):
     assert client.delete(f"/api/admin/keys/{made['id']}", headers=h).json() == {"revoked": made["id"]}
     assert client.post("/api/ask", json={"user": "alice", "question": "anything"}, headers={"X-Api-Key": key}).status_code == 401
     assert client.delete(f"/api/admin/keys/{made['id']}", headers=h).status_code == 404
+
+
+def test_layout_is_a_document_per_owner_validated_in_plain_code(web):
+    client, llm, doc, memo, path = web
+    h = {"X-Token": "demo"}
+    assert client.get("/api/admin/layout").status_code == 401
+    d = client.get("/api/admin/layout", headers=h).json()
+    assert d["owner"] == "admin" and not d["saved"] and d["layout"]["version"] == 1
+    types = [w["type"] for w in d["layout"]["widgets"]]
+    assert types == list(d["catalogue"]) and len(types) == 7
+    assert all(set(w) == {"type", "span", "x", "y", "h", "settings"} for w in d["layout"]["widgets"])
+
+    lay = d["layout"]
+    lay["widgets"][0]["span"] = 12
+    saved = client.put("/api/admin/layout", json={"owner": "admin", "layout": lay}, headers=h).json()
+    assert saved["saved"] and saved["layout"]["widgets"][0]["span"] == 12 and saved["updated_at"]
+    assert client.get("/api/admin/layout", headers=h).json()["layout"]["widgets"][0]["span"] == 12
+    # another owner still sees the default
+    assert not client.get("/api/admin/layout", params={"owner": "bob"}, headers=h).json()["saved"]
+
+    bad_type = {"version": 1, "widgets": [{"type": "weather", "span": 4, "x": None, "y": None, "h": 1, "settings": {}}]}
+    r = client.put("/api/admin/layout", json={"layout": bad_type}, headers=h)
+    assert r.status_code == 400 and "unknown type 'weather'" in r.json()["detail"]
+    bad_span = {"version": 1, "widgets": [{"type": "todo", "span": 13, "x": None, "y": None, "h": 1, "settings": {}}]}
+    assert "span" in client.put("/api/admin/layout", json={"layout": bad_span}, headers=h).json()["detail"]
+    bad_pos = {"version": 1, "widgets": [{"type": "todo", "span": 4, "x": 12, "y": -1, "h": 9, "settings": []}]}
+    detail = client.put("/api/admin/layout", json={"layout": bad_pos}, headers=h).json()["detail"]
+    assert all(k in detail for k in ("x must", "y must", "h must", "settings must"))
+    assert client.put("/api/admin/layout", json={"layout": {"widgets": []}}, headers=h).status_code == 400
+    # a rejected document never touches the stored one
+    assert client.get("/api/admin/layout", headers=h).json()["layout"]["widgets"][0]["span"] == 12
+
+    reset = client.delete("/api/admin/layout", headers=h).json()
+    assert not reset["saved"] and reset["layout"]["widgets"][0]["span"] == 4
+
+
+def test_dashboard_page_builds_its_grid_from_the_layout(web):
+    client, llm, doc, memo, path = web
+    page = client.get("/dashboard").text
+    assert '<div class="grid skel" id="grid"' in page and "<h2>To do" not in page  # no static panels left
+    for t in ("todo", "timeline", "coverage", "recent", "runs", "users", "people"):
+        assert f" {t}:{{title:" in page  # the page's catalogue mirrors the server's
