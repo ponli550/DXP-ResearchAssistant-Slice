@@ -309,7 +309,8 @@ def test_layout_is_a_document_per_owner_validated_in_plain_code(web):
 def test_dashboard_page_builds_its_grid_from_the_layout(web):
     client, llm, doc, memo, path = web
     page = client.get("/dashboard").text
-    assert '<div class="grid skel" id="grid"' in page and "<h2>To do" not in page  # no static panels left
+    assert '<div class="grid" id="grid"' in page and "<h2>To do" not in page  # no static panels left
+    assert "IntersectionObserver" in page and "/api/admin/widget/" in page and "parts=head" in page
     for t in ("todo", "timeline", "coverage", "recent", "runs", "users", "people"):
         assert f" {t}:{{title:" in page  # the page's catalogue mirrors the server's
 
@@ -318,3 +319,22 @@ def test_pages_are_never_cached(web):
     client = web[0]
     for path in ("/", "/dashboard"):
         assert client.get(path).headers["cache-control"] == "no-store"
+
+
+def test_board_loads_in_parts_head_first_then_one_widget_at_a_time(web):
+    client, llm, doc, memo, path = web
+    h = {"X-Token": "demo"}
+    client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
+    head = client.get("/api/admin/board", params={"parts": "head"}, headers=h).json()
+    assert {"now", "brief", "brief_why", "todo", "coverage", "usage", "runs", "sources"} <= set(head)
+    assert "graph" not in head and "recent" not in head and "people" not in head
+    tl = client.get("/api/admin/widget/timeline", headers=h).json()
+    assert set(tl) == {"now", "graph"} and any(n["kind"] == "document" for n in tl["graph"]["nodes"])
+    cov = client.get("/api/admin/widget/coverage", headers=h).json()
+    assert set(cov) == {"now", "coverage", "libraries"} and cov["coverage"]["pages"] >= 1
+    assert set(client.get("/api/admin/widget/recent", headers=h).json()) == {"now", "recent"}
+    assert client.get("/api/admin/widget/weather", headers=h).status_code == 404
+    assert client.get("/api/admin/widget/recent").status_code == 401
+    # the whole board is still one call, and the parts agree with it
+    whole = client.get("/api/admin/board", headers=h).json()
+    assert whole["coverage"] == cov["coverage"] and whole["graph"]["nodes"] == tl["graph"]["nodes"]

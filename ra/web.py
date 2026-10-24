@@ -103,19 +103,8 @@ def _bar(n, top, width=8):
     return "█" * max(1, round(width * n / top))
 
 
-def board_data(con, model_name, results_dir="evals/results", since=None, db_path=None, model=None):
-    """The admin board: a brief since the last visit, what to do, and counts by library, user and run.
-
-    Counts, names, reasons and dates only, never a passage or a page's text, because a board stays on screen. Every list
-    says in `why` how it was made. `since` is an ISO time from the device that last looked; the brief is silent when
-    nothing happened after it.
-    """
-    import glob
-    import json
-    import os
-    from datetime import date, datetime, timezone
-
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+def _libraries(con):
+    """Library rows, coverage and the per-library table. Everything that comes from documents and pages."""
     libs = con.execute(
         "SELECT l.id, l.name, "
         "(SELECT COUNT(*) FROM documents d WHERE d.library_id = l.id) AS documents, "
@@ -133,6 +122,11 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
     libraries = [{"library": r["name"], "documents": r["documents"], "pages": r["pages"], "low_text_pages": low.get(r["id"], 0),
                   "users": r["users"], "bar": _bar(r["pages"], top_pages)} for r in libs]
 
+    return {"libs": libs, "coverage": coverage, "libraries": libraries}
+
+
+def _usage(con, model_name):
+    """The audit log, read once: totals, per-user counts and the last twelve questions."""
     rows = con.execute("SELECT id, at, user, question, status, cited FROM audit ORDER BY id DESC").fetchall()
     per_user = {}
     for r in rows:
@@ -148,11 +142,26 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
     recent = [{"at": r["at"], "user": r["user"], "question": r["question"], "status": r["status"],
                "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
 
+    return {"rows": rows, "usage": usage, "recent": recent, "users": users}
+
+
+def _people(con):
+    """Ratings and review requests."""
     fb = con.execute("SELECT user, rating, reason, at FROM feedback ORDER BY id DESC").fetchall()
     rv = con.execute("SELECT r.id, r.user, r.note, r.status, r.at, a.question FROM reviews r JOIN audit a ON a.id = r.audit_id ORDER BY r.id DESC").fetchall()
     people = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
               "down_reasons": [{"user": r["user"], "reason": r["reason"], "at": r["at"]} for r in fb if r["rating"] == "down" and r["reason"]][:6],
               "reviews_open": [{"user": r["user"], "question": r["question"], "note": r["note"], "at": r["at"]} for r in rv if r["status"] == "open"][:6]}
+
+    return {"fb": fb, "rv": rv, "people": people}
+
+
+def _runs(results_dir):
+    """Saved evaluation runs, newest first, read from the results folder."""
+    import glob
+    import json
+    import os
+    from datetime import date
 
     runs = []
     for f in sorted(glob.glob(os.path.join(results_dir, "*.json")), key=os.path.getmtime, reverse=True):
@@ -165,6 +174,10 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
                      "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
                      "wrong_and_confident": j.get("wrong_and_confident")})
 
+    return runs
+
+
+def _graph(con, libs, rows, users):
     # Relationships: libraries, documents in edition order and users, joined by grants and by the citations users' answers made.
     # Issuer, sector and instrument nodes arrive with MARC's tables; today the real edges are membership, grant and citation.
     from .retrieve import EDITION_RE, MONTHS
@@ -196,6 +209,13 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
     graph = {"nodes": nodes, "edges": edges,
              "why": "membership from the documents table, grants from the grants table, citations from the audit log's cited pages, edition order from the month and year in each title. Issuer and sector nodes come with MARC's database."}
 
+    return graph
+
+
+def _sources(db_path, libs, rows, runs, model, model_name, results_dir):
+    import os
+    from datetime import datetime
+
     # Sources: where the data and the model live, and when each was last used. States are facts, not health scores.
     sources = []
     last_q = rows[0]["at"] if rows else None
@@ -209,6 +229,12 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
     sources[-1] = dict(sources[-1], last_used=last_q)
     sources.append({"kind": "evaluation results", "name": results_dir, "where": os.path.abspath(results_dir),
                     "state": f"{len(runs)} saved run{'s' if len(runs) != 1 else ''}" + (f", latest {runs[0]['date']}" if runs else "")})
+
+    return sources
+
+
+def _todo(now, people, libraries, runs):
+    from datetime import date
 
     # What to do: each item is a count with a reason, and appears only when the count is not zero.
     todo = []
@@ -230,6 +256,12 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
             todo.append({"n": age, "what": "days since the question set was last run", "why": "the harness runs on every change; a stale run means a change went unmeasured"})
     else:
         todo.append({"n": 0, "what": "evaluation runs saved", "why": "nothing says how well answers hold up until the question set is run"})
+
+    return todo
+
+
+def _brief(now, since, rows, fb, rv, runs):
+    from datetime import datetime
 
     # The brief: what happened after `since`, in one sentence. Silent when nothing did.
     brief, why = "", ""
@@ -261,9 +293,60 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
         hello = "Good morning" if 5 <= datetime.now().hour < 12 else "Good afternoon" if datetime.now().hour < 18 else "Good evening"
         lead = "Since your last look: " if t0 is not None else "So far: "
         brief = f"{hello}. {lead}" + "; ".join(parts) + "."
-    return {"now": now.isoformat(timespec="seconds"), "brief": brief, "brief_why": why, "todo": todo, "coverage": coverage,
-            "sources": sources, "libraries": libraries, "usage": usage, "recent": recent, "people": people, "runs": runs, "graph": graph}
+    return brief, why
 
+
+def _now():
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# Which parts of the board each widget needs. The head (brief and key figures) needs the counts but never the graph,
+# which is the heaviest part and only wanted once the timeline scrolls into view.
+WIDGET_PARTS = {
+    "todo": ("todo",), "timeline": ("graph",), "coverage": ("coverage", "libraries"), "recent": ("recent",),
+    "runs": ("runs",), "users": ("usage",), "people": ("people",),
+}
+HEAD_PARTS = ("now", "brief", "brief_why", "todo", "coverage", "usage", "runs", "sources")
+
+
+def board_data(con, model_name, results_dir="evals/results", since=None, db_path=None, model=None, parts=None):
+    """The admin board: a brief since the last visit, what to do, and counts by library, user and run.
+
+    Counts, names, reasons and dates only, never a passage or a page's text, because a board stays on screen. Every list
+    says in `why` how it was made. `since` is an ISO time from the device that last looked; the brief is silent when
+    nothing happened after it. `parts` limits the keys computed and returned, so a widget fetches only its own slice.
+    """
+    want = set(parts) if parts else None
+    need = lambda *ks: want is None or any(k in want for k in ks)
+    now = _now()
+    out = {"now": now.isoformat(timespec="seconds")}
+    lib = _libraries(con) if need("coverage", "libraries", "todo", "graph", "sources") else None
+    use = _usage(con, model_name) if need("usage", "recent", "graph", "sources", "brief", "brief_why") else None
+    ppl = _people(con) if need("people", "todo", "brief", "brief_why") else None
+    runs = _runs(results_dir) if need("runs", "todo", "sources", "brief", "brief_why") else None
+    if need("coverage"):
+        out["coverage"] = lib["coverage"]
+    if need("libraries"):
+        out["libraries"] = lib["libraries"]
+    if need("usage"):
+        out["usage"] = use["usage"]
+    if need("recent"):
+        out["recent"] = use["recent"]
+    if need("people"):
+        out["people"] = ppl["people"]
+    if need("runs"):
+        out["runs"] = runs
+    if need("graph"):
+        out["graph"] = _graph(con, lib["libs"], use["rows"], use["users"])
+    if need("sources"):
+        out["sources"] = _sources(db_path, lib["libs"], use["rows"], runs, model, model_name, results_dir)
+    if need("todo"):
+        out["todo"] = _todo(now, ppl["people"], lib["libraries"], runs)
+    if need("brief", "brief_why"):
+        out["brief"], out["brief_why"] = _brief(now, since, use["rows"], ppl["fb"], ppl["rv"], runs)
+    return out
 
 
 # The board is a document, not markup. Each owner has one; the page builds its grid from it, and the only thing
@@ -507,10 +590,19 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         return get_layout(con, owner.strip() or "admin")
 
     @app.get("/api/admin/board")
-    def admin_board(since: str = "", x_token: str = Header(default="")):
-        if not x_token or x_token != admin_token:
-            raise HTTPException(401, "That token is not the admin token.")
-        return board_data(db(), model_name, results_dir, since or None, db_path=db_path, model=model_source(llm, model_name))
+    def admin_board(since: str = "", parts: str = "", x_token: str = Header(default="")):
+        admin(x_token)
+        wanted = [p for p in parts.split(",") if p] or None
+        if parts == "head":
+            wanted = list(HEAD_PARTS)
+        return board_data(db(), model_name, results_dir, since or None, db_path=db_path, model=model_source(llm, model_name), parts=wanted)
+
+    @app.get("/api/admin/widget/{kind}")
+    def admin_widget(kind: str, x_token: str = Header(default="")):
+        admin(x_token)
+        if kind not in WIDGET_PARTS:
+            raise HTTPException(404, f"No widget called {kind!r}; known: {', '.join(WIDGET_PARTS)}")
+        return board_data(db(), model_name, results_dir, None, db_path=db_path, model=model_source(llm, model_name), parts=WIDGET_PARTS[kind])
 
     return app
 
@@ -729,7 +821,7 @@ main{max-width:1200px;margin:0 auto;padding:var(--s3) var(--s4) var(--s5)}
 @media (pointer:coarse){button,select,input{min-height:44px}}
 .keyrow{display:flex;gap:var(--s5);flex-wrap:wrap;margin:var(--s3) 0 0;padding:var(--s2) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .keyrow div{display:flex;align-items:baseline;gap:var(--s2)}.keyrow .v{font:600 1.25rem/1 var(--mono);font-variant-numeric:tabular-nums}.keyrow .k{font-size:.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
-.skel .panel{min-height:7rem}.skel .panel::after{content:"";display:block;height:.6rem;width:60%;border-radius:3px;background:var(--line);margin-top:var(--s2);box-shadow:0 1rem 0 0 var(--line),0 2rem 0 0 var(--line)}
+.panel.skel{min-height:7rem}.panel.skel .pbody{visibility:hidden}.panel.skel::after{content:"";display:block;height:.6rem;width:60%;border-radius:3px;background:var(--line);margin-top:var(--s2);box-shadow:0 1rem 0 0 var(--line),0 2rem 0 0 var(--line)}
 .top{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.5rem}
 h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .meta{color:var(--dim);font-size:.8rem}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -778,7 +870,7 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
 <div class="brief" id="brief"></div>
 <div class="keyrow" id="keyrow"></div>
 <section id="board">
-<div class="grid skel" id="grid" aria-live="polite"></div>
+<div class="grid" id="grid" aria-live="polite"></div>
 <div class="foot" id="sources"></div>
 </section>
 <section id="tools" hidden>
@@ -837,48 +929,49 @@ function buildGrid(){const g=$("grid");g.textContent="";
  LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
   if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
   const h=el("h2");h.innerHTML=t.title+" "+t.sub;const b=el("button","exp",w.span===12?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",w.span===12?"true":"false");b.setAttribute("aria-label",(w.span===12?"Shrink ":"Expand ")+t.title);
-  b.onclick=()=>toggle(i);h.appendChild(b);p.appendChild(h);const body=el("div");body.innerHTML=t.body;p.appendChild(body);if(w.span===12)p.classList.add("open");g.appendChild(p);});
+  b.onclick=()=>toggle(i);h.appendChild(b);p.appendChild(h);const body=el("div","pbody");body.innerHTML=t.body;p.appendChild(body);if(w.span===12)p.classList.add("open");p.dataset.type=w.type;if(!DATA[w.type])p.classList.add("skel");g.appendChild(p);if(DATA[w.type])fillWidget(w.type);else watch(p);});
  let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
  n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
  if(LAYOUT.saved){const r=el("button","link","reset to default");r.type="button";r.onclick=resetLayout;n.appendChild(r);}}
 async function saveLayout(){const r=await fetch("/api/admin/layout",{method:"PUT",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({owner:OWNER,layout:LAYOUT.layout})});
  if(r.ok){LAYOUT=await r.json();}else{$("msg").textContent="Layout not saved ("+r.status+").";}}
-let LAST=null;
-async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CAT[w.type]?CAT[w.type].span:4):12;buildGrid();if(LAST)render(LAST);await saveLayout();buildGrid();if(LAST)render(LAST);}
-async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:{"X-Token":tok()}});if(r.ok){LAYOUT=await r.json();buildGrid();if(LAST)render(LAST);}}
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();if(LAST)render(LAST);saveLayout();}});
+async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CAT[w.type]?CAT[w.type].span:4):12;buildGrid();await saveLayout();buildGrid();}
+async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:{"X-Token":tok()}});if(r.ok){LAYOUT=await r.json();buildGrid();}}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
 function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===type&&w.span===12));}
-function render(d){LAST=d;
+// The head loads first and once: brief, key figures, sources. Each widget then fetches only its own slice when it
+// scrolls into view, and keeps it, so expanding or shrinking re-fills from memory without another request.
+const DATA={};
+function renderHead(d){
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
  const kr=$("keyrow");kr.textContent="";const latest=d.runs[0];const share=d.usage.asked?Math.round(100*d.usage.answered/d.usage.asked):0;
  [[latest?String(latest.wrong_and_confident):"—","wrong and confident, latest run",latest?(latest.wrong_and_confident?"bad":"ok"):""],[share+"%","answered with checked citations",""],[d.coverage.pct+"%","pages searchable",""],[String(d.todo.length),"to do",d.todo.length?"bad":""]]
   .forEach(([v,k,c])=>{const b=el("div");b.appendChild(el("span","v "+c,v));b.appendChild(el("span","k",k));kr.appendChild(b);});
- $("grid").classList.remove("skel");
- setT("todoN",d.todo.length?d.todo.length:"nothing waiting");
- fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero.");
- if($("ringFill"))$("ringFill").style.strokeDasharray=d.coverage.pct+" 100";setT("covPct",d.coverage.pct+"%");setT("covN",d.coverage.pages+" pages");
- setT("covText",d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR");
- fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries.");
- setT("recentN","last "+d.recent.length);
- fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td(isOpen("recent")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")])),isOpen("recent")?["at","user","question","outcome",">cited"]:null,"No questions yet.");
- // Expanded, the table gains columns instead of stretching: the detail that was a hover title becomes figures.
- if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run.");
- else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run.");
- setT("usersN",d.usage.users.length);
- fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet.");
- const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open");
- const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)])));
- fillT("people",prow,null,"No open review requests and no thumbs-down reasons.");
- if($("tl"))timeline(d.graph);
  const f=$("sources");f.textContent="";d.sources.forEach(x=>{const p=el("div");p.appendChild(el("b","",x.kind+" "));p.appendChild(document.createTextNode(x.name+" · "+x.state+(x.last_used?" · last used "+hm(x.last_used):"")));p.title=x.where;f.appendChild(p);});
  $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · rows are the audit log · libraries are documents behind grants · runs are the files in evals/results.";
 }
+const FILL={
+ todo(d){ setT("todoN",d.todo.length?d.todo.length:"nothing waiting"); fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero."); },
+ coverage(d){ if($("ringFill"))$("ringFill").style.strokeDasharray=d.coverage.pct+" 100";setT("covPct",d.coverage.pct+"%");setT("covN",d.coverage.pages+" pages"); setT("covText",d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR"); fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries."); },
+ recent(d){ setT("recentN","last "+d.recent.length); fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td(isOpen("recent")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")])),isOpen("recent")?["at","user","question","outcome",">cited"]:null,"No questions yet."); },
+ runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
+ users(d){ setT("usersN",d.usage.users.length); fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet."); },
+ people(d){ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open"); const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)]))); fillT("people",prow,null,"No open review requests and no thumbs-down reasons."); },
+ timeline(d){ if($("tl"))timeline(d.graph); }};
+function fillWidget(type){const d=DATA[type];if(!d||!FILL[type])return;FILL[type](d);document.querySelectorAll('.panel[data-type="'+type+'"]').forEach(p=>p.classList.remove("skel"));}
+async function loadWidget(type){if(DATA[type]){fillWidget(type);return;}
+ const r=await fetch("/api/admin/widget/"+encodeURIComponent(type),{headers:{"X-Token":tok()}});
+ if(!r.ok){document.querySelectorAll('.panel[data-type="'+type+'"] .pbody').forEach(b=>{b.textContent="Could not load ("+r.status+").";b.className="pbody meta";});return;}
+ DATA[type]=await r.json();fillWidget(type);}
+const SEEN=("IntersectionObserver" in window)?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){SEEN.unobserve(e.target);loadWidget(e.target.dataset.type);}}),{rootMargin:"200px"}):null;
+function watch(p){if(SEEN)SEEN.observe(p);else loadWidget(p.dataset.type);}
+function render(d){renderHead(d);}
 function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
 async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
- const [r,lr]=await Promise.all([fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":t}}),fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{headers:{"X-Token":t}})]);
+ const [r,lr]=await Promise.all([fetch("/api/admin/board?parts=head&since="+encodeURIComponent(since),{headers:{"X-Token":t}}),fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{headers:{"X-Token":t}})]);
  if(lr.ok){LAYOUT=await lr.json();CAT=LAYOUT.catalogue||{};buildGrid();}
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
  if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
