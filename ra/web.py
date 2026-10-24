@@ -138,6 +138,37 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
                      "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
                      "wrong_and_confident": j.get("wrong_and_confident")})
 
+    # Relationships: libraries, documents in edition order and users, joined by grants and by the citations users' answers made.
+    # Issuer, sector and instrument nodes arrive with MARC's tables; today the real edges are membership, grant and citation.
+    from .retrieve import EDITION_RE, MONTHS
+    docs = con.execute("SELECT d.id, d.title, d.library_id, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id").fetchall()
+    def edition_key(title):
+        m = EDITION_RE.search(title)
+        return (int(m.group(2)), MONTHS.index(m.group(1).lower()) + 1) if m else (0, 0)
+    cites = {}
+    for r in rows:
+        for c in r["cited"].split(","):
+            if c:
+                did = int(c.split(":")[0])
+                cites[(did, r["user"])] = cites.get((did, r["user"]), 0) + 1
+    nodes = [{"id": f"L{r['id']}", "kind": "library", "label": r["name"]} for r in libs]
+    by_lib = {}
+    for d in sorted(docs, key=lambda d: (d["library"], edition_key(d["title"]))):
+        n = sum(v for (did, _), v in cites.items() if did == d["id"])
+        nodes.append({"id": f"D{d['id']}", "kind": "document", "label": d["title"], "library": d["library"], "citations": n,
+                      "edition": edition_key(d["title"])})
+        by_lib.setdefault(d["library_id"], []).append(d["id"])
+    for u in users:
+        nodes.append({"id": f"U{u['user']}", "kind": "user", "label": u["user"], "asked": u["asked"]})
+    edges = [{"a": f"L{d['library_id']}", "b": f"D{d['id']}", "kind": "member", "w": 1} for d in docs]
+    edges += [{"a": f"U{r['user']}", "b": f"L{r['library_id']}", "kind": "grant", "w": 1} for r in con.execute("SELECT user, library_id FROM grants")]
+    edges += [{"a": f"D{did}", "b": f"U{u}", "kind": "cited", "w": w} for (did, u), w in cites.items()]
+    for ids in by_lib.values():
+        ordered = sorted(ids, key=lambda i: edition_key(next(d["title"] for d in docs if d["id"] == i)))
+        edges += [{"a": f"D{x}", "b": f"D{y}", "kind": "next_edition", "w": 1} for x, y in zip(ordered, ordered[1:])]
+    graph = {"nodes": nodes, "edges": edges,
+             "why": "membership from the documents table, grants from the grants table, citations from the audit log's cited pages, edition order from the month and year in each title. Issuer and sector nodes come with MARC's database."}
+
     # Sources: where the data and the model live, and when each was last used. States are facts, not health scores.
     sources = []
     last_q = rows[0]["at"] if rows else None
@@ -204,7 +235,7 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
         lead = "Since your last look: " if t0 is not None else "So far: "
         brief = f"{hello}. {lead}" + "; ".join(parts) + "."
     return {"now": now.isoformat(timespec="seconds"), "brief": brief, "brief_why": why, "todo": todo, "coverage": coverage,
-            "sources": sources, "libraries": libraries, "usage": usage, "recent": recent, "people": people, "runs": runs}
+            "sources": sources, "libraries": libraries, "usage": usage, "recent": recent, "people": people, "runs": runs, "graph": graph}
 
 
 def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None):
@@ -543,6 +574,8 @@ h2 span{letter-spacing:0;text-transform:none;font-weight:400}
 .explain .row{display:block}.explain b{display:block;margin-bottom:.2rem}
 .todo .row{grid-template-columns:3.2rem 1fr}.big{font-size:1.5rem;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
 .cover{display:flex!important;gap:1rem;align-items:center;margin-top:1rem}.ring{width:4.2rem;height:4.2rem;flex:none;transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:3.4}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100}
+.graph{width:100%;height:auto;display:block}.graph text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.graph text.dim{fill:var(--dim)}.graph .lib{fill:var(--card);stroke:var(--accent);stroke-width:1.5}.graph .doc{fill:var(--card);stroke:var(--fg);stroke-width:1}.graph .usr{fill:var(--accent)}
+.graph line.member{stroke:var(--line);stroke-width:1}.graph line.grant{stroke:var(--accent);stroke-width:1;stroke-opacity:.5}.graph line.cited{stroke:var(--accent);stroke-opacity:.85}.graph path.next_edition{stroke:var(--dim);stroke-dasharray:3 3;stroke-width:1}
 .tryform{display:grid!important;grid-template-columns:auto 1fr auto;gap:.5rem}.tryform input,.tryform select{padding:.5rem .6rem}.tryform .sub{grid-column:1/-1}
 #login{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
 input,button{font:inherit;padding:.55rem .7rem;border-radius:.5rem;border:1px solid var(--line);background:var(--card);color:var(--fg)}
@@ -565,6 +598,8 @@ button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:
 <h2>Sources <span>where the data and the model are, and when last used</span></h2><div id="sources"></div>
 <h2>Try a question <span>as a user, to check an answer after an ingest or a model change</span></h2>
 <form id="try" class="row plain tryform"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button>Ask</button><div class="sub" id="tryOut">The result shows outcome, attempts, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></form>
+<h2>Relationships <span>libraries, reports in edition order, users; lines are grants and the citations their answers made</span></h2>
+<div class="row plain graphbox"><svg id="graph" class="graph" role="img" aria-label="Relationships between libraries, reports and users"></svg><div class="sub" id="graphWhy"></div></div>
 <div class="cols"><div>
  <h2>Libraries <span>pages, and pages flagged for OCR</span></h2><div id="libs"></div>
  <h2>Questions by user <span id="usageN"></span></h2><div id="users"></div>
@@ -603,8 +638,20 @@ function render(d){
  fill("people",ppl,"");
  fill("recent",d.recent.map(r=>row([when(r.at),el("b","",r.user),outcome(r.status)],r.question+" · "+r.citations+" citation"+(r.citations===1?"":"s"))),"No questions yet.");
  fill("runs",d.runs.map(r=>{const w=el("span",r.wrong_and_confident?"pill bad":"pill ok","wrong and confident "+r.wrong_and_confident);return row([el("span","when",r.date),el("b","",r.name),w],"retrieval "+(r.retrieval==null?"—":r.retrieval)+" · correct "+r.correct+" of "+r.answerable+" · timid "+r.timid+" · refused right "+r.correct_refusal+" of "+(r.questions-r.answerable));}),"No saved evaluation run. Nothing says how well answers hold up until the question set is run.");
+ drawGraph(d.graph);
  $("why").textContent="Board built "+d.now.replace("T"," ")+" UTC. Rows are the audit log; libraries are documents behind grants; runs are the files in evals/results.";
 }
+function drawGraph(g){const svg=$("graph");svg.textContent="";$("graphWhy").textContent="why: "+g.why;
+ const libs=g.nodes.filter(n=>n.kind==="library"),docs=g.nodes.filter(n=>n.kind==="document"),usrs=g.nodes.filter(n=>n.kind==="user");
+ const W=1000,rowH=26,H=Math.max(libs.length,docs.length,usrs.length)*rowH+40;svg.setAttribute("viewBox","0 0 "+W+" "+H);
+ const ns="http://www.w3.org/2000/svg",mk=(t,a)=>{const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+ const pos={},col=(arr,x,gap)=>arr.forEach((n,i)=>pos[n.id]={x,y:20+i*gap+(H-40-(arr.length-1)*gap)/2});
+ col(libs,90,rowH*2);col(docs,W/2,rowH);col(usrs,W-90,rowH*2);
+ const maxW=Math.max(1,...g.edges.filter(e=>e.kind==="cited").map(e=>e.w));
+ g.edges.forEach(e=>{const a=pos[e.a],b=pos[e.b];if(!a||!b)return;let l;if(e.kind==="next_edition"){l=mk("path",{d:"M"+a.x+","+a.y+" Q"+(a.x-22)+","+((a.y+b.y)/2)+" "+b.x+","+b.y,fill:"none",class:e.kind});}else{l=mk("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:e.kind});}if(e.kind==="cited")l.setAttribute("stroke-width",String(1+3*e.w/maxW));const t=mk("title",{});t.textContent=e.kind.replace("_"," ")+(e.kind==="cited"?" "+e.w+" time"+(e.w===1?"":"s"):"");l.appendChild(t);svg.appendChild(l);});
+ libs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("rect",{x:p.x-60,y:p.y-11,width:120,height:22,rx:11,class:"lib"}));const t=mk("text",{x:p.x,y:p.y+4,"text-anchor":"middle"});t.textContent=n.label;svg.appendChild(t);});
+ docs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("circle",{cx:p.x,cy:p.y,r:4+Math.min(8,Math.sqrt(n.citations)),class:"doc"}));const t=mk("text",{x:p.x+16,y:p.y+4});t.textContent=n.label.replace(/^Malaysia Economic Monitor /,"MEM ");svg.appendChild(t);const c=mk("text",{x:p.x-16,y:p.y+4,"text-anchor":"end",class:"dim"});c.textContent=n.citations?n.citations+" cited":"";svg.appendChild(c);});
+ usrs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("circle",{cx:p.x,cy:p.y,r:7,class:"usr"}));const t=mk("text",{x:p.x+14,y:p.y+4});t.textContent=n.label+" · "+n.asked+" asked";svg.appendChild(t);});}
 async function load(tok){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
  const r=await fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":tok}});
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}

@@ -232,3 +232,17 @@ def test_admin_board_has_coverage_and_sources(web):
     assert d["sources"][0]["name"] == "web.db" and "2 libraries" in d["sources"][0]["state"]
     assert d["sources"][1]["name"] == "scripted"
     assert "Try a question" in client.get("/dashboard").text
+
+
+def test_admin_board_graph_links_libraries_documents_and_users_by_citation(web):
+    client, llm, doc, memo, path = web
+    llm.responses = [[good(doc)], [good(doc)]]
+    client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
+    client.post("/api/ask", json={"user": "alice", "question": "Did palm oil output rise?"})
+    g = client.get("/api/admin/board", headers={"X-Token": "demo"}).json()["graph"]
+    kinds = {n["kind"] for n in g["nodes"]}
+    assert kinds == {"library", "document", "user"}
+    cited = [e for e in g["edges"] if e["kind"] == "cited"]
+    assert cited == [{"a": f"D{doc}", "b": "Ualice", "kind": "cited", "w": 2}]
+    assert {e["kind"] for e in g["edges"]} >= {"member", "grant", "cited"}
+    assert next(n for n in g["nodes"] if n["id"] == f"D{doc}")["citations"] == 2
