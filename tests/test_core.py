@@ -305,3 +305,50 @@ def test_a_number_that_appears_only_in_figure_labels_is_rejected(db):
     assert not v.ok and "figure label" in v.reason and "4.4" in v.reason
     in_prose = Claim("Palm oil output rose 4.2 percent in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
     assert check_claim(in_prose, page, {(d, 1)}).ok
+
+
+def test_a_figure_question_is_refused_when_no_claim_states_a_figure(db):
+    from ra.answer import NO_FIGURE, ask
+    from ra.llm import ScriptedLLM
+
+    d = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    prose = Claim("Palm oil output rose in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
+    llm = ScriptedLLM([prose], [prose])
+    res = ask(db, llm, "alice", "How much did palm oil output grow in 2024?")
+    assert res.status == "not_found" and res.attempts == 2
+    assert all(why == NO_FIGURE for _, why in res.rejected) and len(res.rejected) == 2
+    assert any(NO_FIGURE in f for f in llm.calls[1][2])
+
+
+def test_a_figure_question_is_answered_when_one_claim_states_the_figure(db):
+    from ra.answer import ask
+    from ra.llm import ScriptedLLM
+
+    d = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    prose = Claim("Palm oil output rose in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
+    figure = Claim("Palm oil output rose 4.2 percent in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
+    res = ask(db, ScriptedLLM([prose, figure]), "alice", "How much did palm oil output grow in 2024?")
+    assert res.status == "answered" and len(res.claims) == 2 and res.attempts == 1
+
+
+def test_a_question_that_does_not_ask_for_a_figure_accepts_prose(db):
+    from ra.answer import ask
+    from ra.ground import asks_for_figure
+    from ra.llm import ScriptedLLM
+
+    d = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    prose = Claim("Palm oil output rose in 2024.", d, 1, "Palm oil output rose 4.2 percent in 2024")
+    q = "What does the outlook say about palm oil output?"
+    assert not asks_for_figure(q)
+    assert ask(db, ScriptedLLM([prose]), "alice", q).status == "answered"
+
+
+def test_years_and_quarter_marks_are_not_figures():
+    from ra.ground import asks_for_figure, figures_in
+
+    assert figures_in("Growth is expected to ease in 2026 after an upside surprise in 2025.") == set()
+    assert figures_in("Growth was 5.1 percent in 2024 and 2.9 percent in Q2 2023.") == {"5.1", "2.9"}
+    assert figures_in("The 2025f projection is 4.1 percent") == {"4.1"}
+    assert asks_for_figure("What GDP growth is projected for Malaysia in 2026?")
+    assert asks_for_figure("How many electric vehicles were sold in Malaysia in 2025?")
+    assert not asks_for_figure("Who is the chief executive officer of PETRONAS?")

@@ -50,6 +50,33 @@ def numbers_in_prose(s):
     return out
 
 
+FIGURE_CUES = re.compile(
+    r"\b(?:how (?:much|many|fast|high|low|big|large)|what (?:share|rate|growth|percentage|proportion|level|number|amount|price)"
+    r"|growth|grow|grew|forecast|projection|projected|percent|share|rate|wage|average|total|sold)\b",
+    re.I,
+)
+YEARISH_RE = re.compile(r"\b(?:19|20)\d\d(?:f|e)?\b|\b[QH][1-4]\b", re.I)
+
+
+def asks_for_figure(question):
+    """True when the question wants a quantity: a growth rate, a share, a count, a price. Plain word cues, no model."""
+    return bool(FIGURE_CUES.search(question))
+
+
+def figures_in(s):
+    """Numbers in s that are figures, not dates: years such as 2026 or 2025f and quarter marks such as Q2 do not count."""
+    return numbers_in(YEARISH_RE.sub(" ", s))
+
+
+def states_a_figure(claims):
+    """A set of claims answers a figure question only if at least one claim states a figure.
+
+    A true sentence with no number ("growth is expected to ease in 2026") answers "what growth is projected for 2026"
+    beside the point. The gate verifies quotes, not relevance, so this is the one relevance check plain code can make.
+    """
+    return any(figures_in(c.text) for c in claims)
+
+
 def check_claim(claim, page_text, allowed_pages):
     """Accept a claim only if its quote is on the cited page and every number in the claim is in the quote.
 

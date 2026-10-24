@@ -83,7 +83,7 @@ _SQL = """
 
 ### 3. The answer loop: draft, check, retry once, otherwise refuse
 
-If nothing survives the gate, the second attempt gets the reasons the first failed. If that also fails, the answer is "not found". Every step is appended to the trace that the Investigation steps view shows.
+If nothing survives the gate, the second attempt gets the reasons the first failed. One check looks at the set rather than each claim: when the question asks for a figure (growth, share, how many, a rate) and no surviving claim states one, the whole set is removed with that reason, so a true sentence that avoids the number cannot stand in for it. If that also fails, the answer is "not found". Every step is appended to the trace that the Investigation steps view shows.
 
 <!-- source: ra/answer.py -->
 ```python
@@ -98,6 +98,9 @@ If nothing survives the gate, the second attempt gets the reasons the first fail
             trace.append({"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)})
             t = time.perf_counter()
             ok, bad = _verify(con, drafted, allowed)
+            if ok and asks_for_figure(question) and not states_a_figure(ok):
+                bad += [(c, NO_FIGURE) for c in ok]
+                ok = []
             trace.append({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
             result.rejected.extend(bad)
             if ok:

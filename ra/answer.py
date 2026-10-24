@@ -3,7 +3,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from .ground import Claim, check_claim
+from .ground import Claim, asks_for_figure, check_claim, states_a_figure
 from .retrieve import Passage, fts_query, named_documents, retrieve, search_terms
 
 
@@ -25,6 +25,9 @@ class Result:
 def _page_text(con, doc_id, page):
     r = con.execute("SELECT text FROM pages WHERE doc_id=? AND page=?", (doc_id, page)).fetchone()
     return r["text"] if r else None
+
+
+NO_FIGURE = "the question asks for a figure and no claim states one"
 
 
 def _verify(con, claims, allowed):
@@ -77,6 +80,9 @@ def ask(con, llm, user, question, k=12):
             trace.append({"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)})
             t = time.perf_counter()
             ok, bad = _verify(con, drafted, allowed)
+            if ok and asks_for_figure(question) and not states_a_figure(ok):
+                bad += [(c, NO_FIGURE) for c in ok]
+                ok = []
             trace.append({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
             result.rejected.extend(bad)
             if ok:
