@@ -2,14 +2,14 @@
 
 Ask a question across a PDF library and get claims that are each checked against the page they cite.
 
-Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. Two real models have been run on the question set sixteen times. The smaller one has never stated a wrong answer and refuses about half of what it could answer. The larger one answers nearly everything and, after two plain-code rules added from its runs, answers beside the point once or twice a run, always with a true figure for a different reading of the question.
+Status: a working demo slice. It has the core pipeline, an evaluation harness, five real public reports, and a web demo with a canvas view and an investigation-steps view. Three real models have been run on the question set nineteen times. The smaller one has never stated a wrong answer and refuses about half of what it could answer. The larger ones answer nearly everything and, after two plain-code rules added from their runs, answer beside the point once or twice a run, always with a true figure for a different reading of the question or half of a comparison.
 
 | Part | State |
 |---|---|
 | Ingest, retrieval with access control, grounding gate, retry, audit | Built and tested |
-| Evaluation harness and 22-question set | Built. Baselines scored. Two real models, sixteen runs |
+| Evaluation harness and 22-question set | Built. Baselines scored. Three real models, nineteen runs |
 | Web demo: canvas, steps, feedback, review request | Built. Camera maths, hover and drag not exercised |
-| Real-model run | Qwen 3.8 27B and Gemini 4 Argon through an OpenAI-compatible API. Claude adapter built, not yet run |
+| Real-model run | Qwen 3.8 27B, Gemini 4 Argon and Claude Sonnet 5.5, all through one OpenAI-compatible endpoint. The native Anthropic adapter is built, not exercised |
 | Cross-report comparisons | Retrieval finds both sides. The small model refuses them; the large one answers two of three |
 | Embeddings, OCR, production auth | Not started |
 
@@ -75,16 +75,18 @@ A real model, Qwen 3.8 27B through Nous Research's OpenAI-compatible API, temper
 | Gemini 4 Argon, 3 runs, figure-label rule in the gate | 1.0 | 11 to 12 of 15 | 0 to 2 | 6 to 7 of 7 | 2 to 4 |
 | Gemini 4 Argon, 3 runs, plus the figure-question rule | 1.0 | 10 to 12 of 15 | 2 to 3 | 7 of 7 | 1 to 2 |
 | Qwen 3.8 27B, run 10, same gate | 1.0 | 6 of 15 | 9 | 7 of 7 | 0 |
+| Claude Sonnet 5.5, 3 runs, same gate | 1.0 | 10 to 12 of 15 | 2 to 3 | 7 of 7 | 1 to 2 |
 
 The second model answers nearly everything and the gate removes a third of what it drafts. Its first runs exposed a gap: it quoted a chart's axis text ("5.1 4.4 3.6 3.3 4.1 2025f") and the number check passed because 4.4 was in the blob. The gate now requires a number to appear on a line with at least three words, so figure labels do not count; that claim is removed and the test that proves it is in `tests/test_core.py`. Its remaining wrong-and-confident answers were each checked against their quotes: none states a false figure. They are true, verified sentences that answer a different question (first-half actual growth when the full-year projection was asked; quarter-on-quarter when year-on-year was anchored) or that reply to an unanswerable question with related facts. The gate cannot judge relevance in general, but one case is plain: a question that asks for a figure (growth, share, how many, a rate) answered by a set of claims none of which states one. The gate now removes that whole set, with the reason, and the retry asks for the figure; years and quarter marks do not count as figures. On three runs that took the larger model's wrong-and-confident from 2 to 4 down to 1 to 2 and every unanswerable question to a correct refusal, at the cost of one more timid answer. What is left is one kind: a true figure for a different reading of the question, every run on the cross-report question about 2025 (it gives the first-half actual instead of the full-year projection) and once on the fourth-quarter question (quarter-on-quarter instead of year-on-year). Plain code cannot see that. The brief counts a confident irrelevant answer as a failure, so the scorer keeps counting it, and it is a reviewer's job or a sharper question.
 
-Three things to read into that. First, neither model stated a false figure as fact in any run, 240 answerable attempts across both, and the gate removed between 2 of 10 and 18 of 42 drafted claims, so the design holds. Second, the two models fail in opposite directions. The smaller one refuses about half the answerable questions and every comparison; the larger one answers almost everything and once or twice a run answers confidently beside the point. Coverage and zero-false pull against each other, and the brief ranks zero-false first. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
+Three things to read into that. First, no model stated a false figure as fact in any run, 285 answerable attempts across three, and the gate removed between 2 of 10 and 33 of 52 drafted claims, so the design holds. Claude Sonnet 5.5 sits between the other two: every single-report question it answers is right, it drafts the most claims and the gate removes the most, and its one or two wrong-and-confident answers per run are all cross-report comparisons where it states one true side or reads 2025 as the first-half actual. Through the same endpoint as the others, so the comparison is like for like; the native Anthropic adapter in `ra/llm.py` is still unexercised. Second, the two models fail in opposite directions. The smaller one refuses about half the answerable questions and every comparison; the larger one answers almost everything and once or twice a run answers confidently beside the point. Coverage and zero-false pull against each other, and the brief ranks zero-false first. Third, results vary from run to run at temperature 0, so one run is a signal and three is the minimum worth quoting.
 
 The first runs reported one to three wrong-and-confident. Every one was checked against the page: right report, right figure, right context, and the gate had verified the quote. They were scored wrong because the question set anchored a single page and these reports repeat forecasts in the executive summary. A fact may now carry several anchor sentences, every anchor must resolve, and 19 were added after reading each page. That is label correction, declared here. The rule that a right number on an unrelated page is wrong still stands and still has a test.
 
 ```
 HERMES_API_KEY=... HERMES_MODEL=qwen/qwen3.8-27b    uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/qwen3.8-27b.json
 HERMES_API_KEY=... HERMES_MODEL=google/gemini-4-argon uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/gemini-4-argon.json
+HERMES_API_KEY=... HERMES_MODEL=anthropic/claude-sonnet-5.5 uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/claude-sonnet-5.5.json
 ```
 
 ## The web demo

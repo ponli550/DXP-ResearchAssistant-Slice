@@ -245,10 +245,10 @@
       '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 73 automated tests. Not a prototype on your documents yet.</p>' +
       table("wrap", ["Part", "State", "Note"], [
         ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "Core pipeline. No runtime dependencies beyond the standard library."],
-        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Two real models, sixteen runs, see next slide."],
+        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Three real models, nineteen runs, see next slide."],
         ["Web demo: canvas, steps view, feedback, review request", "{ok}Built", "Checked in headless Chrome and jsdom. Camera and drag not exercised."],
-        ["Real-model run on the question set", "{ok}Run, sixteen times", "Two models. No false figure in any run. Small model timid; large model answers beside the point once or twice a run, with a true figure."],
-        ["Cross-report comparison questions", "{warn}Retrieved, split", "Both reports reach the model. The small model declines to compare; the large one answers two of three."],
+        ["Real-model run on the question set", "{ok}Run, nineteen times", "Three models. No false figure in any run. Small model timid; large models answer beside the point once or twice a run, with a true figure."],
+        ["Cross-report comparison questions", "{warn}Retrieved, split", "Both reports reach the model. The small model declines to compare; the large ones answer two of three."],
         ["Embeddings, OCR, production login", "{danger}Not started", "Weeks 2 to 6 of the plan."]]) +
       '<p class="dim" style="font-size:14px">Status as of 25 October 2026</p>',
       note: "Do not oversell. It proves the design works end to end on real reports. It does not prove answer quality and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
@@ -259,10 +259,10 @@
       '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{ok}3 of 3 get both pages"]]) + '<p class="dim" style="font-size:15px">Right page in the top 12 across the set: 1.0, up from 0.867 after the edition words left the query and every report kept two slots.</p>' +
       '<p class="dim" style="font-size:15px">Nothing was tuned on these questions; 19 anchors were added after checking pages by hand, because the reports repeat forecasts in the summary.</p>' +
       '<h3>Model-free baselines, as a floor</h3>' + table("sm wrap", ["Baseline", "Correct", "Timid", "Wrong and confident"], [["Quote the best sentence", "1 of 15", "0", "{danger}21 of 22"], ["Refuse on weak match", "0 of 15", "9", "{danger}9 of 22"]]) +
-      card("warn", '<p><b>Opposite failures.</b> Small model refuses half of what it could answer. Large one answers beside the point 1 to 2 times a run: a true figure, a different reading. Zero-false comes first.</p>') + '</div>' +
-      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">False figures stated as fact, 2 models, 16 runs</div><div class="num">0 of 240</div><p>Neither model stated a false figure. The gate removed up to 4 in 10 of the large model’s drafts, one read off a chart.</p>') +
-      table("sm", ["Model", "Correct", "Timid", "Refused right", "Wrong, confident"], [["Qwen · 10 runs", "5 to 9", "6 to 10", "7 of 7", "{ok}0"], ["Gemini · 3", "11 to 12", "0 to 2", "6 to 7", "{danger}2 to 4"], ["Gemini · 3, figure rule", "10 to 12", "2 to 3", "7 of 7", "{warn}1 to 2"]]) + '</div></div>',
-      note: "Lead with the zero, then say what it does not mean: the model refuses a lot, and cross-report questions always. The model measured is Qwen 3.8 27B through Nous Research, not the Claude in the original proposal; say so if asked. The baselines prove a model-free approach cannot work." },
+      card("warn", '<p><b>Opposite failures.</b> Small model refuses half of what it could answer. Large ones answer beside the point 1 to 2 times a run, only on comparisons: a true figure, half an answer. Zero-false comes first.</p>') + '</div>' +
+      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">False figures stated as fact, 3 models, 19 runs</div><div class="num">0 of 285</div><p>No model stated a false figure. The gate removed up to 6 in 10 of the large models’ drafts, one read off a chart.</p>') +
+      table("sm", ["Model", "Correct", "Timid", "Refused right", "Wrong, confident"], [["Qwen · 10 runs", "5 to 9", "6 to 10", "7 of 7", "{ok}0"], ["Gemini · 3", "11 to 12", "0 to 2", "6 to 7", "{danger}2 to 4"], ["Gemini · 3, figure rule", "10 to 12", "2 to 3", "7 of 7", "{warn}1 to 2"], ["Claude Sonnet 5.5 · 3", "10 to 12", "2 to 3", "7 of 7", "{warn}1 to 2"]]) + '</div></div>',
+      note: "Lead with the zero, then say what it does not mean: the model refuses a lot, and cross-report questions always. The model measured is Qwen 3.8 27B through Nous Research, and Gemini and Claude Sonnet through the same endpoint; the demo runs on Qwen. The baselines prove a model-free approach cannot work." },
 
     // ---------- 4 TECHNOLOGY ----------
     { sec: "TECHNOLOGY", html:
@@ -271,7 +271,7 @@
         ["Back end", "Python, FastAPI", "Strong PDF and evaluation libraries, typed API, easy to test", "{ok}Same"],
         ["Store and search", "PostgreSQL with pgvector, beside MARC Online’s database", "Passages, vectors and audit in one store; entitlements and metadata synced from theirs. If their engine is PostgreSQL, same instance", "{warn}SQLite FTS5, keyword only"],
         ["PDF reading", "poppler page extraction, OCR fallback, table extraction", "Keeps page numbers, which citations need; reading-order mode handles two-column pages", "{warn}poppler only, OCR flagged not run"],
-        ["Model", "Any Anthropic or OpenAI-compatible model, behind a thin interface", "Provider, region and retention decided with you in week 1. One adapter file to swap", "{ok}Measured on Qwen 3.8 27B and Gemini 4 Argon. Claude adapter built, not yet run"],
+        ["Model", "Any Anthropic or OpenAI-compatible model, behind a thin interface", "Provider, region and retention decided with you in week 1. One adapter file to swap", "{ok}Measured on Qwen 3.8 27B, Gemini 4 Argon and Claude Sonnet 5.5, one adapter"],
         ["Front end", "React web app", "Chat, page viewer and admin screens need component state and accessibility work", "{warn}One plain HTML page"],
         ["Files", "Private object storage", "Original PDFs, page images, retention rules", "{warn}Local files"],
         ["Login", "Your single sign-on, else email login", "Matches how your customers already sign in", "{danger}Demo user picker"],
