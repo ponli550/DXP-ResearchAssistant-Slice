@@ -119,7 +119,7 @@ Needs `pdftotext` and `pdfinfo` (poppler). 58 tests, including one that fails if
 
 ## What comes next
 
-1. Bring the timid rate down without raising wrong-and-confident: the system prompt tells the model to return nothing when unsure, and a 27B model takes that literally on comparisons. Try asking for one claim per report, and re-measure over three runs.
+1. Bring the timid rate down without raising wrong-and-confident. Loosening the prompt was tried and reverted: three runs with "one claim per report, a partial answer beats none, refuse only when no passage mentions the subject" left timid at 7 to 9 and produced the first real wrong-and-confident, an unanswerable question answered from an unrelated passage. The strict refusal rule is doing its job. The next lever is the model, not the instruction: run the same set on a stronger model and on the Claude adapter, three runs each.
 2. Run the Claude adapter on the same set so the two models can be compared.
 3. Add embeddings beside the keyword search, and measure whether they help.
 4. Only then think about authentication, hosting and the client's own reports.
