@@ -21,7 +21,7 @@ Status: a working demo slice. It has the core pipeline, an evaluation harness, f
 | `tests/` | 62 tests, with a small PDF writer so no fixtures are needed |
 | `evals/` | The question set and the baseline results |
 | `tools/` | A stand-in server and a jsdom check for the page. Test tooling, not product code |
-| `docs/` | `TECH_STACK.md`: the stack, versions, what differs from the proposal, and code examples checked by a test. `DERIVING_THE_UI.md`: how the canvas and steps views were derived from reference recordings |
+| `docs/` | `TECH_STACK.md`: the stack, versions, what differs from the proposal, and code examples checked by a test. `DERIVING_THE_UI.md`: how the canvas and steps views were derived from reference recordings. `DESIGN.md`: the rules the admin board follows and where each came from |
 | `data/` | Ignored. The PDFs and the database |
 
 ## How an answer is made

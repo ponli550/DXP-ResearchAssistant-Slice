@@ -619,40 +619,47 @@ DASHBOARD_HTML = r"""<!doctype html>
 <title>Research assistant · admin</title>
 <style>
 /* One screen, dense, like the home board: counts and names in fixed panels, text bars, tabular figures, no prose where a number will do. */
-:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a;--mono:ui-monospace,Menlo,Consolas,monospace}
+:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a;
+ --mono:ui-monospace,Menlo,Consolas,monospace;--serif:Charter,'Iowan Old Style',Georgia,serif;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px}
 @media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8dd;--dim:#9a9486;--card:#1d1b16;--line:#2e2b23;--accent:#e08a52;--ok:#6cc38b;--warn:#e0b45a}}
 *{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,sans-serif}
-main{max-width:1200px;margin:0 auto;padding:.8rem 1rem 2rem}
+main{max-width:1200px;margin:0 auto;padding:var(--s3) var(--s4) var(--s5)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+@media (pointer:coarse){button,select,input{min-height:44px}}
+.keyrow{display:flex;gap:var(--s5);flex-wrap:wrap;margin:var(--s3) 0 0;padding:var(--s2) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.keyrow div{display:flex;align-items:baseline;gap:var(--s2)}.keyrow .v{font:600 1.25rem/1 var(--mono);font-variant-numeric:tabular-nums}.keyrow .k{font-size:.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.skel .panel{min-height:7rem}.skel .panel::after{content:"";display:block;height:.6rem;width:60%;border-radius:3px;background:var(--line);margin-top:var(--s2);box-shadow:0 1rem 0 0 var(--line),0 2rem 0 0 var(--line)}
 .top{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.5rem}
 h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .meta{color:var(--dim);font-size:.8rem}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-.tabs{display:flex;gap:.2rem}.tabs button{background:none;border:1px solid transparent;border-radius:.4rem;padding:.2rem .6rem;color:var(--dim);font:inherit;cursor:pointer}
+.tabs{display:flex;gap:.2rem}.tabs button{background:none;border:1px solid transparent;border-radius:6px;padding:var(--s1) var(--s3);color:var(--dim);font:inherit;cursor:pointer;transition:background .15s ease-out}.tabs button:hover{background:var(--card)}
 .tabs button[aria-selected=true]{color:var(--fg);border-color:var(--line);background:var(--card)}
-.brief{margin:.7rem 0 .8rem;font-size:1.05rem;line-height:1.35}.brief .meta{display:block;margin-top:.15rem}
+.brief{margin:var(--s3) 0 var(--s3);font:1.08rem/1.4 var(--serif);text-wrap:balance;max-inline-size:90ch}.brief .meta{display:block;margin-top:var(--s1)}
 .brief .why{cursor:help;text-decoration:underline dotted;color:var(--dim)}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:.7rem}
-.panel{grid-column:span 4;background:var(--card);border:1px solid var(--line);border-radius:.5rem;padding:.55rem .7rem .6rem;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:var(--s3)}
+.panel{grid-column:span 4;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s2) var(--s3) var(--s3);min-width:0}
 .panel.w8{grid-column:span 8}.panel.w5{grid-column:span 5}.panel.w3{grid-column:span 3}.panel.w12{grid-column:span 12}
 @media(max-width:900px){.panel,.panel.w8,.panel.w5,.panel.w3{grid-column:span 12}}
-h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 .4rem;display:flex;justify-content:space-between;gap:.5rem}
+h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
 h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
 table{border-collapse:collapse;width:100%}td,th{padding:.18rem .3rem;vertical-align:baseline;text-align:left;white-space:nowrap}
 th{font-size:.7rem;color:var(--dim);font-weight:500;border-bottom:1px solid var(--line)}
 td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}td.q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;width:100%}
-td.t{font-family:var(--mono);color:var(--accent);font-size:.78rem}tr:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
-.bar{font-family:var(--mono);color:var(--accent);letter-spacing:-.08em;font-size:.72rem}
-.big{font-size:1.45rem;font-weight:600;color:var(--accent);font-family:var(--mono);line-height:1}
+td.t{font-family:var(--mono);color:var(--dim);font-size:.78rem}tr:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
+.bar{font-family:var(--mono);color:var(--dim);letter-spacing:-.08em;font-size:.72rem}
+.big{font-size:1.45rem;font-weight:600;color:var(--fg);font-family:var(--mono);line-height:1}
 .todo td.n{color:var(--accent);font-weight:600;font-size:1.05rem}
 .ok{color:var(--ok)}.bad{color:var(--warn)}.dim{color:var(--dim)}
-.ring{width:3rem;height:3rem;transform:rotate(-90deg);flex:none}.ring circle{fill:none;stroke-width:3.6}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round}
+.ring{width:3rem;height:3rem;transform:rotate(-90deg);flex:none}.ring circle{fill:none;stroke-width:3.6}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--fg);stroke-linecap:round}
 .cover{display:flex;gap:.7rem;align-items:center;margin-bottom:.4rem}
-.tl{width:100%;display:block}.tl text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.tl text.dim{fill:var(--dim);font-size:10px}.tl .lane{stroke:var(--line);stroke-width:1}.tl .chain{stroke:var(--dim);stroke-dasharray:2 3}.tl .dot{fill:var(--card);stroke:var(--accent);stroke-width:1.5}.tl .seg{stroke:none}.tl .lab{fill:var(--dim);font-size:10px;letter-spacing:.06em}
+.tl{width:100%;display:block}.tl text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.tl text.dim{fill:var(--dim);font-size:10px}.tl .lane{stroke:var(--line);stroke-width:1}.tl .chain{stroke:var(--dim);stroke-dasharray:2 3}.tl .dot{fill:var(--card);stroke:var(--fg);stroke-width:1.3}.tl .seg{stroke:none}.tl .lab{fill:var(--dim);font-size:10px;letter-spacing:.06em}
 .legend{display:flex;gap:.9rem;font-size:.75rem;color:var(--dim);margin-top:.3rem}.legend i{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;vertical-align:-1px;margin-right:.3rem}
 .foot{margin-top:.8rem;display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;font-size:.78rem;color:var(--dim)}.foot b{color:var(--fg);font-weight:600}@media(max-width:900px){.foot{grid-template-columns:1fr}}
 .empty{color:var(--dim);padding:.3rem 0}
 form.inline{display:grid;grid-template-columns:auto 1fr auto;gap:.4rem;align-items:center}form.inline.keys{grid-template-columns:1fr auto auto}
 input,select,button.go{font:inherit;padding:.4rem .6rem;border-radius:.4rem;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
-button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer}button.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
+button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer}button.go:disabled{opacity:.6;cursor:progress}button.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
 .out{margin-top:.5rem;font-size:.85rem}.keyval{font-family:var(--mono);user-select:all}
 #login{margin:4rem auto;max-width:22rem;display:grid;gap:.5rem}#login label{font-size:.85rem;color:var(--dim)}
 #help{margin:.4rem 0 0;padding:.5rem .7rem;border-left:2px solid var(--accent);font-size:.85rem;color:var(--dim)}
@@ -666,8 +673,9 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
 <div id="view" hidden>
 <p id="help" hidden>A reading room on top of the report library: a user asks, retrieval returns only passages they may see, a model drafts claims with exact quotes, and plain code checks each quote against its page before anything is shown. This board is counts and names from the audit log, the library and the saved runs; it never shows answer text. To read an answer, open the chat as that user. <button class="link" id="gotit" type="button">got it</button></p>
 <div class="brief" id="brief"></div>
+<div class="keyrow" id="keyrow"></div>
 <section id="board">
-<div class="grid">
+<div class="grid skel" id="grid">
  <div class="panel"><h2>To do <span id="todoN"></span></h2><table class="todo" id="todo"></table></div>
  <div class="panel w8"><h2>Reports by edition <span>dot size: citations · bar: by user</span></h2><svg class="tl" id="tl" role="img" aria-label="Reports on a timeline per library, sized by citations"></svg><div class="legend" id="legend"></div></div>
  <div class="panel"><h2>Coverage <span id="covN"></span></h2><div class="cover"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="covPct"></div><div class="meta" id="covText"></div></div></div><table id="libs"></table></div>
@@ -724,6 +732,10 @@ function render(d){
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
+ const kr=$("keyrow");kr.textContent="";const latest=d.runs[0];const share=d.usage.asked?Math.round(100*d.usage.answered/d.usage.asked):0;
+ [[latest?String(latest.wrong_and_confident):"—","wrong and confident, latest run",latest?(latest.wrong_and_confident?"bad":"ok"):""],[share+"%","answered with checked citations",""],[d.coverage.pct+"%","pages searchable",""],[String(d.todo.length),"to do",d.todo.length?"bad":""]]
+  .forEach(([v,k,c])=>{const b=el("div");b.appendChild(el("span","v "+c,v));b.appendChild(el("span","k",k));kr.appendChild(b);});
+ $("grid").classList.remove("skel");
  $("todoN").textContent=d.todo.length?d.todo.length:"nothing waiting";
  fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero.");
  $("ringFill").style.strokeDasharray=d.coverage.pct+" 100";$("covPct").textContent=d.coverage.pct+"%";$("covN").textContent=d.coverage.pages+" pages";
@@ -755,13 +767,13 @@ $("login").onsubmit=e=>{e.preventDefault();const t=$("t").value.trim();if(!t)ret
 $("forget").onclick=()=>{try{sessionStorage.removeItem("ra.token");localStorage.removeItem("ra.lastlook");}catch(e){}show("login","Token forgotten on this device.");};
 $("helpBtn").onclick=()=>{$("help").hidden=!$("help").hidden;};$("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("help").hidden=true;};
 (async()=>{try{const j=await (await fetch("/api/users")).json();["tryUser","keyUser"].forEach(id=>{$(id).textContent="";j.users.forEach(u=>$(id).appendChild(el("option","",u)));});}catch(e){}})();
-$("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("tryQ").value.trim();if(!q)return;const out=$("tryOut");out.textContent="Asking as "+u+"…";
+$("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("tryQ").value.trim();if(!q)return;const out=$("tryOut");const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Asking…";out.textContent="Asking as "+u+"…";try{
  const r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,question:q})});
  if(!r.ok){out.textContent="Refused ("+r.status+"): "+((await r.json()).detail||"");return;}
  const j=await r.json();const checks=j.trace.filter(t=>t.kind==="check");const kept=checks.reduce((a,c)=>a+c.kept,0),removed=checks.reduce((a,c)=>a+c.removed,0);const reasons=[...new Set(checks.flatMap(c=>c.reasons||[]))];const ms=j.trace.filter(t=>t.kind==="draft").reduce((a,t)=>a+(t.ms||0),0);
  out.textContent="";out.appendChild(el("span",j.status==="answered"?"ok":"bad",j.status==="answered"?"answered":"not found"));out.appendChild(document.createTextNode(" · "+j.attempts+" attempt"+(j.attempts===1?"":"s")+" · model "+Math.round(ms/1000)+" s · kept "+kept+", removed "+removed+(reasons.length?" ("+reasons.join("; ")+")":"")+" · citations "+((j.claims||[]).map(c=>c.doc_id+":"+c.page).join(", ")||"none")+" · "));
- const a=el("a","","open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);};
-$("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;
+ const a=el("a","","open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);}finally{btn.disabled=false;btn.textContent="Ask";}};
+$("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Creating…";setTimeout(()=>{btn.disabled=false;btn.textContent="Create key";},800);
  const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
  out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
