@@ -338,3 +338,42 @@ def test_board_loads_in_parts_head_first_then_one_widget_at_a_time(web):
     # the whole board is still one call, and the parts agree with it
     whole = client.get("/api/admin/board", headers=h).json()
     assert whole["coverage"] == cov["coverage"] and whole["graph"]["nodes"] == tl["graph"]["nodes"]
+
+
+def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
+    client, llm, doc, memo, path = web
+    llm.responses = [[good(doc)], []]
+    client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
+    client.post("/api/ask", json={"user": "bob", "question": "What did the board decide?"})
+    client.post("/api/feedback", json={"user": "alice", "audit_id": 1, "rating": "down", "reason": "wrong year"})
+    client.post("/api/review", json={"user": "alice", "audit_id": 1, "note": "please check"})
+
+    head = client.get("/api/me/board", params={"user": "alice", "parts": "head"}).json()
+    assert set(head) == {"now", "brief", "usage", "ratings", "reviews"}
+    assert head["usage"]["asked"] == 1 and head["usage"]["answered"] == 1 and len(head["usage"]["libraries"]) >= 1
+    assert head["ratings"]["down"] == 1 and head["reviews"]["open"] == 1
+    assert "alice" in head["brief"] and "1 review request waiting" in head["brief"]
+
+    ans = client.get("/api/me/widget/answers", params={"user": "alice"}).json()
+    assert [a["question"] for a in ans["answers"]] == ["How did palm oil output change?"]  # never bob's
+    bob = client.get("/api/me/widget/answers", params={"user": "bob"}).json()
+    assert [a["question"] for a in bob["answers"]] == ["What did the board decide?"]
+    assert client.get("/api/me/widget/timeline", params={"user": "alice"}).status_code == 404  # admin widget, not in the user catalogue
+    assert client.get("/api/me/board", params={"user": "nobody"}).status_code == 404
+
+    lay = client.get("/api/me/layout", params={"user": "alice"}).json()
+    assert lay["owner"] == "user:alice" and [w["type"] for w in lay["layout"]["widgets"]] == ["answers", "usage", "ratings", "reviews"]
+    doc_ = lay["layout"]
+    doc_["widgets"][0]["span"] = 12
+    assert client.put("/api/me/layout", json={"user": "alice", "layout": doc_}).json()["saved"]
+    assert client.get("/api/me/layout", params={"user": "alice"}).json()["layout"]["widgets"][0]["span"] == 12
+    assert not client.get("/api/me/layout", params={"user": "bob"}).json()["saved"]
+    # a user layout cannot name an admin widget, and vice versa
+    doc_["widgets"][0]["type"] = "timeline"
+    assert client.put("/api/me/layout", json={"user": "alice", "layout": doc_}).status_code == 400
+    admin_doc = client.get("/api/admin/layout", headers={"X-Token": "demo"}).json()["layout"]
+    admin_doc["widgets"][0]["type"] = "answers"
+    assert client.put("/api/admin/layout", json={"layout": admin_doc}, headers={"X-Token": "demo"}).status_code == 400
+    assert not client.delete("/api/me/layout", params={"user": "alice"}).json()["saved"]
+    # the chat page links to the user's own board
+    assert 'id="melink"' in client.get("/").text

@@ -71,6 +71,11 @@ class LayoutBody(BaseModel):
     layout: dict
 
 
+class MeLayoutBody(BaseModel):
+    user: str
+    layout: dict
+
+
 def _hash_key(key):
     import hashlib
 
@@ -362,17 +367,24 @@ WIDGETS = {
     "users": {"title": "Users", "span": 4},
     "people": {"title": "People", "span": 8},
 }
+# The user catalogue: four widgets, each something MARC Online does not show. Same document shape, same rules.
+USER_WIDGETS = {
+    "answers": {"title": "Your recent answers", "span": 8},
+    "usage": {"title": "Your usage", "span": 4},
+    "ratings": {"title": "Your ratings", "span": 6},
+    "reviews": {"title": "Your review requests", "span": 6},
+}
 LAYOUT_VERSION = 1
 MAX_WIDGETS = 24
 
 
-def default_layout():
+def default_layout(catalogue=WIDGETS):
     return {"version": LAYOUT_VERSION, "widgets": [
-        {"type": t, "span": w["span"], "x": None, "y": None, "h": 1, "settings": {}} for t, w in WIDGETS.items()
+        {"type": t, "span": w["span"], "x": None, "y": None, "h": 1, "settings": {}} for t, w in catalogue.items()
     ]}
 
 
-def validate_layout(doc):
+def validate_layout(doc, catalogue=WIDGETS):
     """Problems with a layout document, as plain sentences. Empty means it can be stored."""
     bad = []
     if not isinstance(doc, dict) or not isinstance(doc.get("widgets"), list):
@@ -386,8 +398,8 @@ def validate_layout(doc):
         if not isinstance(w, dict):
             bad.append(f"widget {i} is not an object")
             continue
-        if w.get("type") not in WIDGETS:
-            bad.append(f"widget {i}: unknown type {w.get('type')!r}; known: {', '.join(WIDGETS)}")
+        if w.get("type") not in catalogue:
+            bad.append(f"widget {i}: unknown type {w.get('type')!r}; known: {', '.join(catalogue)}")
         if not (isinstance(w.get("span"), int) and 1 <= w["span"] <= 12):
             bad.append(f"widget {i}: span must be a whole number from 1 to 12")
         if w.get("x") is not None and not (isinstance(w["x"], int) and 0 <= w["x"] <= 11):
@@ -401,11 +413,53 @@ def validate_layout(doc):
     return bad
 
 
-def get_layout(con, owner):
+def get_layout(con, owner, catalogue=WIDGETS):
     row = con.execute("SELECT doc, updated_at FROM layouts WHERE owner=?", (owner,)).fetchone()
     if not row:
-        return {"owner": owner, "layout": default_layout(), "saved": False, "updated_at": None, "catalogue": WIDGETS}
-    return {"owner": owner, "layout": json.loads(row["doc"]), "saved": True, "updated_at": row["updated_at"], "catalogue": WIDGETS}
+        return {"owner": owner, "layout": default_layout(catalogue), "saved": False, "updated_at": None, "catalogue": catalogue}
+    return {"owner": owner, "layout": json.loads(row["doc"]), "saved": True, "updated_at": row["updated_at"], "catalogue": catalogue}
+
+
+USER_WIDGET_PARTS = {"answers": ("answers",), "usage": ("usage",), "ratings": ("ratings",), "reviews": ("reviews",)}
+USER_HEAD_PARTS = ("now", "brief", "usage", "ratings", "reviews")
+
+
+def user_board(con, user, model_name, parts=None):
+    """One user's board: their questions, ratings and review requests, and the libraries they may see. Nothing of anyone else's."""
+    from datetime import datetime
+
+    want = set(parts) if parts else None
+    need = lambda *ks: want is None or any(k in want for k in ks)
+    now = _now()
+    out = {"now": now.isoformat(timespec="seconds")}
+    rows = con.execute("SELECT id, at, question, status, cited FROM audit WHERE user=? ORDER BY id DESC", (user,)).fetchall()
+    answered = sum(1 for r in rows if r["status"] == "answered")
+    if need("usage", "brief"):
+        libs = [r["name"] for r in con.execute("SELECT l.name FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user=? ORDER BY l.name", (user,))]
+        out["usage"] = {"user": user, "asked": len(rows), "answered": answered, "not_found": len(rows) - answered, "model": model_name,
+                        "libraries": libs, "first_at": rows[-1]["at"] if rows else None, "last_at": rows[0]["at"] if rows else None}
+    if need("answers"):
+        out["answers"] = [{"at": r["at"], "question": r["question"], "status": r["status"], "audit_id": r["id"],
+                           "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
+    if need("ratings", "brief"):
+        fb = con.execute("SELECT f.at, f.rating, f.reason, a.question FROM feedback f JOIN audit a ON a.id = f.audit_id WHERE f.user=? ORDER BY f.id DESC", (user,)).fetchall()
+        out["ratings"] = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
+                          "recent": [dict(r) for r in fb[:12]]}
+    if need("reviews", "brief"):
+        rv = con.execute("SELECT r.at, r.status, r.note, a.question FROM reviews r JOIN audit a ON a.id = r.audit_id WHERE r.user=? ORDER BY r.id DESC", (user,)).fetchall()
+        out["reviews"] = {"open": sum(1 for r in rv if r["status"] == "open"), "recent": [dict(r) for r in rv[:12]]}
+    if need("brief"):
+        hello = "Good morning" if 5 <= datetime.now().hour < 12 else "Good afternoon" if datetime.now().hour < 18 else "Good evening"
+        parts_ = [f"{len(rows)} question{'s' if len(rows) != 1 else ''}, {answered} answered with checked citations" if rows else "no questions yet"]
+        if out["ratings"]["down"]:
+            parts_.append(f"{out['ratings']['down']} answer{'s' if out['ratings']['down'] != 1 else ''} you rated down")
+        if out["reviews"]["open"]:
+            parts_.append(f"{out['reviews']['open']} review request{'s' if out['reviews']['open'] != 1 else ''} waiting for a person")
+        out["brief"] = f"{hello}, {user}. " + "; ".join(parts_) + f". You can search {len(out['usage']['libraries'])} librar{'ies' if len(out['usage']['libraries']) != 1 else 'y'}."
+    for k in ("usage", "ratings", "reviews"):
+        if want is not None and k not in want:
+            out.pop(k, None)
+    return out
 
 
 def put_layout(con, owner, doc):
@@ -566,6 +620,53 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
             raise HTTPException(404, "No active key with that id.")
         return {"revoked": key_id}
 
+    # A user's own board. Trust is the demo's: the user name in the query, like the chat. In production the session says who you are.
+    def known(con, user):
+        user = user.strip()
+        if not user or not allowed_libraries(con, user):
+            raise HTTPException(404, "No such user, or that user holds no library grant.")
+        return user
+
+    @app.get("/api/me/board")
+    def me_board(user: str, parts: str = ""):
+        con = db()
+        user = known(con, user)
+        wanted = [p for p in parts.split(",") if p] or None
+        if parts == "head":
+            wanted = list(USER_HEAD_PARTS)
+        return user_board(con, user, model_name, wanted)
+
+    @app.get("/api/me/widget/{kind}")
+    def me_widget(kind: str, user: str):
+        con = db()
+        user = known(con, user)
+        if kind not in USER_WIDGET_PARTS:
+            raise HTTPException(404, f"No widget called {kind!r}; known: {', '.join(USER_WIDGET_PARTS)}")
+        return user_board(con, user, model_name, USER_WIDGET_PARTS[kind])
+
+    @app.get("/api/me/layout")
+    def me_layout(user: str):
+        con = db()
+        return get_layout(con, "user:" + known(con, user), USER_WIDGETS)
+
+    @app.put("/api/me/layout")
+    def me_write_layout(body: MeLayoutBody):
+        con = db()
+        user = known(con, body.user)
+        problems = validate_layout(body.layout, USER_WIDGETS)
+        if problems:
+            raise HTTPException(400, "; ".join(problems))
+        put_layout(con, "user:" + user, body.layout)
+        return get_layout(con, "user:" + user, USER_WIDGETS)
+
+    @app.delete("/api/me/layout")
+    def me_reset_layout(user: str):
+        con = db()
+        user = known(con, user)
+        con.execute("DELETE FROM layouts WHERE owner=?", ("user:" + user,))
+        con.commit()
+        return get_layout(con, "user:" + user, USER_WIDGETS)
+
     @app.get("/api/admin/layout")
     def read_layout(owner: str = "admin", x_token: str = Header(default="")):
         admin(x_token)
@@ -670,7 +771,7 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 @media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}.flash{animation:none}}
 </style></head><body>
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
-<div style="display:flex;gap:1rem;align-items:end"><a id="dashlink" href="/dashboard" style="font-size:.85rem;color:var(--accent)">Dashboard</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
+<div style="display:flex;gap:1rem;align-items:end"><a id="melink" href="/dashboard?user=alice" style="font-size:.85rem;color:var(--accent)">Your board</a><a id="dashlink" href="/dashboard" style="font-size:.85rem;color:var(--accent)">Admin</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
 <div id="banner" class="banner" hidden></div>
 <div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
 <div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button></div>
@@ -798,7 +899,9 @@ let stepsIO=null;
 async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
   if(j.model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant."}}
 $("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
-loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");
+function meLink(){$("melink").href="/dashboard?user="+encodeURIComponent($("user").value);}
+$("user").addEventListener("change",meLink);
+loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
   if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """
@@ -860,7 +963,7 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
 #help{margin:.4rem 0 0;padding:.5rem .7rem;border-left:2px solid var(--accent);font-size:.85rem;color:var(--dim)}
 [hidden]{display:none!important}
 </style></head><body><main>
-<div class="top"><h1>Research assistant · admin</h1><span class="meta" id="model"></span>
+<div class="top"><h1 id="h1">Research assistant · admin</h1><span class="meta" id="model"></span>
 <div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-v="board">Board</button><button role="tab" aria-selected="false" data-v="tools">Try a question · keys</button></div>
 <button class="link" id="helpBtn" type="button">what is this?</button><button class="link" id="forget" type="button">forget token</button></div>
 <div id="msg" class="meta bad"></div>
@@ -923,8 +1026,16 @@ const T={
  recent:{title:"Recent",sub:'<span id="recentN"></span>',body:'<table id="recent"></table>'},
  runs:{title:"Runs",sub:'<span>wrong and confident</span>',body:'<table id="runs"></table>'},
  users:{title:"Users",sub:'<span id="usersN"></span>',body:'<table id="users"></table>'},
- people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'}};
-let LAYOUT=null,CAT={},OWNER="admin";
+ people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'},
+ answers:{title:"Your recent answers",sub:'<span id="ansN"></span>',body:'<table id="answers"></table>'},
+ usage:{title:"Your usage",sub:'<span id="useN"></span>',body:'<table id="myuse"></table><p class="meta" id="mylibs"></p>'},
+ ratings:{title:"Your ratings",sub:'<span id="ratN"></span>',body:'<table id="ratings"></table>'},
+ reviews:{title:"Your review requests",sub:'<span id="revN"></span>',body:'<table id="reviews"></table>'}};
+const ME=new URLSearchParams(location.search).get("user")||"";
+let LAYOUT=null,CAT={},OWNER=ME?"user:"+ME:"admin";
+// In user mode every call goes to /api/me with the user in the query and no admin token.
+function api(path){if(!ME)return path;return path.replace("/api/admin/","/api/me/")+(path.includes("?")?"&":"?")+"user="+encodeURIComponent(ME);}
+function hdr(extra){return Object.assign(ME?{}:{"X-Token":tok()},extra||{});}
 function buildGrid(){const g=$("grid");g.textContent="";
  LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
   if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
@@ -933,10 +1044,10 @@ function buildGrid(){const g=$("grid");g.textContent="";
  let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
  n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
  if(LAYOUT.saved){const r=el("button","link","reset to default");r.type="button";r.onclick=resetLayout;n.appendChild(r);}}
-async function saveLayout(){const r=await fetch("/api/admin/layout",{method:"PUT",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({owner:OWNER,layout:LAYOUT.layout})});
+async function saveLayout(){const r=await fetch(api("/api/admin/layout"),{method:"PUT",headers:hdr({"content-type":"application/json"}),body:JSON.stringify(ME?{user:ME,layout:LAYOUT.layout}:{owner:OWNER,layout:LAYOUT.layout})});
  if(r.ok){LAYOUT=await r.json();}else{$("msg").textContent="Layout not saved ("+r.status+").";}}
 async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CAT[w.type]?CAT[w.type].span:4):12;buildGrid();await saveLayout();buildGrid();}
-async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:{"X-Token":tok()}});if(r.ok){LAYOUT=await r.json();buildGrid();}}
+async function resetLayout(){const r=await fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{method:"DELETE",headers:hdr()});if(r.ok){LAYOUT=await r.json();buildGrid();}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
 function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===type&&w.span===12));}
@@ -944,6 +1055,12 @@ function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===t
 // scrolls into view, and keeps it, so expanding or shrinking re-fills from memory without another request.
 const DATA={};
 function renderHead(d){
+ if(ME){document.title="Research assistant · "+ME;$("h1").textContent="Research assistant · "+ME;$("model").textContent=ME+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
+  const b=$("brief");b.textContent=d.brief||"";
+  const kr=$("keyrow");kr.textContent="";const share=d.usage.asked?Math.round(100*d.usage.answered/d.usage.asked):0;
+  [[String(d.usage.asked),"questions asked",""],[share+"%","answered with checked citations",""],[d.ratings.up+" / "+d.ratings.down,"rated up / down",d.ratings.down?"bad":""],[String(d.reviews.open),"review requests open",d.reviews.open?"bad":""],[String(d.usage.libraries.length),"libraries you can search",""]]
+   .forEach(([v,k,c])=>{const x=el("div");x.appendChild(el("span","v "+c,v));x.appendChild(el("span","k",k));kr.appendChild(x);});
+  $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · your rows from the audit log, your ratings and review requests · nobody else's.";return;}
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
@@ -960,10 +1077,14 @@ const FILL={
  runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
  users(d){ setT("usersN",d.usage.users.length); fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet."); },
  people(d){ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open"); const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)]))); fillT("people",prow,null,"No open review requests and no thumbs-down reasons."); },
+ answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&q="+encodeURIComponent(r.question);const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
+ usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
+ ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("dim",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
+ reviews(d){ setT("revN",d.reviews.open+" open"); fillT("reviews",d.reviews.recent.map(r=>tr([td("t",hm(r.at)),td(r.status==="open"?"bad":"ok",r.status),td("q",r.question,r.question),td("dim",r.note||"")])),null,"No review requests. Ask for one when an answer needs a person."); },
  timeline(d){ if($("tl"))timeline(d.graph); }};
 function fillWidget(type){const d=DATA[type];if(!d||!FILL[type])return;FILL[type](d);document.querySelectorAll('.panel[data-type="'+type+'"]').forEach(p=>p.classList.remove("skel"));}
 async function loadWidget(type){if(DATA[type]){fillWidget(type);return;}
- const r=await fetch("/api/admin/widget/"+encodeURIComponent(type),{headers:{"X-Token":tok()}});
+ const r=await fetch(api("/api/admin/widget/"+encodeURIComponent(type)),{headers:hdr()});
  if(!r.ok){document.querySelectorAll('.panel[data-type="'+type+'"] .pbody').forEach(b=>{b.textContent="Could not load ("+r.status+").";b.className="pbody meta";});return;}
  DATA[type]=await r.json();fillWidget(type);}
 const SEEN=("IntersectionObserver" in window)?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){SEEN.unobserve(e.target);loadWidget(e.target.dataset.type);}}),{rootMargin:"200px"}):null;
@@ -971,11 +1092,11 @@ function watch(p){if(SEEN)SEEN.observe(p);else loadWidget(p.dataset.type);}
 function render(d){renderHead(d);}
 function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
 async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
- const [r,lr]=await Promise.all([fetch("/api/admin/board?parts=head&since="+encodeURIComponent(since),{headers:{"X-Token":t}}),fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{headers:{"X-Token":t}})]);
+ const [r,lr]=await Promise.all([fetch(api("/api/admin/board?parts=head&since="+encodeURIComponent(since)),{headers:hdr()}),fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{headers:hdr()})]);
  if(lr.ok){LAYOUT=await lr.json();CAT=LAYOUT.catalogue||{};buildGrid();}
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
- if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
- const d=await r.json();render(d);loadKeys();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+ if(!r.ok){show("login",ME?"No board for "+ME+": unknown user, or no library grant ("+r.status+").":"The board could not be loaded ("+r.status+").");return;}
+ const d=await r.json();render(d);if(!ME)loadKeys();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
 async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
  fillT("keys",j.keys.map(k=>{const row=tr([td("",k.name),td("",k.user),td("mono dim",k.prefix+"…"),td("t",hm(k.created_at)),td("dim",k.last_used?hm(k.last_used):"never used"),td(k.revoked_at?"bad":"ok",k.revoked_at?"revoked":"active")]);
   const c=el("td");if(!k.revoked_at){const b=el("button","link","revoke");b.onclick=async()=>{if(!confirm("Revoke “"+k.name+"”? Anything using it stops now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};c.appendChild(b);}row.appendChild(c);return row;}),["name","user","key","created","last used","",""],"No API keys. The chat works without one; a key is for another system asking on a user’s behalf.");}
@@ -994,6 +1115,7 @@ $("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.
  const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
  out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
-(()=>{let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
+(()=>{if(ME){["helpBtn","forget","help"].forEach(id=>$(id).hidden=true);document.querySelector(".tabs").hidden=true;$("login").hidden=true;const a=el("a","link","ask a question");a.href="/?user="+encodeURIComponent(ME);document.querySelector(".top").appendChild(a);load("");return;}
+ let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
  if(!t)t=tok();if(t)load(t);else show("login");})();
 </script></body></html>"""
