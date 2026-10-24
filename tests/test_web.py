@@ -221,3 +221,14 @@ def test_dashboard_page_is_served_and_links_back(web):
     html = client.get("/dashboard").text
     assert "Show the board" in html and "/api/admin/board" in html and "Forget the token" in html
     assert 'href="/dashboard"' in client.get("/").text
+
+
+def test_admin_board_has_coverage_and_sources(web):
+    client, llm, doc, memo, path = web
+    d = client.get("/api/admin/board", headers={"X-Token": "demo"}).json()
+    assert d["coverage"] == {"pages": 2, "searchable": 2, "flagged": 0, "pct": 100}
+    kinds = [x["kind"] for x in d["sources"]]
+    assert kinds == ["library database", "model", "evaluation results"]
+    assert d["sources"][0]["name"] == "web.db" and "2 libraries" in d["sources"][0]["state"]
+    assert d["sources"][1]["name"] == "scripted"
+    assert "Try a question" in client.get("/dashboard").text

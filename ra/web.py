@@ -30,6 +30,18 @@ def default_llm():
     return Extractive(), "extractive baseline (no model key set)"
 
 
+def model_source(llm, name):
+    """Where the model runs, for the sources list: a provider and endpoint, or the note that there is none."""
+    base = getattr(llm, "base_url", None)
+    if base:
+        return {"kind": "model", "name": name, "where": base, "state": "key set"}
+    if name == "claude":
+        return {"kind": "model", "name": name, "where": "Anthropic API", "state": "key set"}
+    if name.startswith("extractive"):
+        return {"kind": "model", "name": name, "where": "no provider", "state": "no key: answers come from the baseline, which is often irrelevant"}
+    return {"kind": "model", "name": name, "where": "in process", "state": "scripted"}
+
+
 class AskBody(BaseModel):
     user: str
     question: str
@@ -64,7 +76,7 @@ def _bar(n, top, width=8):
     return "█" * max(1, round(width * n / top))
 
 
-def board_data(con, model_name, results_dir="evals/results", since=None):
+def board_data(con, model_name, results_dir="evals/results", since=None, db_path=None, model=None):
     """The admin board: a brief since the last visit, what to do, and counts by library, user and run.
 
     Counts, names, reasons and dates only, never a passage or a page's text, because a board stays on screen. Every list
@@ -87,6 +99,10 @@ def board_data(con, model_name, results_dir="evals/results", since=None):
     low = {r["library_id"]: r["n"] for r in con.execute(
         "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id WHERE p.low_text = 1 GROUP BY d.library_id")}
     top_pages = max([r["pages"] for r in libs] or [0])
+    total_pages = sum(r["pages"] for r in libs)
+    flagged_pages = sum(low.values())
+    coverage = {"pages": total_pages, "searchable": total_pages - flagged_pages, "flagged": flagged_pages,
+                "pct": round(100 * (total_pages - flagged_pages) / total_pages) if total_pages else 0}
     libraries = [{"library": r["name"], "documents": r["documents"], "pages": r["pages"], "low_text_pages": low.get(r["id"], 0),
                   "users": r["users"], "bar": _bar(r["pages"], top_pages)} for r in libs]
 
@@ -121,6 +137,20 @@ def board_data(con, model_name, results_dir="evals/results", since=None):
                      "questions": j.get("questions"), "answerable": j.get("answerable"), "retrieval": j.get("retrieval_hit_rate"),
                      "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
                      "wrong_and_confident": j.get("wrong_and_confident")})
+
+    # Sources: where the data and the model live, and when each was last used. States are facts, not health scores.
+    sources = []
+    last_q = rows[0]["at"] if rows else None
+    if db_path and db_path != ":memory:" and os.path.exists(db_path):
+        st = os.stat(db_path)
+        sources.append({"kind": "library database", "name": os.path.basename(db_path), "where": os.path.abspath(db_path),
+                        "state": f"{len(libs)} librar{'ies' if len(libs) != 1 else 'y'}, {sum(r['documents'] for r in libs)} documents, {st.st_size // 1024} KB, last written {datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M')}"})
+    else:
+        sources.append({"kind": "library database", "name": "in memory", "where": "this process", "state": f"{len(libs)} libraries"})
+    sources.append(model or {"kind": "model", "name": model_name, "where": "unknown", "state": ""})
+    sources[-1] = dict(sources[-1], last_used=last_q)
+    sources.append({"kind": "evaluation results", "name": results_dir, "where": os.path.abspath(results_dir),
+                    "state": f"{len(runs)} saved run{'s' if len(runs) != 1 else ''}" + (f", latest {runs[0]['date']}" if runs else "")})
 
     # What to do: each item is a count with a reason, and appears only when the count is not zero.
     todo = []
@@ -173,8 +203,8 @@ def board_data(con, model_name, results_dir="evals/results", since=None):
         hello = "Good morning" if 5 <= datetime.now().hour < 12 else "Good afternoon" if datetime.now().hour < 18 else "Good evening"
         lead = "Since your last look: " if t0 is not None else "So far: "
         brief = f"{hello}. {lead}" + "; ".join(parts) + "."
-    return {"now": now.isoformat(timespec="seconds"), "brief": brief, "brief_why": why, "todo": todo, "libraries": libraries,
-            "usage": usage, "recent": recent, "people": people, "runs": runs}
+    return {"now": now.isoformat(timespec="seconds"), "brief": brief, "brief_why": why, "todo": todo, "coverage": coverage,
+            "sources": sources, "libraries": libraries, "usage": usage, "recent": recent, "people": people, "runs": runs}
 
 
 def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None):
@@ -285,7 +315,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
     def admin_board(since: str = "", x_token: str = Header(default="")):
         if not x_token or x_token != admin_token:
             raise HTTPException(401, "That token is not the admin token.")
-        return board_data(db(), model_name, results_dir, since or None)
+        return board_data(db(), model_name, results_dir, since or None, db_path=db_path, model=model_source(llm, model_name))
 
     return app
 
@@ -511,8 +541,10 @@ h2 span{letter-spacing:0;text-transform:none;font-weight:400}
 .brief .meta{margin-top:.3rem}
 .explain{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}@media(max-width:760px){.explain{grid-template-columns:1fr}}
 .explain .row{display:block}.explain b{display:block;margin-bottom:.2rem}
-.todo .row{grid-template-columns:3.2rem 1fr}.todo .big{font-size:1.5rem;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
-form{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
+.todo .row{grid-template-columns:3.2rem 1fr}.big{font-size:1.5rem;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+.cover{display:flex!important;gap:1rem;align-items:center;margin-top:1rem}.ring{width:4.2rem;height:4.2rem;flex:none;transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:3.4}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100}
+.tryform{display:grid!important;grid-template-columns:auto 1fr auto;gap:.5rem}.tryform input,.tryform select{padding:.5rem .6rem}.tryform .sub{grid-column:1/-1}
+#login{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
 input,button{font:inherit;padding:.55rem .7rem;border-radius:.5rem;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff}button.link{background:none;border:none;color:var(--dim);padding:0;text-decoration:underline;font-size:.8rem;cursor:pointer}
 .empty{color:var(--dim);font-size:.9rem;padding:.4rem .2rem}
@@ -528,7 +560,11 @@ button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:
  <div class="row"><b>What this board shows</b>What to do first, then what is searchable, who asked what and how it went, and how the question set scored. Counts and names only. To read an answer, open the chat as that user.</div>
  <div class="row"><b>What to do here</b>Read review requests, run OCR on flagged pages, turn thumbs-down reasons into test questions, and keep the question set running. <button class="link" id="gotit" type="button">Got it, do not show this again</button></div>
 </div>
+<div class="cover row plain"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="coverPct"></div><div id="coverText"></div><div class="sub" id="coverSub"></div></div></div>
 <h2>What to do <span id="todoN"></span></h2><div class="todo" id="todo"></div>
+<h2>Sources <span>where the data and the model are, and when last used</span></h2><div id="sources"></div>
+<h2>Try a question <span>as a user, to check an answer after an ingest or a model change</span></h2>
+<form id="try" class="row plain tryform"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button>Ask</button><div class="sub" id="tryOut">The result shows outcome, attempts, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></form>
 <div class="cols"><div>
  <h2>Libraries <span>pages, and pages flagged for OCR</span></h2><div id="libs"></div>
  <h2>Questions by user <span id="usageN"></span></h2><div id="users"></div>
@@ -550,6 +586,10 @@ function show(name,msg){["login","view"].forEach(n=>$(n).hidden=n!==name);$("msg
 function fill(id,nodes,emptyText){const box=$(id);box.textContent="";if(!nodes.length){box.appendChild(el("div","empty",emptyText));return;}nodes.forEach(n=>box.appendChild(n));}
 function render(d){
  $("model").textContent="model: "+d.usage.model;
+ $("ringFill").style.strokeDasharray=d.coverage.pct+" 100";$("coverPct").textContent=d.coverage.pct+"%";
+ $("coverText").textContent="of pages are searchable: "+d.coverage.searchable+" of "+d.coverage.pages+", across "+d.libraries.length+" librar"+(d.libraries.length===1?"y":"ies");
+ $("coverSub").textContent=(d.coverage.flagged?d.coverage.flagged+" page"+(d.coverage.flagged===1?"":"s")+" read almost nothing with pdftotext and wait for OCR.":"Every page read cleanly.")+" Searchable means text was extracted; it says nothing about whether answers are good. The runs below say that.";
+ fill("sources",d.sources.map(x=>row([el("b","",x.kind),el("span","",x.name),el("span","pill",x.state.split(":")[0].split(",")[0])],x.where+" · "+x.state+(x.last_used?" · last used "+x.last_used.replace("T"," ").slice(0,16):""))),"");
  $("brief").hidden=!d.brief;if(d.brief){$("brief").textContent="";$("brief").appendChild(document.createTextNode(d.brief));$("brief").appendChild(el("div","meta","Why this brief: "+d.brief_why+". It says nothing when nothing happened."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("explain").hidden=seen;
  $("todoN").textContent=d.todo.length?d.todo.length+" item"+(d.todo.length===1?"":"s"):"nothing waiting";
@@ -573,6 +613,14 @@ async function load(tok){let since="";try{since=localStorage.getItem("ra.lastloo
 $("login").onsubmit=e=>{e.preventDefault();const t=$("t").value.trim();if(!t)return;try{sessionStorage.setItem("ra.token",t);}catch(e){}load(t);};
 $("forget").onclick=()=>{try{sessionStorage.removeItem("ra.token");localStorage.removeItem("ra.lastlook");}catch(e){}show("login","Token forgotten on this device.");};
 $("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("explain").hidden=true;};
+(async()=>{try{const j=await (await fetch("/api/users")).json();$("tryUser").textContent="";j.users.forEach(u=>$("tryUser").appendChild(el("option","",u)));}catch(e){}})();
+$("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("tryQ").value.trim();if(!q)return;const out=$("tryOut");out.textContent="Asking as "+u+"…";
+ const r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,question:q})});
+ if(!r.ok){out.textContent="Refused ("+r.status+"): "+((await r.json()).detail||"");return;}
+ const j=await r.json();const checks=j.trace.filter(t=>t.kind==="check");const kept=checks.reduce((a,c)=>a+c.kept,0),removed=checks.reduce((a,c)=>a+c.removed,0);const reasons=[...new Set(checks.flatMap(c=>c.reasons||[]))];
+ const ms=j.trace.filter(t=>t.kind==="draft").reduce((a,t)=>a+(t.ms||0),0);
+ out.textContent="";out.appendChild(outcome(j.status));out.appendChild(document.createTextNode(" · "+j.attempts+" attempt"+(j.attempts===1?"":"s")+" · model "+Math.round(ms/1000)+" s · kept "+kept+", removed "+removed+(reasons.length?" ("+reasons.join("; ")+")":"")+" · citations "+(j.claims||[]).map(c=>c.doc_id+":"+c.page).join(", ")+" · "));
+ const a=el("a","","Open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);};
 (()=>{let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
  if(!t){try{t=sessionStorage.getItem("ra.token")||"";}catch(e){}}if(t)load(t);else show("login");})();
 </script></body></main></html>"""
