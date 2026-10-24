@@ -219,7 +219,7 @@ def test_admin_board_token_is_configurable_and_reads_saved_runs(tmp_path, web):
 def test_dashboard_page_is_served_and_links_back(web):
     client, *_ = web
     html = client.get("/dashboard").text
-    assert "Show the board" in html and "/api/admin/board" in html and "Forget the token" in html
+    assert "Show the board" in html and "/api/admin/board" in html and "forget token" in html
     assert 'href="/dashboard"' in client.get("/").text
 
 

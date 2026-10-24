@@ -613,136 +613,158 @@ loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("use
 
 
 
+
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
-<title>Research assistant · admin board</title>
+<title>Research assistant · admin</title>
 <style>
-/* The deployed-dashboard idiom: warm ground, one accent, flat rows with hairlines, small-caps section labels, counts not content. */
-:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a}
+/* One screen, dense, like the home board: counts and names in fixed panels, text bars, tabular figures, no prose where a number will do. */
+:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a;--mono:ui-monospace,Menlo,Consolas,monospace}
 @media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8dd;--dim:#9a9486;--card:#1d1b16;--line:#2e2b23;--accent:#e08a52;--ok:#6cc38b;--warn:#e0b45a}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif}
-main{max-width:62rem;margin:0 auto;padding:1rem 1rem 3rem}
-h1{font-size:1.15rem;margin:.2rem 0 0}h2{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:1.6rem 0 .5rem;display:flex;justify-content:space-between;align-items:baseline}
-h2 span{letter-spacing:0;text-transform:none;font-weight:400}
-.top{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
-.meta{color:var(--dim);font-size:.85rem}.pill{border:1px solid var(--line);border-radius:99px;padding:.1rem .6rem;font-size:.8rem;white-space:nowrap}
-.row{background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.6rem .8rem;margin:.4rem 0;display:grid;grid-template-columns:auto 1fr auto;gap:.2rem .8rem;align-items:baseline}
-.row.plain{display:block}.row b{font-weight:600}.when{color:var(--accent);font-variant-numeric:tabular-nums;font-size:.85rem}
-.sub{color:var(--dim);font-size:.85rem;overflow-wrap:anywhere;grid-column:1/-1}.n{font-variant-numeric:tabular-nums;text-align:right}
-.bar{color:var(--accent);font-family:ui-monospace,Menlo,monospace;letter-spacing:-.05em;font-size:.8rem}
-.ok{color:var(--ok)}.bad{color:var(--warn)}.zero{color:var(--ok);font-weight:600}
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 2rem}@media(max-width:760px){.cols{grid-template-columns:1fr}}
-.brief{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:.6rem;padding:.8rem 1rem;margin:1rem 0 .2rem;font-size:1.02rem}
-.brief .meta{margin-top:.3rem}
-.explain{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}@media(max-width:760px){.explain{grid-template-columns:1fr}}
-.explain .row{display:block}.explain b{display:block;margin-bottom:.2rem}
-.todo .row{grid-template-columns:3.2rem 1fr}.big{font-size:1.5rem;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
-.cover{display:flex!important;gap:1rem;align-items:center;margin-top:1rem}.ring{width:4.2rem;height:4.2rem;flex:none;transform:rotate(-90deg)}.ring circle{fill:none;stroke-width:3.4}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:0 100}
-.graph{width:100%;height:auto;display:block}.graph text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.graph text.dim{fill:var(--dim)}.graph .lib{fill:var(--card);stroke:var(--accent);stroke-width:1.5}.graph .doc{fill:var(--card);stroke:var(--fg);stroke-width:1}.graph .usr{fill:var(--accent)}
-.graph line.member{stroke:var(--line);stroke-width:1}.graph line.grant{stroke:var(--accent);stroke-width:1;stroke-opacity:.5}.graph line.cited{stroke:var(--accent);stroke-opacity:.85}.graph path.next_edition{stroke:var(--dim);stroke-dasharray:3 3;stroke-width:1}
-.tryform{display:grid!important;grid-template-columns:auto 1fr auto;gap:.5rem}#newkey{grid-template-columns:1fr auto auto}.keyval{font-family:ui-monospace,Menlo,monospace;user-select:all;color:var(--fg)}.tryform input,.tryform select{padding:.5rem .6rem}.tryform .sub{grid-column:1/-1}
-#login{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
-input,button{font:inherit;padding:.55rem .7rem;border-radius:.5rem;border:1px solid var(--line);background:var(--card);color:var(--fg)}
-button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff}button.link{background:none;border:none;color:var(--dim);padding:0;text-decoration:underline;font-size:.8rem;cursor:pointer}
-.empty{color:var(--dim);font-size:.9rem;padding:.4rem .2rem}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,sans-serif}
+main{max-width:1200px;margin:0 auto;padding:.8rem 1rem 2rem}
+.top{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.5rem}
+h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
+.meta{color:var(--dim);font-size:.8rem}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:.2rem}.tabs button{background:none;border:1px solid transparent;border-radius:.4rem;padding:.2rem .6rem;color:var(--dim);font:inherit;cursor:pointer}
+.tabs button[aria-selected=true]{color:var(--fg);border-color:var(--line);background:var(--card)}
+.brief{margin:.7rem 0 .8rem;font-size:1.05rem;line-height:1.35}.brief .meta{display:block;margin-top:.15rem}
+.brief .why{cursor:help;text-decoration:underline dotted;color:var(--dim)}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:.7rem}
+.panel{grid-column:span 4;background:var(--card);border:1px solid var(--line);border-radius:.5rem;padding:.55rem .7rem .6rem;min-width:0}
+.panel.w8{grid-column:span 8}.panel.w5{grid-column:span 5}.panel.w3{grid-column:span 3}.panel.w12{grid-column:span 12}
+@media(max-width:900px){.panel,.panel.w8,.panel.w5,.panel.w3{grid-column:span 12}}
+h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 .4rem;display:flex;justify-content:space-between;gap:.5rem}
+h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
+table{border-collapse:collapse;width:100%}td,th{padding:.18rem .3rem;vertical-align:baseline;text-align:left;white-space:nowrap}
+th{font-size:.7rem;color:var(--dim);font-weight:500;border-bottom:1px solid var(--line)}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}td.q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;width:100%}
+td.t{font-family:var(--mono);color:var(--accent);font-size:.78rem}tr:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
+.bar{font-family:var(--mono);color:var(--accent);letter-spacing:-.08em;font-size:.72rem}
+.big{font-size:1.45rem;font-weight:600;color:var(--accent);font-family:var(--mono);line-height:1}
+.todo td.n{color:var(--accent);font-weight:600;font-size:1.05rem}
+.ok{color:var(--ok)}.bad{color:var(--warn)}.dim{color:var(--dim)}
+.ring{width:3rem;height:3rem;transform:rotate(-90deg);flex:none}.ring circle{fill:none;stroke-width:3.6}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--accent);stroke-linecap:round}
+.cover{display:flex;gap:.7rem;align-items:center;margin-bottom:.4rem}
+.tl{width:100%;display:block}.tl text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.tl text.dim{fill:var(--dim);font-size:10px}.tl .lane{stroke:var(--line);stroke-width:1}.tl .chain{stroke:var(--dim);stroke-dasharray:2 3}.tl .dot{fill:var(--card);stroke:var(--accent);stroke-width:1.5}.tl .seg{stroke:none}.tl .lab{fill:var(--dim);font-size:10px;letter-spacing:.06em}
+.legend{display:flex;gap:.9rem;font-size:.75rem;color:var(--dim);margin-top:.3rem}.legend i{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;vertical-align:-1px;margin-right:.3rem}
+.foot{margin-top:.8rem;display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;font-size:.78rem;color:var(--dim)}.foot b{color:var(--fg);font-weight:600}@media(max-width:900px){.foot{grid-template-columns:1fr}}
+.empty{color:var(--dim);padding:.3rem 0}
+form.inline{display:grid;grid-template-columns:auto 1fr auto;gap:.4rem;align-items:center}form.inline.keys{grid-template-columns:1fr auto auto}
+input,select,button.go{font:inherit;padding:.4rem .6rem;border-radius:.4rem;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer}button.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
+.out{margin-top:.5rem;font-size:.85rem}.keyval{font-family:var(--mono);user-select:all}
+#login{margin:4rem auto;max-width:22rem;display:grid;gap:.5rem}#login label{font-size:.85rem;color:var(--dim)}
+#help{margin:.4rem 0 0;padding:.5rem .7rem;border-left:2px solid var(--accent);font-size:.85rem;color:var(--dim)}
 [hidden]{display:none!important}
 </style></head><body><main>
-<div class="top"><div><h1>Research assistant · admin</h1><div class="meta">Counts and names from the audit log, the library and the saved runs. No answer text is shown here.</div></div><span class="pill" id="model"></span></div>
+<div class="top"><h1>Research assistant · admin</h1><span class="meta" id="model"></span>
+<div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-v="board">Board</button><button role="tab" aria-selected="false" data-v="tools">Try a question · keys</button></div>
+<button class="link" id="helpBtn" type="button">what is this?</button><button class="link" id="forget" type="button">forget token</button></div>
 <div id="msg" class="meta bad"></div>
-<form id="login" hidden><label for="t">Admin token</label><input id="t" type="password" autocomplete="current-password" placeholder="the admin token"><button>Show the board</button><span class="meta">Typed once per device. In the demo the token is <code>demo</code>; set <code>ADMIN_TOKEN</code> for anything shared.</span></form>
+<form id="login" hidden><label for="t">Admin token</label><input id="t" type="password" autocomplete="current-password" placeholder="the admin token"><button class="go">Show the board</button><span class="meta">Typed once per device. In the demo it is <code>demo</code>; set <code>ADMIN_TOKEN</code> for anything shared.</span></form>
 <div id="view" hidden>
-<div class="brief" id="brief" hidden></div>
-<div class="explain" id="explain" hidden>
- <div class="row"><b>What this is</b>A reading room on top of the report library. A user asks, the system finds passages they may see, a model drafts claims with exact quotes, and plain code checks each quote against its page before anything is shown.</div>
- <div class="row"><b>What this board shows</b>What to do first, then what is searchable, who asked what and how it went, and how the question set scored. Counts and names only. To read an answer, open the chat as that user.</div>
- <div class="row"><b>What to do here</b>Read review requests, run OCR on flagged pages, turn thumbs-down reasons into test questions, and keep the question set running. <button class="link" id="gotit" type="button">Got it, do not show this again</button></div>
+<p id="help" hidden>A reading room on top of the report library: a user asks, retrieval returns only passages they may see, a model drafts claims with exact quotes, and plain code checks each quote against its page before anything is shown. This board is counts and names from the audit log, the library and the saved runs; it never shows answer text. To read an answer, open the chat as that user. <button class="link" id="gotit" type="button">got it</button></p>
+<div class="brief" id="brief"></div>
+<section id="board">
+<div class="grid">
+ <div class="panel"><h2>To do <span id="todoN"></span></h2><table class="todo" id="todo"></table></div>
+ <div class="panel w8"><h2>Reports by edition <span>dot size: citations · bar: by user</span></h2><svg class="tl" id="tl" role="img" aria-label="Reports on a timeline per library, sized by citations"></svg><div class="legend" id="legend"></div></div>
+ <div class="panel"><h2>Coverage <span id="covN"></span></h2><div class="cover"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="covPct"></div><div class="meta" id="covText"></div></div></div><table id="libs"></table></div>
+ <div class="panel w5"><h2>Recent <span id="recentN"></span></h2><table id="recent"></table></div>
+ <div class="panel w3"><h2>Runs <span>wrong and confident</span></h2><table id="runs"></table></div>
+ <div class="panel"><h2>Users <span id="usersN"></span></h2><table id="users"></table></div>
+ <div class="panel w8"><h2>People <span id="peopleN"></span></h2><table id="people"></table></div>
 </div>
-<div class="cover row plain"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="coverPct"></div><div id="coverText"></div><div class="sub" id="coverSub"></div></div></div>
-<h2>What to do <span id="todoN"></span></h2><div class="todo" id="todo"></div>
-<h2>Sources <span>where the data and the model are, and when last used</span></h2><div id="sources"></div>
-<h2>Try a question <span>as a user, to check an answer after an ingest or a model change</span></h2>
-<form id="try" class="row plain tryform"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button>Ask</button><div class="sub" id="tryOut">The result shows outcome, attempts, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></form>
-<h2>Integrations <span>API keys: each stands for one user and inherits that user’s grants, nothing more</span></h2>
-<form id="newkey" class="row plain tryform"><input id="keyName" maxlength="60" placeholder="What will use this key, for example: MARC Online portal"><select id="keyUser" aria-label="As user"></select><button>Create key</button><div class="sub" id="keyOut">The key is shown once, here, and only its hash is kept. Send it as the <code>X-Api-Key</code> header on <code>POST /api/ask</code>; the body’s user is then ignored.</div></form>
-<div id="keys"></div>
-<h2>Relationships <span>libraries, reports in edition order, users; lines are grants and the citations their answers made</span></h2>
-<div class="row plain graphbox"><svg id="graph" class="graph" role="img" aria-label="Relationships between libraries, reports and users"></svg><div class="sub" id="graphWhy"></div></div>
-<div class="cols"><div>
- <h2>Libraries <span>pages, and pages flagged for OCR</span></h2><div id="libs"></div>
- <h2>Questions by user <span id="usageN"></span></h2><div id="users"></div>
- <h2>People <span>ratings and review requests</span></h2><div id="people"></div>
-</div><div>
- <h2>Recent <span>last 12, every user</span></h2><div id="recent"></div>
- <h2>Measured <span>the question set, by run</span></h2><div id="runs"></div>
-</div></div>
-<p class="meta" id="why"></p>
-<p><a href="/" class="meta">Back to the chat</a> · <button class="link" id="forget" type="button">Forget the token on this device</button></p>
+<div class="foot" id="sources"></div>
+</section>
+<section id="tools" hidden>
+<div class="grid">
+ <div class="panel w12"><h2>Try a question <b>as a user, to check an answer after an ingest or a model change</b></h2>
+  <form id="try" class="inline"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button class="go">Ask</button></form>
+  <div class="out meta" id="tryOut">Shows outcome, attempts, model time, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></div>
+ <div class="panel w12"><h2>API keys <b>a key stands for one user and inherits that user’s grants, nothing more</b></h2>
+  <form id="newkey" class="inline keys"><input id="keyName" maxlength="60" placeholder="What will use this key, for example: MARC Online portal"><select id="keyUser" aria-label="As user"></select><button class="go">Create key</button></form>
+  <div class="out meta" id="keyOut">Shown once, stored as a hash. Send it as <code>X-Api-Key</code> on <code>POST /api/ask</code>; the body’s user is then ignored.</div>
+  <table id="keys" style="margin-top:.5rem"></table></div>
+</div>
+</section>
+<p class="meta" id="built"></p>
 </div></main>
 <script>
 const $=id=>document.getElementById(id);
 function el(tag,cls,t){const e=document.createElement(tag);if(cls)e.className=cls;if(t!==undefined)e.textContent=t;return e;}
-function row(cells,sub){const r=el("div","row");cells.forEach(c=>r.appendChild(c));if(sub){r.appendChild(el("div","sub",sub));}return r;}
-function when(iso){return el("span","when",iso.replace("T"," ").slice(5,16));}
-function outcome(s){return el("span",s==="answered"?"pill ok":"pill bad",s==="answered"?"answered":"not found");}
+function tr(cells){const r=el("tr");cells.forEach(c=>{if(typeof c==="string"||typeof c==="number"){r.appendChild(el("td","",String(c)));}else{r.appendChild(c);}});return r;}
+function td(cls,t,title){const c=el("td",cls,t);if(title)c.title=title;return c;}
+function hm(iso){return iso.replace("T"," ").slice(5,16);}
+function fillT(id,rows,head,emptyText){const t=$(id);t.textContent="";if(head){const h=el("tr");head.forEach(x=>{const c=el("th",x.startsWith(">")?"n":"",x.replace(/^>/,""));h.appendChild(c);});t.appendChild(h);}
+ if(!rows.length){const r=el("tr");const c=el("td","empty",emptyText);c.colSpan=(head||[1]).length;r.appendChild(c);t.appendChild(r);return;}rows.forEach(r=>t.appendChild(r));}
 function show(name,msg){["login","view"].forEach(n=>$(n).hidden=n!==name);$("msg").textContent=msg||"";}
-function fill(id,nodes,emptyText){const box=$(id);box.textContent="";if(!nodes.length){box.appendChild(el("div","empty",emptyText));return;}nodes.forEach(n=>box.appendChild(n));}
+const USERC=["#b4531f","#6b665c","#2f7d4f","#a8741a","#3f6fa8"];
+function timeline(g){const svg=$("tl");svg.textContent="";const ns="http://www.w3.org/2000/svg",mk=(t,a)=>{const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+ const libs=g.nodes.filter(n=>n.kind==="library"),docs=g.nodes.filter(n=>n.kind==="document"),users=g.nodes.filter(n=>n.kind==="user").map(u=>u.label);
+ const W=800,laneH=58,padL=90,padR=70,H=laneH*libs.length+22;svg.setAttribute("viewBox","0 0 "+W+" "+H);
+ // Spaced by edition order, not elapsed time: the lane says which report came after which, and one 2015 edition must not squash 2023 to 2026 together.
+ const order=docs.slice().sort((a,b)=>(a.edition[0]*12+a.edition[1])-(b.edition[0]*12+b.edition[1]));const dated=order.filter(d=>d.edition[0]);
+ const rank={};dated.forEach((d,i)=>rank[d.id]=i);const nD=Math.max(1,dated.length-1);
+ const x=d=>{if(!d.edition[0])return W-padR+30;return padL+(rank[d.id]/nD)*(W-padL-padR);};
+ const MON=["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+ const maxC=Math.max(1,...docs.map(d=>d.citations));const by={};g.edges.filter(e=>e.kind==="cited").forEach(e=>{(by[e.a]=by[e.a]||{})[e.b.slice(1)]=e.w;});
+ libs.forEach((L,i)=>{const y=14+i*laneH+laneH/2;svg.appendChild(mk("line",{x1:padL-6,y1:y,x2:W-padR,y2:y,class:"lane"}));const t=mk("text",{x:0,y:y+4,class:"lab"});t.textContent=L.label.toUpperCase();svg.appendChild(t);
+  const mine=docs.filter(d=>d.library===L.label).sort((a,b)=>x(a)-x(b));
+  mine.forEach((d,j)=>{const cx=x(d),r=3+8*Math.sqrt(d.citations/maxC);if(j>0){const p=mine[j-1];svg.appendChild(mk("line",{x1:x(p),y1:y,x2:cx,y2:y,class:"chain"}));}
+   const c=mk("circle",{cx,cy:y,r,class:"dot"});const tt=mk("title",{});tt.textContent=d.label+" · "+d.citations+" citation"+(d.citations===1?"":"s");c.appendChild(tt);svg.appendChild(c);
+   const lbl=mk("text",{x:cx,y:y-r-5,"text-anchor":"middle"});lbl.textContent=d.edition[0]?MON[d.edition[1]]+" "+d.edition[0]:d.label.replace(/ \(synthetic\)$/,"").slice(0,16);svg.appendChild(lbl);
+   const split=by["D"+d.id.slice(1)]||{};const tot=Object.values(split).reduce((a,b)=>a+b,0);if(tot){let sx=cx-14;const bw=28;users.forEach((u,ui)=>{const w=bw*(split[u]||0)/tot;if(w){const rct=mk("rect",{x:sx,y:y+r+5,width:w,height:4,class:"seg",fill:USERC[ui%USERC.length]});const t2=mk("title",{});t2.textContent=u+" "+split[u];rct.appendChild(t2);svg.appendChild(rct);sx+=w;}});
+    const n=mk("text",{x:cx,y:y+r+19,"text-anchor":"middle",class:"dim"});n.textContent=tot;svg.appendChild(n);}});});
+ if(docs.some(d=>!d.edition[0])){const t=mk("text",{x:W-padR+30,y:H-2,"text-anchor":"middle",class:"dim"});t.textContent="undated";svg.appendChild(t);}
+ $("legend").textContent="";users.forEach((u,i)=>{const s=el("span");const sw=el("i");sw.style.background=USERC[i%USERC.length];s.appendChild(sw);s.appendChild(document.createTextNode(u));$("legend").appendChild(s);});
+ const s=el("span","","dashed: next edition · hover a dot for the title");$("legend").appendChild(s);}
 function render(d){
- $("model").textContent="model: "+d.usage.model;
- $("ringFill").style.strokeDasharray=d.coverage.pct+" 100";$("coverPct").textContent=d.coverage.pct+"%";
- $("coverText").textContent="of pages are searchable: "+d.coverage.searchable+" of "+d.coverage.pages+", across "+d.libraries.length+" librar"+(d.libraries.length===1?"y":"ies");
- $("coverSub").textContent=(d.coverage.flagged?d.coverage.flagged+" page"+(d.coverage.flagged===1?"":"s")+" read almost nothing with pdftotext and wait for OCR.":"Every page read cleanly.")+" Searchable means text was extracted; it says nothing about whether answers are good. The runs below say that.";
- fill("sources",d.sources.map(x=>row([el("b","",x.kind),el("span","",x.name),el("span","pill",x.state.split(":")[0].split(",")[0])],x.where+" · "+x.state+(x.last_used?" · last used "+x.last_used.replace("T"," ").slice(0,16):""))),"");
- $("brief").hidden=!d.brief;if(d.brief){$("brief").textContent="";$("brief").appendChild(document.createTextNode(d.brief));$("brief").appendChild(el("div","meta","Why this brief: "+d.brief_why+". It says nothing when nothing happened."));}
- let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("explain").hidden=seen;
- $("todoN").textContent=d.todo.length?d.todo.length+" item"+(d.todo.length===1?"":"s"):"nothing waiting";
- fill("todo",d.todo.map(t=>{const r=el("div","row");r.appendChild(el("div","big",String(t.n)));r.appendChild(el("div","",t.what));r.appendChild(el("div","sub","why: "+t.why));return r;}),"Nothing to do. Every count that would appear here is zero.");
- fill("libs",d.libraries.map(l=>row([el("b","",l.library),el("span","bar",l.bar),el("span","n",l.pages+" p")],l.documents+" document"+(l.documents===1?"":"s")+" · "+l.users+" user"+(l.users===1?"":"s")+" granted · "+(l.low_text_pages?l.low_text_pages+" page"+(l.low_text_pages===1?"":"s")+" flagged for OCR":"no pages flagged"))),"No libraries yet.");
- $("usageN").textContent=d.usage.asked+" asked · "+d.usage.answered+" answered · "+d.usage.not_found+" not found";
- fill("users",d.usage.users.map(u=>row([el("b","",u.user),el("span","bar",u.bar),el("span","n",u.asked)],u.answered+" answered · "+u.not_found+" not found")),"No questions yet.");
- const ppl=[row([el("b","",d.people.up+" up · "+d.people.down+" down"),el("span","",""),el("span","n",d.people.reviews_open.length+" open")],"thumbs given by users on their own answers · review requests waiting for a person")];
- d.people.reviews_open.forEach(r=>ppl.push(row([when(r.at),el("b","",r.user),el("span","pill","review")],"on: "+r.question+(r.note?" · note: "+r.note:""))));
- d.people.down_reasons.forEach(r=>ppl.push(row([when(r.at),el("b","",r.user),el("span","pill bad","down")],"reason: "+r.reason)));
- fill("people",ppl,"");
- fill("recent",d.recent.map(r=>row([when(r.at),el("b","",r.user),outcome(r.status)],r.question+" · "+r.citations+" citation"+(r.citations===1?"":"s"))),"No questions yet.");
- fill("runs",d.runs.map(r=>{const w=el("span",r.wrong_and_confident?"pill bad":"pill ok","wrong and confident "+r.wrong_and_confident);return row([el("span","when",r.date),el("b","",r.name),w],"retrieval "+(r.retrieval==null?"—":r.retrieval)+" · correct "+r.correct+" of "+r.answerable+" · timid "+r.timid+" · refused right "+r.correct_refusal+" of "+(r.questions-r.answerable));}),"No saved evaluation run. Nothing says how well answers hold up until the question set is run.");
- drawGraph(d.graph);loadKeys();
- $("why").textContent="Board built "+d.now.replace("T"," ")+" UTC. Rows are the audit log; libraries are documents behind grants; runs are the files in evals/results.";
+ $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
+ const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
+ let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
+ $("todoN").textContent=d.todo.length?d.todo.length:"nothing waiting";
+ fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero.");
+ $("ringFill").style.strokeDasharray=d.coverage.pct+" 100";$("covPct").textContent=d.coverage.pct+"%";$("covN").textContent=d.coverage.pages+" pages";
+ $("covText").textContent=d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR";
+ fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries.");
+ $("recentN").textContent="last "+d.recent.length;
+ fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td("q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations)])),null,"No questions yet.");
+ fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run.");
+ $("usersN").textContent=d.usage.users.length;
+ fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet.");
+ const ppl=d.people;$("peopleN").textContent=ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open";
+ const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)])));
+ fillT("people",prow,null,"No open review requests and no thumbs-down reasons.");
+ timeline(d.graph);
+ const f=$("sources");f.textContent="";d.sources.forEach(x=>{const p=el("div");p.appendChild(el("b","",x.kind+" "));p.appendChild(document.createTextNode(x.name+" · "+x.state+(x.last_used?" · last used "+hm(x.last_used):"")));p.title=x.where;f.appendChild(p);});
+ $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · rows are the audit log · libraries are documents behind grants · runs are the files in evals/results.";
 }
-function drawGraph(g){const svg=$("graph");svg.textContent="";$("graphWhy").textContent="why: "+g.why;
- const libs=g.nodes.filter(n=>n.kind==="library"),docs=g.nodes.filter(n=>n.kind==="document"),usrs=g.nodes.filter(n=>n.kind==="user");
- const W=1000,rowH=26,H=Math.max(libs.length,docs.length,usrs.length)*rowH+40;svg.setAttribute("viewBox","0 0 "+W+" "+H);
- const ns="http://www.w3.org/2000/svg",mk=(t,a)=>{const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
- const pos={},col=(arr,x,gap)=>arr.forEach((n,i)=>pos[n.id]={x,y:20+i*gap+(H-40-(arr.length-1)*gap)/2});
- col(libs,90,rowH*2);col(docs,W/2,rowH);col(usrs,W-90,rowH*2);
- const maxW=Math.max(1,...g.edges.filter(e=>e.kind==="cited").map(e=>e.w));
- g.edges.forEach(e=>{const a=pos[e.a],b=pos[e.b];if(!a||!b)return;let l;if(e.kind==="next_edition"){l=mk("path",{d:"M"+a.x+","+a.y+" Q"+(a.x-22)+","+((a.y+b.y)/2)+" "+b.x+","+b.y,fill:"none",class:e.kind});}else{l=mk("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,class:e.kind});}if(e.kind==="cited")l.setAttribute("stroke-width",String(1+3*e.w/maxW));const t=mk("title",{});t.textContent=e.kind.replace("_"," ")+(e.kind==="cited"?" "+e.w+" time"+(e.w===1?"":"s"):"");l.appendChild(t);svg.appendChild(l);});
- libs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("rect",{x:p.x-60,y:p.y-11,width:120,height:22,rx:11,class:"lib"}));const t=mk("text",{x:p.x,y:p.y+4,"text-anchor":"middle"});t.textContent=n.label;svg.appendChild(t);});
- docs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("circle",{cx:p.x,cy:p.y,r:4+Math.min(8,Math.sqrt(n.citations)),class:"doc"}));const t=mk("text",{x:p.x+16,y:p.y+4});t.textContent=n.label.replace(/^Malaysia Economic Monitor /,"MEM ");svg.appendChild(t);const c=mk("text",{x:p.x-16,y:p.y+4,"text-anchor":"end",class:"dim"});c.textContent=n.citations?n.citations+" cited":"";svg.appendChild(c);});
- usrs.forEach(n=>{const p=pos[n.id];svg.appendChild(mk("circle",{cx:p.x,cy:p.y,r:7,class:"usr"}));const t=mk("text",{x:p.x+14,y:p.y+4});t.textContent=n.label+" · "+n.asked+" asked";svg.appendChild(t);});}
-async function load(tok){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
- const r=await fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":tok}});
+function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
+async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
+ const r=await fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":t}});
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
  if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
- const d=await r.json();render(d);show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+ const d=await r.json();render(d);loadKeys();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
+ fillT("keys",j.keys.map(k=>{const row=tr([td("",k.name),td("",k.user),td("mono dim",k.prefix+"…"),td("t",hm(k.created_at)),td("dim",k.last_used?hm(k.last_used):"never used"),td(k.revoked_at?"bad":"ok",k.revoked_at?"revoked":"active")]);
+  const c=el("td");if(!k.revoked_at){const b=el("button","link","revoke");b.onclick=async()=>{if(!confirm("Revoke “"+k.name+"”? Anything using it stops now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};c.appendChild(b);}row.appendChild(c);return row;}),["name","user","key","created","last used","",""],"No API keys. The chat works without one; a key is for another system asking on a user’s behalf.");}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));$("board").hidden=b.dataset.v!=="board";$("tools").hidden=b.dataset.v!=="tools";});
 $("login").onsubmit=e=>{e.preventDefault();const t=$("t").value.trim();if(!t)return;try{sessionStorage.setItem("ra.token",t);}catch(e){}load(t);};
 $("forget").onclick=()=>{try{sessionStorage.removeItem("ra.token");localStorage.removeItem("ra.lastlook");}catch(e){}show("login","Token forgotten on this device.");};
-$("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("explain").hidden=true;};
+$("helpBtn").onclick=()=>{$("help").hidden=!$("help").hidden;};$("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("help").hidden=true;};
 (async()=>{try{const j=await (await fetch("/api/users")).json();["tryUser","keyUser"].forEach(id=>{$(id).textContent="";j.users.forEach(u=>$(id).appendChild(el("option","",u)));});}catch(e){}})();
-function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
-async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
- fill("keys",j.keys.map(k=>{const st=el("span",k.revoked_at?"pill bad":"pill ok",k.revoked_at?"revoked":"active");const r=row([el("b","",k.name),el("span","",k.user+" · "+k.prefix+"…"),st],"created "+k.created_at.replace("T"," ").slice(0,16)+(k.last_used?" · last used "+k.last_used.replace("T"," ").slice(0,16):" · never used")+(k.revoked_at?" · revoked "+k.revoked_at.replace("T"," ").slice(0,16):""));
- if(!k.revoked_at){const b=el("button","link","Revoke");b.onclick=async()=>{if(!confirm("Revoke the key “"+k.name+"”? Anything using it stops working now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};r.appendChild(b);}return r;}),"No API keys yet. The chat page works without one; a key is for another system asking on a user’s behalf.");}
-$("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;
- const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
- if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
- out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));const k=el("span","keyval",j.key);out.appendChild(k);out.appendChild(document.createTextNode(" · copy it now; it cannot be shown again."));$("keyName").value="";loadKeys();};
 $("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("tryQ").value.trim();if(!q)return;const out=$("tryOut");out.textContent="Asking as "+u+"…";
  const r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({user:u,question:q})});
  if(!r.ok){out.textContent="Refused ("+r.status+"): "+((await r.json()).detail||"");return;}
- const j=await r.json();const checks=j.trace.filter(t=>t.kind==="check");const kept=checks.reduce((a,c)=>a+c.kept,0),removed=checks.reduce((a,c)=>a+c.removed,0);const reasons=[...new Set(checks.flatMap(c=>c.reasons||[]))];
- const ms=j.trace.filter(t=>t.kind==="draft").reduce((a,t)=>a+(t.ms||0),0);
- out.textContent="";out.appendChild(outcome(j.status));out.appendChild(document.createTextNode(" · "+j.attempts+" attempt"+(j.attempts===1?"":"s")+" · model "+Math.round(ms/1000)+" s · kept "+kept+", removed "+removed+(reasons.length?" ("+reasons.join("; ")+")":"")+" · citations "+(j.claims||[]).map(c=>c.doc_id+":"+c.page).join(", ")+" · "));
- const a=el("a","","Open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);};
+ const j=await r.json();const checks=j.trace.filter(t=>t.kind==="check");const kept=checks.reduce((a,c)=>a+c.kept,0),removed=checks.reduce((a,c)=>a+c.removed,0);const reasons=[...new Set(checks.flatMap(c=>c.reasons||[]))];const ms=j.trace.filter(t=>t.kind==="draft").reduce((a,t)=>a+(t.ms||0),0);
+ out.textContent="";out.appendChild(el("span",j.status==="answered"?"ok":"bad",j.status==="answered"?"answered":"not found"));out.appendChild(document.createTextNode(" · "+j.attempts+" attempt"+(j.attempts===1?"":"s")+" · model "+Math.round(ms/1000)+" s · kept "+kept+", removed "+removed+(reasons.length?" ("+reasons.join("; ")+")":"")+" · citations "+((j.claims||[]).map(c=>c.doc_id+":"+c.page).join(", ")||"none")+" · "));
+ const a=el("a","","open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);};
+$("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;
+ const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
+ if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
+ out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
 (()=>{let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
- if(!t){try{t=sessionStorage.getItem("ra.token")||"";}catch(e){}}if(t)load(t);else show("login");})();
-</script></body></main></html>"""
+ if(!t)t=tok();if(t)load(t);else show("login");})();
+</script></body></html>"""
