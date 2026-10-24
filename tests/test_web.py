@@ -178,37 +178,46 @@ def test_steps_view_is_present_and_still_builds_no_html_from_data():
     assert "Investigation steps" in INDEX_HTML and "Show how it was found" in INDEX_HTML and "innerHTML" not in INDEX_HTML
 
 
-def test_dashboard_counts_only_this_users_questions_and_libraries(web):
+
+def test_admin_board_needs_the_token_and_counts_every_user(web):
     client, llm, doc, memo, path = web
     llm.responses = [[good(doc)], []]
     client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
-    client.post("/api/ask", json={"user": "alice", "question": "What did the board decide?"})
-    a = client.get("/api/dashboard", params={"user": "alice"}).json()
-    assert a["usage"] == {**a["usage"], "asked": 2, "answered": 1, "not_found": 1}
-    assert [c["library"] for c in a["coverage"]] == ["public"] and a["coverage"][0]["documents"] == 1
-    assert len(a["recent"]) == 2 and a["recent"][0]["status"] == "not_found" and a["recent"][1]["citations"] == [f"{doc}:1"]
-    assert sum(d["asked"] for d in a["usage"]["days"]) == 2
-    b = client.get("/api/dashboard", params={"user": "bob"}).json()
-    assert b["usage"]["asked"] == 0 and sorted(c["library"] for c in b["coverage"]) == ["public", "restricted"]
-    assert [w["id"] for w in b["layout"]] == ["coverage", "usage", "recent", "feedback", "evaluation"]
-    assert client.get("/api/dashboard", params={"user": "nobody"}).status_code == 403
+    client.post("/api/ask", json={"user": "bob", "question": "What did the board decide?"})
+    client.post("/api/review", json={"user": "alice", "audit_id": 1, "note": "please check"})
+    assert client.get("/api/admin/board").status_code == 401
+    assert client.get("/api/admin/board", headers={"X-Token": "wrong"}).status_code == 401
+    d = client.get("/api/admin/board", headers={"X-Token": "demo"}).json()
+    assert d["usage"]["asked"] == 2 and [u["user"] for u in d["usage"]["users"]] == ["alice", "bob"]
+    assert sorted(l["library"] for l in d["libraries"]) == ["public", "restricted"]
+    pub = next(l for l in d["libraries"] if l["library"] == "public")
+    assert pub["pages"] == 1 and pub["documents"] == 1 and pub["users"] == 2  # two grants must not double the page count
+    assert d["recent"][0]["user"] == "bob" and d["recent"][0]["status"] == "not_found" and d["recent"][1]["citations"] == 1
+    assert d["todo"][0]["n"] == 1 and "review request" in d["todo"][0]["what"]
+    assert len(d["people"]["reviews_open"]) == 1 and "palm oil" in d["people"]["reviews_open"][0]["question"]
+    assert d["brief"].startswith("Good ") and "2 questions from 2 users, 1 answered" in d["brief"] and "1 review request waiting" in d["brief"]
+    assert "first visit" in d["brief_why"]
+    quiet = client.get("/api/admin/board", params={"since": "2999-01-01T00:00:00"}, headers={"X-Token": "demo"}).json()
+    assert quiet["brief"] == "" and "away" in quiet["brief_why"]
 
 
-def test_dashboard_reads_saved_evaluation_runs(tmp_path, web):
+def test_admin_board_token_is_configurable_and_reads_saved_runs(tmp_path, web):
     import json
 
     from ra.web import create_app
 
     client, llm, doc, memo, path = web
     (tmp_path / "r").mkdir()
-    (tmp_path / "r" / "demo.json").write_text(json.dumps({"questions": 22, "answerable": 15, "retrieval_hit_rate": 1.0, "correct": 8, "timid": 7, "correct_refusal": 7, "wrong_and_confident": 0}))
-    c2 = TestClient(create_app(path, lambda: (llm, "scripted"), results_dir=str(tmp_path / "r")))
-    e = c2.get("/api/dashboard", params={"user": "alice"}).json()["evaluation"]
-    assert e[0]["name"] == "demo" and e[0]["wrong_and_confident"] == 0 and e[0]["correct"] == 8
+    (tmp_path / "r" / "qwen.json").write_text(json.dumps({"questions": 22, "answerable": 15, "retrieval_hit_rate": 1.0, "correct": 8, "timid": 7, "correct_refusal": 7, "wrong_and_confident": 0}))
+    c2 = TestClient(create_app(path, lambda: (llm, "scripted"), results_dir=str(tmp_path / "r"), admin_token="s3cret"))
+    assert c2.get("/api/admin/board", headers={"X-Token": "demo"}).status_code == 401
+    d = c2.get("/api/admin/board", headers={"X-Token": "s3cret"}).json()
+    assert d["runs"][0]["name"] == "qwen" and d["runs"][0]["wrong_and_confident"] == 0
+    assert all(t["what"] != "evaluation runs saved" for t in d["todo"])
 
 
 def test_dashboard_page_is_served_and_links_back(web):
     client, *_ = web
     html = client.get("/dashboard").text
-    assert "Back to the chat" in html and "/api/dashboard" in html
+    assert "Show the board" in html and "/api/admin/board" in html and "Forget the token" in html
     assert 'href="/dashboard"' in client.get("/").text

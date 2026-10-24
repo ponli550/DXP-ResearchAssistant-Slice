@@ -7,7 +7,7 @@ authentication. Access is still enforced in retrieval and on the page route.
 import os
 import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -57,81 +57,131 @@ def quote_span(text, quote):
     return [m.start(), m.end()] if m else None
 
 
-LAYOUT = [
-    # The dashboard is a fixed list of widgets, read by the page in this order. Each says how its numbers are made.
-    {"id": "coverage", "kicker": "Library", "title": "What is searchable", "span": 1,
-     "why": "Documents and pages behind a grant this user holds. A low-text page is one pdftotext could not read; it is flagged, never trusted."},
-    {"id": "usage", "kicker": "Questions", "title": "Asked and answered", "span": 1,
-     "why": "From the audit log of this user. Answered means at least one claim passed the quote check; not found means none did."},
-    {"id": "recent", "kicker": "Recent", "title": "The last questions, with their outcome", "span": 2,
-     "why": "Each row is one audit entry. Citations are report and page pairs that passed the check. Open re-runs the question in the chat."},
-    {"id": "feedback", "kicker": "People", "title": "Ratings and review requests", "span": 1,
-     "why": "Thumbs are given by this user on their own answers. A review request is a log entry for a person; nothing else happens."},
-    {"id": "evaluation", "kicker": "Measured", "title": "The question set, by model", "span": 1,
-     "why": "Each row is one saved evaluation run over the 22-question set. Wrong and confident is the number that matters; the target is zero."},
-]
+def _bar(n, top, width=8):
+    """A text bar, as the home board draws them: proportional, never empty for a non-zero count."""
+    if not top or n <= 0:
+        return ""
+    return "█" * max(1, round(width * n / top))
 
 
-def dashboard_data(con, user, model_name, results_dir="evals/results"):
-    """Everything the dashboard shows, computed from the audit, feedback, reviews and pages tables and the saved eval results.
+def board_data(con, model_name, results_dir="evals/results", since=None):
+    """The admin board: a brief since the last visit, what to do, and counts by library, user and run.
 
-    Scoped to the user: libraries by grant, questions and ratings by user. The eval results are not user data.
+    Counts, names, reasons and dates only, never a passage or a page's text, because a board stays on screen. Every list
+    says in `why` how it was made. `since` is an ISO time from the device that last looked; the brief is silent when
+    nothing happened after it.
     """
     import glob
     import json
     import os
-    from collections import defaultdict
-    from datetime import date, timedelta
+    from datetime import date, datetime, timezone
 
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     libs = con.execute(
-        "SELECT l.id, l.name, COUNT(DISTINCT d.id) AS documents, COALESCE(SUM(d.pages),0) AS pages, "
-        "COALESCE(SUM(d.needs_ocr),0) AS needs_ocr FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user = ? "
-        "LEFT JOIN documents d ON d.library_id = l.id GROUP BY l.id ORDER BY l.name", (user,)).fetchall()
+        "SELECT l.id, l.name, "
+        "(SELECT COUNT(*) FROM documents d WHERE d.library_id = l.id) AS documents, "
+        "(SELECT COALESCE(SUM(d.pages),0) FROM documents d WHERE d.library_id = l.id) AS pages, "
+        "(SELECT COALESCE(SUM(d.needs_ocr),0) FROM documents d WHERE d.library_id = l.id) AS needs_ocr, "
+        "(SELECT COUNT(*) FROM grants g WHERE g.library_id = l.id) AS users "
+        "FROM libraries l ORDER BY l.name").fetchall()
     low = {r["library_id"]: r["n"] for r in con.execute(
-        "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id "
-        "JOIN grants g ON g.library_id = d.library_id AND g.user = ? WHERE p.low_text = 1 GROUP BY d.library_id", (user,))}
-    coverage = [{"library": r["name"], "documents": r["documents"], "pages": r["pages"], "low_text_pages": low.get(r["id"], 0),
-                 "needs_ocr_documents": r["needs_ocr"]} for r in libs]
+        "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id WHERE p.low_text = 1 GROUP BY d.library_id")}
+    top_pages = max([r["pages"] for r in libs] or [0])
+    libraries = [{"library": r["name"], "documents": r["documents"], "pages": r["pages"], "low_text_pages": low.get(r["id"], 0),
+                  "users": r["users"], "bar": _bar(r["pages"], top_pages)} for r in libs]
 
-    rows = con.execute("SELECT id, at, question, status, cited FROM audit WHERE user=? ORDER BY id DESC", (user,)).fetchall()
-    today = date.today()
-    days = [(today - timedelta(days=i)).isoformat() for i in range(13, -1, -1)]
-    by_day = defaultdict(lambda: {"asked": 0, "answered": 0})
+    rows = con.execute("SELECT id, at, user, question, status, cited FROM audit ORDER BY id DESC").fetchall()
+    per_user = {}
     for r in rows:
-        d = r["at"][:10]
-        if d in days:
-            by_day[d]["asked"] += 1
-            by_day[d]["answered"] += r["status"] == "answered"
+        u = per_user.setdefault(r["user"], {"user": r["user"], "asked": 0, "answered": 0, "not_found": 0})
+        u["asked"] += 1
+        u["answered" if r["status"] == "answered" else "not_found"] += 1
+    top_asked = max([u["asked"] for u in per_user.values()] or [0])
+    users = sorted(per_user.values(), key=lambda u: (-u["asked"], u["user"]))
+    for u in users:
+        u["bar"] = _bar(u["asked"], top_asked)
     usage = {"asked": len(rows), "answered": sum(1 for r in rows if r["status"] == "answered"),
-             "not_found": sum(1 for r in rows if r["status"] != "answered"), "model": model_name,
-             "days": [{"day": d, **by_day[d]} for d in days]}
+             "not_found": sum(1 for r in rows if r["status"] != "answered"), "model": model_name, "users": users}
+    recent = [{"at": r["at"], "user": r["user"], "question": r["question"], "status": r["status"],
+               "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
 
-    recent = [{"audit_id": r["id"], "at": r["at"], "question": r["question"], "status": r["status"],
-               "citations": [c for c in r["cited"].split(",") if c]} for r in rows[:10]]
-
-    fb = con.execute("SELECT rating, reason, at FROM feedback WHERE user=? ORDER BY id DESC", (user,)).fetchall()
-    rv = con.execute("SELECT note, status, at FROM reviews WHERE user=? ORDER BY id DESC", (user,)).fetchall()
-    feedback = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
-                "reasons": [r["reason"] for r in fb if r["rating"] == "down" and r["reason"]][:5],
-                "reviews_open": sum(1 for r in rv if r["status"] == "open"), "reviews": [dict(r) for r in rv[:5]]}
+    fb = con.execute("SELECT user, rating, reason, at FROM feedback ORDER BY id DESC").fetchall()
+    rv = con.execute("SELECT r.id, r.user, r.note, r.status, r.at, a.question FROM reviews r JOIN audit a ON a.id = r.audit_id ORDER BY r.id DESC").fetchall()
+    people = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
+              "down_reasons": [{"user": r["user"], "reason": r["reason"], "at": r["at"]} for r in fb if r["rating"] == "down" and r["reason"]][:6],
+              "reviews_open": [{"user": r["user"], "question": r["question"], "note": r["note"], "at": r["at"]} for r in rv if r["status"] == "open"][:6]}
 
     runs = []
     for f in sorted(glob.glob(os.path.join(results_dir, "*.json")), key=os.path.getmtime, reverse=True):
         try:
             j = json.load(open(f))
-            runs.append({"name": os.path.splitext(os.path.basename(f))[0], "date": date.fromtimestamp(os.path.getmtime(f)).isoformat(),
-                         "questions": j.get("questions"), "answerable": j.get("answerable"), "retrieval": j.get("retrieval_hit_rate"),
-                         "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
-                         "wrong_and_confident": j.get("wrong_and_confident")})
         except (OSError, ValueError):
             continue
+        runs.append({"name": os.path.splitext(os.path.basename(f))[0], "date": date.fromtimestamp(os.path.getmtime(f)).isoformat(),
+                     "questions": j.get("questions"), "answerable": j.get("answerable"), "retrieval": j.get("retrieval_hit_rate"),
+                     "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
+                     "wrong_and_confident": j.get("wrong_and_confident")})
 
-    return {"user": user, "layout": LAYOUT, "coverage": coverage, "usage": usage, "recent": recent, "feedback": feedback, "evaluation": runs}
+    # What to do: each item is a count with a reason, and appears only when the count is not zero.
+    todo = []
+    if people["reviews_open"]:
+        todo.append({"n": len(people["reviews_open"]), "what": "review request" + ("s" if len(people["reviews_open"]) != 1 else "") + " waiting for a person",
+                     "why": "someone pressed Create review request and nothing happens until a person reads it"})
+    flagged = sum(x["low_text_pages"] for x in libraries)
+    if flagged:
+        todo.append({"n": flagged, "what": "page" + ("s" if flagged != 1 else "") + " flagged for OCR", "why": "pdftotext read almost nothing on them; they are not searchable until OCR runs"})
+    if people["down_reasons"]:
+        todo.append({"n": len(people["down_reasons"]), "what": "thumbs-down reason" + ("s" if len(people["down_reasons"]) != 1 else "") + " to read",
+                     "why": "a reason becomes a new test question once a person has checked it"})
+    if runs:
+        bad = [r for r in runs if r["wrong_and_confident"]]
+        age = (now.date() - date.fromisoformat(runs[0]["date"])).days
+        if bad and bad[0] is runs[0]:
+            todo.append({"n": runs[0]["wrong_and_confident"], "what": "wrong-and-confident in the latest run", "why": "the target is zero; read those answers before anything else"})
+        if age > 7:
+            todo.append({"n": age, "what": "days since the question set was last run", "why": "the harness runs on every change; a stale run means a change went unmeasured"})
+    else:
+        todo.append({"n": 0, "what": "evaluation runs saved", "why": "nothing says how well answers hold up until the question set is run"})
+
+    # The brief: what happened after `since`, in one sentence. Silent when nothing did.
+    brief, why = "", ""
+    try:
+        t0 = datetime.fromisoformat(since.replace("Z", "")) if since else None
+    except ValueError:
+        t0 = None
+    if t0 is None:
+        why = "first visit from this device: no since time, so the brief covers everything"
+        new_rows, new_fb, new_rv = rows, fb, [r for r in rv if r["status"] == "open"]
+    else:
+        new_rows = [r for r in rows if r["at"] > t0.isoformat(timespec="seconds")]
+        new_fb = [r for r in fb if r["at"] > t0.isoformat(timespec="seconds")]
+        new_rv = [r for r in rv if r["at"] > t0.isoformat(timespec="seconds") and r["status"] == "open"]
+        away = now - t0
+        why = f"away {away.days} d {away.seconds // 3600} h; counting rows after {t0.isoformat(timespec='minutes')}"
+    parts = []
+    if new_rows:
+        who = sorted({r["user"] for r in new_rows})
+        ans = sum(1 for r in new_rows if r["status"] == "answered")
+        parts.append(f"{len(new_rows)} question{'s' if len(new_rows) != 1 else ''} from {len(who)} user{'s' if len(who) != 1 else ''}, {ans} answered with checked citations, {len(new_rows) - ans} not found")
+    if new_fb:
+        parts.append(f"{len(new_fb)} rating{'s' if len(new_fb) != 1 else ''}" + (f", {sum(1 for r in new_fb if r['rating'] == 'down')} down" if any(r["rating"] == "down" for r in new_fb) else ""))
+    if new_rv:
+        parts.append(f"{len(new_rv)} review request{'s' if len(new_rv) != 1 else ''} waiting")
+    if runs and (t0 is None or runs[0]["date"] >= t0.date().isoformat()):
+        parts.append(f"the question set ran on {runs[0]['date']}: wrong-and-confident {runs[0]['wrong_and_confident']}")
+    if parts:
+        hello = "Good morning" if 5 <= datetime.now().hour < 12 else "Good afternoon" if datetime.now().hour < 18 else "Good evening"
+        lead = "Since your last look: " if t0 is not None else "So far: "
+        brief = f"{hello}. {lead}" + "; ".join(parts) + "."
+    return {"now": now.isoformat(timespec="seconds"), "brief": brief, "brief_why": why, "todo": todo, "libraries": libraries,
+            "usage": usage, "recent": recent, "people": people, "runs": runs}
 
 
-def create_app(db_path, llm_factory=default_llm, results_dir="evals/results"):
+def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None):
     app = FastAPI(title="Research assistant demo")
     llm, model_name = llm_factory()
+    # The admin board is behind a token, typed once per device. The demo default is "demo"; set ADMIN_TOKEN for anything shared.
+    admin_token = admin_token or os.environ.get("ADMIN_TOKEN") or "demo"
 
     def db():
         return connect(db_path)
@@ -231,12 +281,11 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results"):
     def dashboard_page():
         return DASHBOARD_HTML
 
-    @app.get("/api/dashboard")
-    def dashboard(user: str):
-        con = db()
-        if not allowed_libraries(con, user):
-            raise HTTPException(403, "This user has no library access.")
-        return dashboard_data(con, user, model_name, results_dir)
+    @app.get("/api/admin/board")
+    def admin_board(since: str = "", x_token: str = Header(default="")):
+        if not x_token or x_token != admin_token:
+            raise HTTPException(401, "That token is not the admin token.")
+        return board_data(db(), model_name, results_dir, since or None)
 
     return app
 
@@ -438,71 +487,92 @@ loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("use
 """
 
 
+
 DASHBOARD_HTML = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Research assistant · dashboard</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>Research assistant · admin board</title>
 <style>
-/* A short paper, not a control room: serif text, small sans labels, hairlines, no shadows. Every number says how it was made. */
-:root{color-scheme:light dark;--ink:#34437f;--teal:#2a8c82;--text:#1f2430;--muted:#6b7185;--line:#e3e6ee;--tint:#f4f5fa;--bg:#fff;--ok:#1f6b3a;--bad:#9b2c2c;--warn:#8a4b00}
-@media (prefers-color-scheme:dark){:root{--ink:#9fb0ff;--teal:#5fd0c3;--text:#e8e9ef;--muted:#9aa0b2;--line:#2a2f3d;--tint:#171a24;--bg:#0f1117;--ok:#7fd49a;--bad:#ff9d9d;--warn:#ffb866}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 Charter,'Iowan Old Style',Georgia,serif;max-width:1060px;margin-inline:auto;padding:28px 22px 64px}
-.sans,h1,h2,.kicker,.meta,.badge,th,.num small,.why,nav,label,select,button,a.open{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
-.head{border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:22px;display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between}
-.kicker{text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:var(--teal);margin:0 0 4px}
-h1{font:400 26px/1.15 Charter,'Iowan Old Style',Georgia,serif;color:var(--ink);margin:0}
-.standfirst{color:var(--muted);margin:6px 0 0;font-size:15px;max-width:640px}
-nav{font-size:13px;color:var(--muted);display:flex;gap:14px;align-items:center}nav a{color:var(--ink);text-decoration:none}
-label{font-size:11px;color:var(--muted);display:block;text-transform:uppercase;letter-spacing:.08em}
-select{font:14px 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 8px}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px 28px}
-.w{border-top:1px solid var(--line);padding-top:12px;min-width:0}.w.span2{grid-column:1/-1}
-h2{font:600 13px/1.3 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--ink);margin:0 0 10px}
-h2 .kicker{display:inline;margin-right:8px}
-.num{font:400 40px/1 Charter,'Iowan Old Style',Georgia,serif;color:var(--ink);margin:4px 0 2px}.num small{font-size:12px;color:var(--muted);margin-left:6px;letter-spacing:.04em}
-.row{display:flex;gap:28px;flex-wrap:wrap}
-table{border-collapse:collapse;width:100%;font:13px/1.4 'Helvetica Neue',Helvetica,Arial,sans-serif;margin:6px 0 4px}
-th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--ink);padding:4px 8px 6px}
-td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
-td.q{font-family:Charter,'Iowan Old Style',Georgia,serif;font-size:15px}
-.badge{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}.badge.ok{color:var(--ok)}.badge.bad{color:var(--bad)}.badge.warn{color:var(--warn)}
-.why{font-size:12px;color:var(--muted);margin:8px 0 0;border-left:3px solid var(--line);padding-left:10px}
-.meta{font-size:12px;color:var(--muted)}
-a.open{font-size:12px;color:var(--ink);text-decoration:none;font-weight:600}
-.bars{width:100%;height:64px;display:block;margin-top:6px}.bars rect.a{fill:var(--line)}.bars rect.b{fill:var(--teal)}.axis{display:flex;justify-content:space-between;font:11px 'Helvetica Neue',Helvetica,Arial,sans-serif;color:var(--muted);border-top:1px solid var(--line);padding-top:3px}
-.empty{color:var(--muted);font-style:italic}
-.abstract{background:var(--tint);border-left:3px solid var(--ink);padding:8px 14px;margin:0 0 22px;font-size:15px}
-@media (max-width:760px){.grid{grid-template-columns:1fr}.w.span2{grid-column:auto}}
-</style></head><body>
-<div class="head"><div><p class="kicker">Research assistant · dashboard</p><h1 id="title">Loading</h1><p class="standfirst">What this user can search, what they asked, what came back, and what the question set measures. Numbers only; each block says how it was made.</p></div>
-<nav><a href="/">Back to the chat</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></nav></div>
-<p class="abstract" id="abstract"></p>
-<div class="grid" id="grid"></div>
+/* The deployed-dashboard idiom: warm ground, one accent, flat rows with hairlines, small-caps section labels, counts not content. */
+:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a}
+@media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8dd;--dim:#9a9486;--card:#1d1b16;--line:#2e2b23;--accent:#e08a52;--ok:#6cc38b;--warn:#e0b45a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,-apple-system,sans-serif}
+main{max-width:62rem;margin:0 auto;padding:1rem 1rem 3rem}
+h1{font-size:1.15rem;margin:.2rem 0 0}h2{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:1.6rem 0 .5rem;display:flex;justify-content:space-between;align-items:baseline}
+h2 span{letter-spacing:0;text-transform:none;font-weight:400}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.meta{color:var(--dim);font-size:.85rem}.pill{border:1px solid var(--line);border-radius:99px;padding:.1rem .6rem;font-size:.8rem;white-space:nowrap}
+.row{background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:.6rem .8rem;margin:.4rem 0;display:grid;grid-template-columns:auto 1fr auto;gap:.2rem .8rem;align-items:baseline}
+.row.plain{display:block}.row b{font-weight:600}.when{color:var(--accent);font-variant-numeric:tabular-nums;font-size:.85rem}
+.sub{color:var(--dim);font-size:.85rem;overflow-wrap:anywhere;grid-column:1/-1}.n{font-variant-numeric:tabular-nums;text-align:right}
+.bar{color:var(--accent);font-family:ui-monospace,Menlo,monospace;letter-spacing:-.05em;font-size:.8rem}
+.ok{color:var(--ok)}.bad{color:var(--warn)}.zero{color:var(--ok);font-weight:600}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:0 2rem}@media(max-width:760px){.cols{grid-template-columns:1fr}}
+.brief{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:.6rem;padding:.8rem 1rem;margin:1rem 0 .2rem;font-size:1.02rem}
+.brief .meta{margin-top:.3rem}
+.explain{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin:1rem 0}@media(max-width:760px){.explain{grid-template-columns:1fr}}
+.explain .row{display:block}.explain b{display:block;margin-bottom:.2rem}
+.todo .row{grid-template-columns:3.2rem 1fr}.todo .big{font-size:1.5rem;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+form{margin:3rem auto;max-width:22rem;display:grid;gap:.6rem}label{font-size:.85rem;color:var(--dim)}
+input,button{font:inherit;padding:.55rem .7rem;border-radius:.5rem;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+button{cursor:pointer;background:var(--accent);border-color:var(--accent);color:#fff}button.link{background:none;border:none;color:var(--dim);padding:0;text-decoration:underline;font-size:.8rem;cursor:pointer}
+.empty{color:var(--dim);font-size:.9rem;padding:.4rem .2rem}
+[hidden]{display:none!important}
+</style></head><body><main>
+<div class="top"><div><h1>Research assistant · admin</h1><div class="meta">Counts and names from the audit log, the library and the saved runs. No answer text is shown here.</div></div><span class="pill" id="model"></span></div>
+<div id="msg" class="meta bad"></div>
+<form id="login" hidden><label for="t">Admin token</label><input id="t" type="password" autocomplete="current-password" placeholder="the admin token"><button>Show the board</button><span class="meta">Typed once per device. In the demo the token is <code>demo</code>; set <code>ADMIN_TOKEN</code> for anything shared.</span></form>
+<div id="view" hidden>
+<div class="brief" id="brief" hidden></div>
+<div class="explain" id="explain" hidden>
+ <div class="row"><b>What this is</b>A reading room on top of the report library. A user asks, the system finds passages they may see, a model drafts claims with exact quotes, and plain code checks each quote against its page before anything is shown.</div>
+ <div class="row"><b>What this board shows</b>What to do first, then what is searchable, who asked what and how it went, and how the question set scored. Counts and names only. To read an answer, open the chat as that user.</div>
+ <div class="row"><b>What to do here</b>Read review requests, run OCR on flagged pages, turn thumbs-down reasons into test questions, and keep the question set running. <button class="link" id="gotit" type="button">Got it, do not show this again</button></div>
+</div>
+<h2>What to do <span id="todoN"></span></h2><div class="todo" id="todo"></div>
+<div class="cols"><div>
+ <h2>Libraries <span>pages, and pages flagged for OCR</span></h2><div id="libs"></div>
+ <h2>Questions by user <span id="usageN"></span></h2><div id="users"></div>
+ <h2>People <span>ratings and review requests</span></h2><div id="people"></div>
+</div><div>
+ <h2>Recent <span>last 12, every user</span></h2><div id="recent"></div>
+ <h2>Measured <span>the question set, by run</span></h2><div id="runs"></div>
+</div></div>
+<p class="meta" id="why"></p>
+<p><a href="/" class="meta">Back to the chat</a> · <button class="link" id="forget" type="button">Forget the token on this device</button></p>
+</div></main>
 <script>
 const $=id=>document.getElementById(id);
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const badge=s=>s==="answered"?'<span class="badge ok">answered</span>':s==="not_found"?'<span class="badge warn">not found</span>':'<span class="badge">'+esc(s)+'</span>';
-const R={
- coverage(d){const t=d.coverage.reduce((a,c)=>({d:a.d+c.documents,p:a.p+c.pages,l:a.l+c.low_text_pages}),{d:0,p:0,l:0});
-  return '<div class="row"><div><div class="num">'+t.d+'<small>DOCUMENTS</small></div></div><div><div class="num">'+t.p+'<small>PAGES</small></div></div><div><div class="num">'+t.l+'<small>FLAGGED FOR OCR</small></div></div></div>'+
-  '<table><tr><th>Library</th><th class="n">Documents</th><th class="n">Pages</th><th class="n">Low-text pages</th></tr>'+d.coverage.map(c=>'<tr><td>'+esc(c.library)+'</td><td class="n">'+c.documents+'</td><td class="n">'+c.pages+'</td><td class="n">'+c.low_text_pages+'</td></tr>').join('')+'</table>';},
- usage(d){const u=d.usage,m=Math.max(1,...u.days.map(x=>x.asked)),w=100/u.days.length;
-  const bars=u.days.map((x,i)=>'<rect class="a" x="'+(i*w+0.6)+'%" width="'+(w-1.2)+'%" y="'+(64-64*x.asked/m)+'" height="'+(64*x.asked/m)+'"/><rect class="b" x="'+(i*w+0.6)+'%" width="'+(w-1.2)+'%" y="'+(64-64*x.answered/m)+'" height="'+(64*x.answered/m)+'"/>').join('');
-  return '<div class="row"><div><div class="num">'+u.asked+'<small>ASKED</small></div></div><div><div class="num">'+u.answered+'<small>ANSWERED</small></div></div><div><div class="num">'+u.not_found+'<small>NOT FOUND</small></div></div></div>'+
-  '<svg class="bars" viewBox="0 0 100 64" preserveAspectRatio="none">'+bars+'</svg><div class="axis"><span>'+esc(u.days[0].day.slice(5))+'</span><span>last 14 days, one bar per day</span><span>'+esc(u.days[u.days.length-1].day.slice(5))+'</span></div>'+
-  '<p class="meta">Totals are all time. Grey is asked, teal is answered. Model now serving: '+esc(u.model)+'.</p>';},
- recent(d){if(!d.recent.length)return '<p class="empty">No questions yet from this user.</p>';
-  return '<table><tr><th>When</th><th>Question</th><th>Outcome</th><th class="n">Citations</th><th></th></tr>'+d.recent.map(r=>'<tr><td class="meta">'+esc(r.at.replace("T"," ").slice(0,16))+'</td><td class="q">'+esc(r.question)+'</td><td>'+badge(r.status)+'</td><td class="n">'+r.citations.length+'</td><td><a class="open" href="/?user='+encodeURIComponent(d.user)+'&q='+encodeURIComponent(r.question)+'&run=1">Open</a></td></tr>').join('')+'</table>';},
- feedback(d){const f=d.feedback;return '<div class="row"><div><div class="num">'+f.up+'<small>THUMBS UP</small></div></div><div><div class="num">'+f.down+'<small>THUMBS DOWN</small></div></div><div><div class="num">'+f.reviews_open+'<small>REVIEWS OPEN</small></div></div></div>'+
-  (f.reasons.length?'<p class="meta">Reasons given for thumbs down:</p><ul>'+f.reasons.map(r=>'<li>'+esc(r)+'</li>').join('')+'</ul>':'<p class="empty">No reasons recorded.</p>');},
- evaluation(d){if(!d.evaluation.length)return '<p class="empty">No saved evaluation run found.</p>';
-  return '<table><tr><th>Run</th><th class="n">Retrieval</th><th class="n">Correct</th><th class="n">Timid</th><th class="n">Refused right</th><th class="n">Wrong, confident</th></tr>'+d.evaluation.map(e=>'<tr><td>'+esc(e.name)+'<br><span class="meta">'+esc(e.date)+'</span></td><td class="n">'+(e.retrieval==null?'':e.retrieval)+'</td><td class="n">'+e.correct+' of '+e.answerable+'</td><td class="n">'+e.timid+'</td><td class="n">'+e.correct_refusal+' of '+(e.questions-e.answerable)+'</td><td class="n"><span class="badge '+(e.wrong_and_confident?'bad':'ok')+'">'+e.wrong_and_confident+'</span></td></tr>').join('')+'</table>';}
-};
-async function load(user){const r=await fetch('/api/dashboard?user='+encodeURIComponent(user));if(!r.ok){$('grid').innerHTML='<p class="empty">'+esc((await r.json()).detail||r.status)+'</p>';return;}
- const d=await r.json();$('title').textContent='Reading room, as '+d.user;
- $('abstract').textContent=d.usage.asked+' question'+(d.usage.asked===1?'':'s')+' asked, '+d.usage.answered+' answered with checked citations, '+d.usage.not_found+' honestly not found. '+d.coverage.reduce((a,c)=>a+c.documents,0)+' documents searchable across '+d.coverage.length+' librar'+(d.coverage.length===1?'y':'ies')+'.';
- $('grid').innerHTML=d.layout.map(w=>'<section class="w'+(w.span===2?' span2':'')+'"><h2><span class="kicker">'+esc(w.kicker)+'</span>'+esc(w.title)+'</h2>'+R[w.id](d)+'<p class="why">'+esc(w.why)+'</p></section>').join('');
- try{history.replaceState(null,'','/dashboard?user='+encodeURIComponent(user));}catch(e){}}
-(async()=>{const j=await (await fetch('/api/users')).json();const sel=$('user');sel.innerHTML=j.users.map(u=>'<option>'+esc(u)+'</option>').join('');
- const want=new URLSearchParams(location.search).get('user');if(want&&j.users.includes(want))sel.value=want;sel.onchange=()=>load(sel.value);load(sel.value);})();
-</script></body></html>"""
+function el(tag,cls,t){const e=document.createElement(tag);if(cls)e.className=cls;if(t!==undefined)e.textContent=t;return e;}
+function row(cells,sub){const r=el("div","row");cells.forEach(c=>r.appendChild(c));if(sub){r.appendChild(el("div","sub",sub));}return r;}
+function when(iso){return el("span","when",iso.replace("T"," ").slice(5,16));}
+function outcome(s){return el("span",s==="answered"?"pill ok":"pill bad",s==="answered"?"answered":"not found");}
+function show(name,msg){["login","view"].forEach(n=>$(n).hidden=n!==name);$("msg").textContent=msg||"";}
+function fill(id,nodes,emptyText){const box=$(id);box.textContent="";if(!nodes.length){box.appendChild(el("div","empty",emptyText));return;}nodes.forEach(n=>box.appendChild(n));}
+function render(d){
+ $("model").textContent="model: "+d.usage.model;
+ $("brief").hidden=!d.brief;if(d.brief){$("brief").textContent="";$("brief").appendChild(document.createTextNode(d.brief));$("brief").appendChild(el("div","meta","Why this brief: "+d.brief_why+". It says nothing when nothing happened."));}
+ let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("explain").hidden=seen;
+ $("todoN").textContent=d.todo.length?d.todo.length+" item"+(d.todo.length===1?"":"s"):"nothing waiting";
+ fill("todo",d.todo.map(t=>{const r=el("div","row");r.appendChild(el("div","big",String(t.n)));r.appendChild(el("div","",t.what));r.appendChild(el("div","sub","why: "+t.why));return r;}),"Nothing to do. Every count that would appear here is zero.");
+ fill("libs",d.libraries.map(l=>row([el("b","",l.library),el("span","bar",l.bar),el("span","n",l.pages+" p")],l.documents+" document"+(l.documents===1?"":"s")+" · "+l.users+" user"+(l.users===1?"":"s")+" granted · "+(l.low_text_pages?l.low_text_pages+" page"+(l.low_text_pages===1?"":"s")+" flagged for OCR":"no pages flagged"))),"No libraries yet.");
+ $("usageN").textContent=d.usage.asked+" asked · "+d.usage.answered+" answered · "+d.usage.not_found+" not found";
+ fill("users",d.usage.users.map(u=>row([el("b","",u.user),el("span","bar",u.bar),el("span","n",u.asked)],u.answered+" answered · "+u.not_found+" not found")),"No questions yet.");
+ const ppl=[row([el("b","",d.people.up+" up · "+d.people.down+" down"),el("span","",""),el("span","n",d.people.reviews_open.length+" open")],"thumbs given by users on their own answers · review requests waiting for a person")];
+ d.people.reviews_open.forEach(r=>ppl.push(row([when(r.at),el("b","",r.user),el("span","pill","review")],"on: "+r.question+(r.note?" · note: "+r.note:""))));
+ d.people.down_reasons.forEach(r=>ppl.push(row([when(r.at),el("b","",r.user),el("span","pill bad","down")],"reason: "+r.reason)));
+ fill("people",ppl,"");
+ fill("recent",d.recent.map(r=>row([when(r.at),el("b","",r.user),outcome(r.status)],r.question+" · "+r.citations+" citation"+(r.citations===1?"":"s"))),"No questions yet.");
+ fill("runs",d.runs.map(r=>{const w=el("span",r.wrong_and_confident?"pill bad":"pill ok","wrong and confident "+r.wrong_and_confident);return row([el("span","when",r.date),el("b","",r.name),w],"retrieval "+(r.retrieval==null?"—":r.retrieval)+" · correct "+r.correct+" of "+r.answerable+" · timid "+r.timid+" · refused right "+r.correct_refusal+" of "+(r.questions-r.answerable));}),"No saved evaluation run. Nothing says how well answers hold up until the question set is run.");
+ $("why").textContent="Board built "+d.now.replace("T"," ")+" UTC. Rows are the audit log; libraries are documents behind grants; runs are the files in evals/results.";
+}
+async function load(tok){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
+ const r=await fetch("/api/admin/board?since="+encodeURIComponent(since),{headers:{"X-Token":tok}});
+ if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
+ if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
+ const d=await r.json();render(d);show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+$("login").onsubmit=e=>{e.preventDefault();const t=$("t").value.trim();if(!t)return;try{sessionStorage.setItem("ra.token",t);}catch(e){}load(t);};
+$("forget").onclick=()=>{try{sessionStorage.removeItem("ra.token");localStorage.removeItem("ra.lastlook");}catch(e){}show("login","Token forgotten on this device.");};
+$("gotit").onclick=()=>{try{localStorage.setItem("ra.explained","1");}catch(e){}$("explain").hidden=true;};
+(()=>{let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
+ if(!t){try{t=sessionStorage.getItem("ra.token")||"";}catch(e){}}if(t)load(t);else show("login");})();
+</script></body></main></html>"""
