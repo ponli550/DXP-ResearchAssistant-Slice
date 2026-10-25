@@ -39,12 +39,12 @@ QUESTIONS = [
     ("alice", "What are the main downside risks to Malaysia's outlook in the October 2025 monitor?"),
     ("alice", "What does the April 2024 monitor say about inflation in Malaysia?"),
     ("alice", "How did the view of Malaysia's 2025 growth change between the October 2025 and April 2026 monitors?"),
-    ("alice", "What does the internal memo say about the coverage review?"),
+    ("alice", "What did the board approve, according to the internal memo?"),
     ("alice", "What will Singapore's minimum wage be in 2029?"),
     ("bob", "What did the April 2024 monitor give as Malaysia's GDP growth in 2023?"),
     ("bob", "What does the monitor say about the ringgit in the October 2025 edition?"),
     ("bob", "Who is the chief executive officer of PETRONAS?"),
-    ("bob", "What does the internal memo say about the coverage review?"),  # bob holds no grant on the internal library, so the memo is never retrieved for him
+    ("bob", "What did the board approve, according to the internal memo?"),  # bob holds no grant on the internal library, so the memo is never retrieved for him
 ]
 
 
@@ -86,7 +86,7 @@ def main(path):
     if len(answered) > 1:
         client.post("/api/feedback", json={"user": answered[1][0], "audit_id": answered[1][1], "rating": "up", "reason": ""})
     if not_found:
-        client.post("/api/feedback", json={"user": "alice", "audit_id": not_found[0][1], "rating": "down", "reason": "The April 2026 report covers this; please check page 12."})
+        client.post("/api/feedback", json={"user": "alice", "audit_id": not_found[0][1], "rating": "down", "reason": "The October 2025 monitor gives this figure in its summary; please check."})
         client.post("/api/review", json={"user": "alice", "audit_id": not_found[0][1], "note": "Needed for a client call on Thursday."})
     print("seeded", path, ":", len(QUESTIONS), "questions,", len(answered), "answered")
     return 0

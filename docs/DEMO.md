@@ -16,20 +16,23 @@ Rules for the live part. Qwen answers about half of the single-report questions 
 
 ## 1. The answer (chat, alice)
 
-**Safe live** (Qwen answered these in the saved run and again in rehearsal; still ask one, not five):
+**Safe live** (Qwen answered these in the saved run and again when the demo database was seeded; still ask one, not five):
 
-- What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?
 - What growth did the October 2025 monitor give for Malaysia in 2024?
 - How much did Malaysia's economy grow in the first half of 2025?
 - What was Malaysia's real GDP growth in the fourth quarter of 2025?
 - What forecast did the October 2023 monitor give for Malaysia's growth in 2024?
+- What share of social assistance transfers goes to the B40 households?
+
+Not safe live, although it is in the question set: "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?" Qwen refused it when the demo database was seeded and answered it the day before. It is in history as a refusal, with alice's thumbs-down and review request on it, which is the better story anyway.
 
 What to show on one of them: the canvas builds the answer in steps, sources then checks then the answer; "Show the quote" under the claim; click the citation chip to open the page with the quote highlighted; the Investigation steps tab for the same answer, with the retry and its reasons if there was one; thumbs down with a reason; "Create review request".
 
-**From history** (open from alice's board, "open" on the row):
+**From history** (open from alice's board, "open" on the row). Be straight about what is there: of alice's twelve seeded questions, five are answered. Qwen refused every open "what does the monitor say about X" question (what drove growth in 2025, the downside risks, inflation, the ringgit), the comparison, and the two it should refuse.
 
-- The analysis questions: what drove growth in 2025, the downside risks, inflation. Show what the model found and what the gate removed.
-- The comparison: how the view of 2025 growth changed between October 2025 and April 2026. Qwen refuses it. Say that the two larger models answer it with one true side, and that both-sides-or-refuse is the week 4 to 5 item.
+- Open one refused analysis question and show the Investigation steps: the right pages were found, the model drafted claims, the gate removed them for quotes that were not exact, and the retry gave up. That is the small model's known weakness, not the design's: the larger models answer these. Say that the model is one line in `.env` and the choice is residency and cost, not quality of the gate.
+- The comparison: how the view of 2025 growth changed between October 2025 and April 2026. Qwen refuses it. The two larger models answer it with one true side; both-sides-or-refuse is the week 4 to 5 item.
+- The internal memo: "What did the board approve, according to the internal memo?" is answered for alice from the memo. Keep it for section 3.
 
 ## 2. Refusals (chat, alice)
 
@@ -43,9 +46,9 @@ The point to make: three models, nineteen runs, 285 answerable attempts, no fals
 
 ## 3. Access (chat, switch the user to bob)
 
-- What does the internal memo say about the coverage review?
+- What did the board approve, according to the internal memo?
 
-bob holds no grant on the internal library, so the memo is never retrieved for him and the answer is "not found", with closest pages only from the World Bank series. Switch back to alice and open the same question from her history: she has the grant and gets the memo. Access is enforced inside retrieval, before any model call; the trace never names a library the user cannot see.
+bob holds no grant on the internal library, so the memo is never retrieved for him and the answer is "not found", with closest pages only from the World Bank series (in history as bob's). Switch to alice and open the same question from her history: she has the grant and gets the memo's sentence, cited. Say that the memo is a synthetic one-page document, marked as such. Access is enforced inside retrieval, before any model call; the trace never names a library the user cannot see.
 
 ## 4. Integration (terminal, beside the admin board)
 
@@ -57,10 +60,10 @@ curl -s -X POST http://127.0.0.1:8765/api/ask \
   -d '{"user":"ignored","question":"What growth did the October 2025 monitor give for Malaysia in 2024?"}'
 ```
 
-The key decides the user; the body's user is ignored. Revoke the key on the board and run the same call: 401. Then the stored answer, no model call:
+The key decides the user; the body's user is ignored. Revoke the key on the board and run the same call: 401. Then a stored answer, no model call (2 is alice's answered question about 2024 growth):
 
 ```
-curl -s "http://127.0.0.1:8765/api/answer/1?user=alice"
+curl -s "http://127.0.0.1:8765/api/answer/2?user=alice"
 ```
 
 What to say: this is the whole surface MARC Online would need, a key per integration that inherits one user's grants and nothing more, every answer stored with its audit row. Nothing of ours touches their portal.
@@ -85,6 +88,7 @@ Four widgets, nothing about other users: recent answers that open in the chat, u
 
 - **How fast is it?** Eight to eleven seconds on this model for a draft, double when a check fails and the model retries. Retrieval and the gate are milliseconds. A faster model is one line in `.env`.
 - **Why did it refuse that?** Either the libraries do not contain it, or the model could not quote it exactly, or the question asked for a figure and no claim stated one. The Investigation steps tab shows which.
-- **Can it be wrong?** It can answer beside the point with a true figure; it has not stated a false figure in 285 attempts. Off-target answers are the review request's job.
+- **Can it be wrong?** It can answer beside the point with a true figure; it has not stated a false figure in 285 attempts. Off-target answers are the review request's job. The admin board's key row shows "1 wrong and confident, latest run" because the latest saved run is Claude's, and that one is a comparison answered with one true side. Say so before they ask.
+- **What if the model goes down mid-demo?** The call is retried once; if it still fails, the answer is a refusal and the steps view says the model did not answer. Open the stored answer instead.
 - **Where does our text go?** To the model provider named in `.env`, and nowhere else. Provider, region and retention are decided with you in week 1, and nothing is sent before that.
 - **Does it touch MARC Online?** No. Our store, our front end, your API licence and samples.
