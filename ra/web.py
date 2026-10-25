@@ -911,7 +911,7 @@ $("tab-canvas").onclick=()=>switchTab("canvas");$("tab-steps").onclick=()=>switc
 const fmtMs=ms=>ms<1000?ms+" ms":(ms/1000).toFixed(1)+" s";
 function stepLine(s){
   if(s.kind==="search")return "Searched "+(s.libraries.join(", ")||"no libraries")+" for: "+(s.query||"no usable words");
-  if(s.kind==="draft")return "Attempt "+s.attempt+": "+s.model+" drafted "+s.claims+" claim"+(s.claims===1?"":"s");
+  if(s.kind==="draft")return s.error?"Attempt "+s.attempt+": "+s.model+" did not answer":"Attempt "+s.attempt+": "+s.model+" drafted "+s.claims+" claim"+(s.claims===1?"":"s");
   if(s.kind==="check")return "Quote check, attempt "+s.attempt+": "+s.kept+" kept, "+s.removed+" removed";
   return "Retried once, with the reasons the first attempt failed"}
 function stepBody(s,j){
@@ -919,7 +919,7 @@ function stepBody(s,j){
     if(s.editions.length)items.push(el("li",{textContent:"Limited to "+s.editions.join(" and ")+", because the question names "+(s.editions.length>1?"them":"it")+"."}));
     items.push(el("li",{textContent:s.found?"Found "+s.found+" passage"+(s.found===1?"":"s")+" in "+Object.entries(s.documents).map(([t,n])=>t+" ("+n+")").join(", ")+".":"No passage matched. Nothing was drafted."}));
     return [el("ul",{},...items),...j.retrieved.slice(0,6).map(srcCard)]}
-  if(s.kind==="draft")return [el("p",{class:"muted",textContent:"The model sees only the retrieved passages. It must return an exact quote for every claim. It never sees libraries the user cannot search."})];
+  if(s.kind==="draft")return [s.error?el("p",{class:"muted",textContent:"The model endpoint failed ("+s.error+"). Nothing was drafted, so the answer is a refusal; ask again in a moment."}):el("p",{class:"muted",textContent:"The model sees only the retrieved passages. It must return an exact quote for every claim. It never sees libraries the user cannot search."})];
   if(s.kind==="check")return [s.reasons.length?el("ul",{},...s.reasons.map(r=>el("li",{textContent:"Removed: "+r})) ):el("p",{class:"muted",textContent:"Every quote was found on its cited page, and every number in a claim was in its quote."}),el("p",{class:"muted",textContent:"Plain string check. No model is involved."})];
   return [el("ul",{},...(s.feedback||[]).map(f=>el("li",{textContent:f})))]}
 function renderSteps(j,q){
