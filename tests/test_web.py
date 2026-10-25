@@ -393,3 +393,23 @@ def test_a_stored_answer_replays_for_its_owner_without_the_model(web):
     assert "async function replay" in page and 'u.get("a")' in page
     ans = client.get("/api/me/widget/answers", params={"user": "alice"}).json()["answers"][0]
     assert ans["audit_id"] == j["audit_id"]
+
+
+def test_admin_adds_a_user_as_a_name_plus_grants(web):
+    client, llm, doc, memo, path = web
+    h = {"X-Token": "demo"}
+    assert client.post("/api/admin/users", json={"user": "carol", "libraries": ["public"]}).status_code == 401
+    libs = client.get("/api/admin/libraries", headers=h).json()["libraries"]
+    ids = [l["id"] for l in libs]
+    assert len(ids) >= 2 and all("name" in l for l in libs)
+    r = client.post("/api/admin/users", json={"user": "carol", "libraries": [ids[0]]}, headers=h).json()
+    assert r == {"user": "carol", "libraries": [ids[0]], "added": [ids[0]], "existed": False}
+    assert "carol" in client.get("/api/users").json()["users"]
+    r = client.post("/api/admin/users", json={"user": "carol", "libraries": [ids[1], "nope"]}, headers=h).json()
+    assert r["existed"] and r["added"] == [ids[1]] and r["libraries"] == sorted(ids[:2])
+    assert client.post("/api/admin/users", json={"user": "carol", "libraries": ["nope"]}, headers=h).status_code == 400
+    assert client.post("/api/admin/users", json={"user": "bad name!", "libraries": [ids[0]]}, headers=h).status_code == 400
+    # carol can now ask, and only sees her libraries
+    llm.responses = [[good(doc)]]
+    assert client.post("/api/ask", json={"user": "carol", "question": "How did palm oil output change?"}).json()["status"] in ("answered", "not_found")
+    assert 'id="newuser"' in client.get("/dashboard").text

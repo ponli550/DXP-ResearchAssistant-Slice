@@ -66,6 +66,11 @@ class KeyBody(BaseModel):
     user: str
 
 
+class UserBody(BaseModel):
+    user: str
+    libraries: list[str]
+
+
 class LayoutBody(BaseModel):
     owner: str = "admin"
     layout: dict
@@ -683,6 +688,28 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         con.commit()
         return get_layout(con, "user:" + user, USER_WIDGETS)
 
+    @app.get("/api/admin/libraries")
+    def admin_libraries(x_token: str = Header(default="")):
+        admin(x_token)
+        return {"libraries": [dict(r) for r in db().execute("SELECT id, name FROM libraries ORDER BY name")]}
+
+    @app.post("/api/admin/users")
+    def add_user(body: UserBody, x_token: str = Header(default="")):
+        """A user is a name plus library grants. Adding grants to an existing user is the same call; nothing is ever removed here."""
+        admin(x_token)
+        con = db()
+        user = body.user.strip()
+        if not user or len(user) > 60 or not re.fullmatch(r"[A-Za-z0-9._@-]+", user):
+            raise HTTPException(400, "A user name is 1 to 60 letters, digits, dots, dashes, underscores or @.")
+        known_libs = {r["id"] for r in con.execute("SELECT id FROM libraries")}
+        libs = [l for l in body.libraries if l in known_libs]
+        if not libs:
+            raise HTTPException(400, "Pick at least one library that exists: " + ", ".join(sorted(known_libs)))
+        before = {r["library_id"] for r in con.execute("SELECT library_id FROM grants WHERE user=?", (user,))}
+        con.executemany("INSERT OR IGNORE INTO grants(user, library_id) VALUES (?,?)", [(user, l) for l in libs])
+        con.commit()
+        return {"user": user, "libraries": sorted(set(libs) | before), "added": sorted(set(libs) - before), "existed": bool(before)}
+
     @app.get("/api/admin/layout")
     def read_layout(owner: str = "admin", x_token: str = Header(default="")):
         admin(x_token)
@@ -1000,6 +1027,9 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
  <div class="panel w12"><h2>Try a question <b>as a user, to check an answer after an ingest or a model change</b></h2>
   <form id="try" class="inline"><select id="tryUser" aria-label="As user"></select><input id="tryQ" maxlength="500" placeholder="A question, as that user would ask it"><button class="go">Ask</button></form>
   <div class="out meta" id="tryOut">Shows outcome, attempts, model time, what the check kept and removed, and the citations. Open shows the full answer in the chat as that user.</div></div>
+ <div class="panel w12"><h2>Users <b>a user is a name and the libraries they may search; nothing else is stored about them</b></h2>
+  <form id="newuser" class="inline keys"><input id="userName" maxlength="60" placeholder="User name, for example: subscriber@marc.com.my"><span id="userLibs" class="meta" style="display:flex;gap:var(--s3);align-items:center"></span><button class="go">Add user</button></form>
+  <div class="out meta" id="userOut">Adding a name that exists adds the ticked libraries to it. Grants are only ever removed from the command line.</div></div>
  <div class="panel w12"><h2>API keys <b>a key stands for one user and inherits that user’s grants, nothing more</b></h2>
   <form id="newkey" class="inline keys"><input id="keyName" maxlength="60" placeholder="What will use this key, for example: MARC Online portal"><select id="keyUser" aria-label="As user"></select><button class="go">Create key</button></form>
   <div class="out meta" id="keyOut">Shown once, stored as a hash. Send it as <code>X-Api-Key</code> on <code>POST /api/ask</code>; the body’s user is then ignored.</div>
@@ -1115,7 +1145,7 @@ async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook"
  if(lr.ok){LAYOUT=await lr.json();CAT=LAYOUT.catalogue||{};buildGrid();}
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
  if(!r.ok){show("login",ME?"No board for "+ME+": unknown user, or no library grant ("+r.status+").":"The board could not be loaded ("+r.status+").");return;}
- const d=await r.json();render(d);if(!ME)loadKeys();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+ const d=await r.json();render(d);if(!ME){loadKeys();loadLibs();}show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
 async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
  fillT("keys",j.keys.map(k=>{const row=tr([td("",k.name),td("",k.user),td("mono dim",k.prefix+"…"),td("t",hm(k.created_at)),td("dim",k.last_used?hm(k.last_used):"never used"),td(k.revoked_at?"bad":"ok",k.revoked_at?"revoked":"active")]);
   const c=el("td");if(!k.revoked_at){const b=el("button","link","revoke");b.onclick=async()=>{if(!confirm("Revoke “"+k.name+"”? Anything using it stops now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};c.appendChild(b);}row.appendChild(c);return row;}),["name","user","key","created","last used","",""],"No API keys. The chat works without one; a key is for another system asking on a user’s behalf.");}
@@ -1130,6 +1160,14 @@ $("try").onsubmit=async e=>{e.preventDefault();const u=$("tryUser").value,q=$("t
  const j=await r.json();const checks=j.trace.filter(t=>t.kind==="check");const kept=checks.reduce((a,c)=>a+c.kept,0),removed=checks.reduce((a,c)=>a+c.removed,0);const reasons=[...new Set(checks.flatMap(c=>c.reasons||[]))];const ms=j.trace.filter(t=>t.kind==="draft").reduce((a,t)=>a+(t.ms||0),0);
  out.textContent="";out.appendChild(el("span",j.status==="answered"?"ok":"bad",j.status==="answered"?"answered":"not found"));out.appendChild(document.createTextNode(" · "+j.attempts+" attempt"+(j.attempts===1?"":"s")+" · model "+Math.round(ms/1000)+" s · kept "+kept+", removed "+removed+(reasons.length?" ("+reasons.join("; ")+")":"")+" · citations "+((j.claims||[]).map(c=>c.doc_id+":"+c.page).join(", ")||"none")+" · "));
  const a=el("a","","open in the chat as "+u);a.href="/?user="+encodeURIComponent(u)+"&q="+encodeURIComponent(q)+"&run=1";out.appendChild(a);}finally{btn.disabled=false;btn.textContent="Ask";}};
+async function loadUserSelects(){try{const j=await (await fetch("/api/users")).json();["tryUser","keyUser"].forEach(id=>{const keep=$(id).value;$(id).textContent="";j.users.forEach(u=>$(id).appendChild(el("option","",u)));if(keep)$(id).value=keep;});}catch(e){}}
+async function loadLibs(){const r=await fetch("/api/admin/libraries",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();const box=$("userLibs");box.textContent="";
+ j.libraries.forEach(l=>{const lab=el("label");const c=el("input");c.type="checkbox";c.value=l.id;c.checked=true;lab.appendChild(c);lab.appendChild(document.createTextNode(" "+l.name));box.appendChild(lab);});}
+$("newuser").onsubmit=async e=>{e.preventDefault();const user=$("userName").value.trim();const libraries=[...$("userLibs").querySelectorAll("input:checked")].map(c=>c.value);if(!user)return;const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Adding…";const out=$("userOut");
+ try{const r=await fetch("/api/admin/users",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({user,libraries})});const j=await r.json();
+  if(!r.ok){out.textContent=j.detail||("Could not add the user ("+r.status+")");return;}
+  out.textContent=(j.existed?"Updated ":"Added ")+j.user+": may search "+j.libraries.join(", ")+(j.added.length?" (new: "+j.added.join(", ")+")":" (no new library)")+". They can open /?user="+j.user+" now.";$("userName").value="";loadUserSelects();}
+ finally{btn.disabled=false;btn.textContent="Add user";}};
 $("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.trim(),user=$("keyUser").value;if(!name)return;const btn=e.target.querySelector("button");btn.disabled=true;btn.textContent="Creating…";setTimeout(()=>{btn.disabled=false;btn.textContent="Create key";},800);
  const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
