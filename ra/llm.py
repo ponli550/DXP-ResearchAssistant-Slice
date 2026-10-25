@@ -97,7 +97,11 @@ class OpenAICompatLLM:
                 {"role": "user", "content": build_prompt(question, passages, feedback)},
             ],
         }
-        data = self.post(body)
+        try:
+            data = self.post(body)
+        except (OSError, TimeoutError) as e:  # a dropped or timed-out connection: try once more, then let the loop record it
+            self.last_error = f"{type(e).__name__}: {e}"
+            data = self.post(body)
         text = data["choices"][0]["message"].get("content") or ""
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
         return parse_claims(text)

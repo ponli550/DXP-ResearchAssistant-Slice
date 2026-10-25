@@ -352,3 +352,32 @@ def test_years_and_quarter_marks_are_not_figures():
     assert asks_for_figure("What GDP growth is projected for Malaysia in 2026?")
     assert asks_for_figure("How many electric vehicles were sold in Malaysia in 2025?")
     assert not asks_for_figure("Who is the chief executive officer of PETRONAS?")
+
+
+def test_a_model_failure_is_a_refusal_with_the_reason_in_the_trace(db):
+    class Down:
+        name = "down"
+
+        def draft(self, q, passages, feedback=None):
+            raise TimeoutError("The read operation timed out")
+
+    res = ask(db, Down(), "alice", "How much did palm oil output grow in 2024?")
+    assert res.status == "not_found" and res.attempts == 1
+    draft = [s for s in res.trace if s["kind"] == "draft"][0]
+    assert draft["claims"] == 0 and draft["error"].startswith("TimeoutError")
+    assert not [s for s in res.trace if s["kind"] == "retry"]
+
+
+def test_openai_compat_adapter_retries_once_on_a_dropped_connection():
+    from ra.llm import OpenAICompatLLM
+
+    calls = []
+
+    def post(body):
+        calls.append(body)
+        if len(calls) == 1:
+            raise TimeoutError("timed out")
+        return {"choices": [{"message": {"content": '{"claims":[]}'}}]}
+
+    llm = OpenAICompatLLM(model="m", api_key="k", post=post)
+    assert llm.draft("q", []) == [] and len(calls) == 2 and llm.last_error.startswith("TimeoutError")

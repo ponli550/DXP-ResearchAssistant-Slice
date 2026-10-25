@@ -94,8 +94,15 @@ If nothing survives the gate, the second attempt gets the reasons the first fail
             if attempt == 2:
                 trace.append({"kind": "retry", "tag": "Plain code", "feedback": feedback})
             t = time.perf_counter()
-            drafted = llm.draft(question, passages, feedback)
-            trace.append({"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)})
+            try:
+                drafted = llm.draft(question, passages, feedback)
+                error = None
+            except Exception as e:  # the model did not answer: that is a refusal with a reason, not a crash
+                drafted, error = [], f"{type(e).__name__}: {e}"[:200]
+            step = {"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)}
+            if error:
+                step["error"] = error
+            trace.append(step)
             t = time.perf_counter()
             ok, bad = _verify(con, drafted, allowed)
             if ok and asks_for_figure(question) and not states_a_figure(ok):
@@ -106,6 +113,8 @@ If nothing survives the gate, the second attempt gets the reasons the first fail
             if ok:
                 result.status, result.claims = "answered", ok
                 break
+            if error:
+                break  # do not retry a model that is down; the trace says why
             feedback = [f"'{c.text}' was rejected: {why}" for c, why in bad] or ["no claims were returned"]
 ```
 

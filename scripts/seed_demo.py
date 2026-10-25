@@ -4,7 +4,7 @@
     uv run --python 3.14 python scripts/seed_demo.py data/demo.db
 
 Every answer is real: the model named in HERMES_MODEL answers, the gate checks, refusals stay refusals. Nothing is faked.
-Run it before the meeting, not during it: about fifteen model calls, a few minutes.
+Run it before the meeting, not during it: sixteen model calls, a few minutes. Safe to run again: it keeps what it has and asks only what is missing.
 """
 import os
 import sys
@@ -49,27 +49,38 @@ QUESTIONS = [
 
 
 def main(path):
-    if os.path.exists(path):
-        print(f"{path} exists; delete it first if you want a fresh seed.")
-        return 1
+    """Resumable: an existing file keeps its reports and answers, and only questions not yet asked are asked."""
     con = connect(path)
+    have = {r["title"] for r in con.execute("SELECT title FROM documents")}
     for lib, lib_name, title, pdf in PDFS:
+        if title in have:
+            continue
         rep = ingest_pdf(con, lib, title, pdf, library_name=lib_name)
-        print("ingested", title, rep["pages"], "pages", "OCR flagged:" if rep["low_text_pages"] else "", rep["low_text_pages"] or "")
+        print("ingested", title, rep["pages"], "pages", "OCR flagged:" if rep["low_text_pages"] else "", rep["low_text_pages"] or "", flush=True)
     con.executemany("INSERT OR IGNORE INTO grants(user, library_id) VALUES (?,?)", GRANTS)
     con.commit()
+    asked = {(r["user"], r["question"]): (r["id"], r["status"]) for r in con.execute("SELECT id, user, question, status FROM audit")}
     con.close()
     app = create_app(path)
     client = TestClient(app)
     ids = []
     for user, q in QUESTIONS:
+        if (user, q) in asked:
+            ids.append((user,) + asked[(user, q)])
+            print(f"{user:6} {asked[(user, q)][1]:10}   kept  {q[:70]}", flush=True)
+            continue
         t = time.perf_counter()
         r = client.post("/api/ask", json={"user": user, "question": q})
         j = r.json()
         ids.append((user, j.get("audit_id"), j.get("status")))
-        print(f"{user:6} {j.get('status', r.status_code):10} {time.perf_counter() - t:5.1f}s  {q[:70]}")
+        print(f"{user:6} {j.get('status', r.status_code):10} {time.perf_counter() - t:5.1f}s  {q[:70]}", flush=True)
     answered = [(u, i) for u, i, st in ids if st == "answered"]
     not_found = [(u, i) for u, i, st in ids if st == "not_found" and u == "alice"]
+    con = connect(path)
+    if con.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]:
+        print("ratings and review already seeded")
+        return 0
+    con.close()
     if answered:
         client.post("/api/feedback", json={"user": answered[0][0], "audit_id": answered[0][1], "rating": "up", "reason": ""})
     if len(answered) > 1:
