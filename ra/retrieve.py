@@ -96,16 +96,23 @@ def _diversify(per_doc, k):
     return (picked + rest)[:k]
 
 
-def retrieve(con, user, question, k=12):
+def retrieve(con, user, question, k=12, only=None):
     """Top passages for a question, limited to libraries the user holds a grant for.
 
     The access rule is part of the SQL, so a passage the user may not see is never returned,
     never reaches the model, and can never be cited. When the question names editions, each named
     edition gets its own k slots and the edition words leave the text query. When it names none,
     every granted document keeps a floor of slots so a comparison sees both of its sides.
+    `only` is a set of document ids that narrows the search further (an analysis cell asks one report);
+    it is intersected with the grant and can never widen it.
     """
     docs = named_documents(con, user, question)
-    q = fts_query(search_terms(question, docs))
+    if only is not None:
+        allowed = [d for d in _granted_docs(con, user) if d in only]
+        docs = [d for d in docs if d in only] or allowed
+        if not docs:
+            return []
+    q = fts_query(search_terms(question, named_documents(con, user, question)))
     if q is None:
         return []
     if docs:

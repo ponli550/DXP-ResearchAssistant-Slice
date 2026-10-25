@@ -4,7 +4,7 @@
     uv run --python 3.14 python scripts/seed_demo.py data/demo.db
 
 Every answer is real: the model named in HERMES_MODEL answers, the gate checks, refusals stay refusals. Nothing is faked.
-Run it before the meeting, not during it: sixteen model calls, a few minutes. Safe to run again: it keeps what it has and asks only what is missing.
+Run it before the meeting, not during it: sixteen questions plus a ten-cell analysis, a few minutes. Safe to run again: it keeps what it has and asks only what is missing.
 """
 import os
 import sys
@@ -61,7 +61,7 @@ def main(path):
     con.commit()
     asked = {(r["user"], r["question"]): (r["id"], r["status"]) for r in con.execute("SELECT id, user, question, status FROM audit")}
     con.close()
-    app = create_app(path)
+    app = create_app(path, background=False)
     client = TestClient(app)
     ids = []
     for user, q in QUESTIONS:
@@ -76,9 +76,20 @@ def main(path):
         print(f"{user:6} {j.get('status', r.status_code):10} {time.perf_counter() - t:5.1f}s  {q[:70]}", flush=True)
     answered = [(u, i) for u, i, st in ids if st == "answered"]
     not_found = [(u, i) for u, i, st in ids if st == "not_found" and u == "alice"]
+    # One saved analysis for alice: two questions across the five World Bank editions, ten cells, run through the pipeline.
     con = connect(path)
+    if not con.execute("SELECT COUNT(*) FROM analyses").fetchone()[0]:
+        wb = [r["id"] for r in con.execute("SELECT id FROM documents WHERE library_id='wb' ORDER BY id")]
+        con.close()
+        a = client.post("/api/me/analyses", json={"user": "alice", "name": "Growth outlook by edition", "doc_ids": wb,
+                                                  "questions": ["What GDP growth is projected for the coming year?", "What are the main risks to the outlook?"]}).json()
+        t = time.perf_counter()
+        v = client.post(f"/api/me/analyses/{a['id']}/run", params={"user": "alice"}).json()
+        print(f"analysis {a['id']}: {v['status']}, {v['answered']} of {v['total']} cells answered, {time.perf_counter() - t:4.0f}s", flush=True)
+        con = connect(path)
     if con.execute("SELECT COUNT(*) FROM feedback").fetchone()[0]:
         print("ratings and review already seeded")
+        con.close()
         return 0
     con.close()
     if answered:

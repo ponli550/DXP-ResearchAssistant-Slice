@@ -53,7 +53,7 @@ def _titles(con, ids):
     return [r["title"] for r in con.execute(f"SELECT title FROM documents WHERE id IN ({marks}) ORDER BY title", ids)]
 
 
-def ask(con, llm, user, question, k=12):
+def ask(con, llm, user, question, k=12, only=None):
     """Retrieve, draft, check every claim, retry once on failures, otherwise say not found.
 
     Every step is recorded in result.trace with what it did and how long it took, including the steps that
@@ -61,11 +61,12 @@ def ask(con, llm, user, question, k=12):
     """
     trace = []
     t = time.perf_counter()
-    passages = retrieve(con, user, question, k)
+    passages = retrieve(con, user, question, k, only)
     trace.append({
         "kind": "search", "tag": "Plain code", "query": (fts_query(search_terms(question, named_documents(con, user, question))) or "").replace('"', ""),
         "libraries": _libraries(con, user), "editions": _titles(con, named_documents(con, user, question)),
         "limit": k, "found": len(passages), "documents": dict(Counter(p.title for p in passages)), "ms": _ms(t),
+        **({"only": sorted(only)} if only is not None else {}),
     })
     allowed = {(p.doc_id, p.page) for p in passages}
     result = Result(status="not_found", closest=passages, trace=trace)

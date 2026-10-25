@@ -24,7 +24,7 @@ def web(tmp_path):
     doc = con.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
     memo = con.execute("SELECT id FROM documents WHERE title='Strategy Memo'").fetchone()["id"]
     llm = ScriptedLLM()
-    client = TestClient(create_app(path, lambda: (llm, "scripted")))
+    client = TestClient(create_app(path, lambda: (llm, "scripted"), background=False))
     return client, llm, doc, memo, path
 
 
@@ -362,7 +362,7 @@ def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
     assert client.get("/api/me/board", params={"user": "nobody"}).status_code == 404
 
     lay = client.get("/api/me/layout", params={"user": "alice"}).json()
-    assert lay["owner"] == "user:alice" and [w["type"] for w in lay["layout"]["widgets"]] == ["library", "answers", "usage", "ratings", "reviews"]
+    assert lay["owner"] == "user:alice" and [w["type"] for w in lay["layout"]["widgets"]] == ["library", "analyses", "answers", "usage", "ratings", "reviews"]
     doc_ = lay["layout"]
     doc_["widgets"][0]["span"] = 12
     assert client.put("/api/me/layout", json={"user": "alice", "layout": doc_}).json()["saved"]
@@ -455,3 +455,34 @@ def test_edition_is_read_from_the_title_and_sorted_newest_first(tmp_path):
     con.commit()
     lib = user_board(con, "alice", "m", ["library"])["library"]
     assert [r["edition"][2] for r in lib] == ["October 2025", "April 2024", "June 2015"]
+
+
+def test_an_analysis_runs_every_question_inside_each_chosen_report_and_stores_the_answers(web):
+    client, llm, doc, memo, path = web
+    # bob may see both reports; the memo question is answered from the memo, the palm-oil question refused there
+    memo_claim = Claim("The board approved a merger with Orion Holdings for 900 million.", memo, 1, "The board approved a merger with Orion Holdings for 900 million.")
+    # cell order is q0:doc, q0:memo, q1:doc, q1:memo; the two cross cells find no passage in their report and never call the model
+    llm.responses = [[good(doc)], [memo_claim]]
+    body = {"user": "bob", "name": "Outlook check", "questions": ["How did palm oil output change?", "What did the board approve?"], "doc_ids": [doc, memo]}
+    a = client.post("/api/me/analyses", json=body).json()
+    assert a["status"] == "new" and a["total"] == 4 and a["done"] == 0 and [d["id"] for d in a["docs"]] == [doc, memo]
+    v = client.post(f"/api/me/analyses/{a['id']}/run", params={"user": "bob"}).json()
+    assert v["status"] == "done" and v["done"] == 4 and v["answered"] == 2
+    assert v["cells"][f"0:{doc}"]["status"] == "answered" and v["cells"][f"0:{doc}"]["page"] == 1 and "4.2" in v["cells"][f"0:{doc}"]["claim"]
+    assert v["cells"][f"1:{memo}"]["status"] == "answered" and v["cells"][f"0:{memo}"]["status"] == "not_found"
+    # every cell searched one report only, and a cell with no passage in its report never reached the model
+    assert len(llm.calls) == 2 and all(len({d for d, _ in call[1]}) == 1 for call in llm.calls)
+    # cells are ordinary stored answers and replay for their owner
+    aid = v["cells"][f"0:{doc}"]["audit_id"]
+    assert client.get(f"/api/answer/{aid}", params={"user": "bob"}).json()["claims"][0]["page"] == 1
+    lst = client.get("/api/me/analyses", params={"user": "bob"}).json()
+    assert lst["analyses"][0]["name"] == "Outlook check" and lst["analyses"][0]["answered"] == 2 and len(lst["docs"]) == 2
+    # alice cannot see bob's analysis, and cannot create one over the restricted memo
+    assert client.get(f"/api/me/analyses/{a['id']}", params={"user": "alice"}).status_code == 404
+    assert client.post("/api/me/analyses", json={"user": "alice", "name": "x", "questions": ["q"], "doc_ids": [memo]}).status_code == 400
+    assert client.post("/api/me/analyses", json={"user": "alice", "name": "x", "questions": [], "doc_ids": [doc]}).status_code == 400
+    assert client.post("/api/me/analyses", json={"user": "alice", "name": "x", "questions": ["q"] * 11, "doc_ids": [doc]}).status_code == 400
+    assert client.get("/api/me/widget/analyses", params={"user": "bob"}).json()["analyses"][0]["status"] == "done"
+    assert client.delete(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).json() == {"deleted": a["id"]}
+    assert client.get(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).status_code == 404
+    assert 'id="anaForm"' in client.get("/dashboard").text

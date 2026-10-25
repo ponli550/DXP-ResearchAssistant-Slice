@@ -60,6 +60,25 @@ CREATE TABLE IF NOT EXISTS layouts (
     doc TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
+CREATE TABLE IF NOT EXISTS analyses (
+    id INTEGER PRIMARY KEY,
+    user TEXT NOT NULL,
+    name TEXT NOT NULL,
+    questions TEXT NOT NULL,
+    doc_ids TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'new',
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    started_at TEXT,
+    finished_at TEXT
+);
+CREATE TABLE IF NOT EXISTS analysis_cells (
+    analysis_id INTEGER NOT NULL REFERENCES analyses(id),
+    qi INTEGER NOT NULL,
+    doc_id INTEGER NOT NULL,
+    audit_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
+    PRIMARY KEY (analysis_id, qi, doc_id)
+);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),

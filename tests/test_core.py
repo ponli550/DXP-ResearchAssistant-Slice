@@ -381,3 +381,15 @@ def test_openai_compat_adapter_retries_once_on_a_dropped_connection():
 
     llm = OpenAICompatLLM(model="m", api_key="k", post=post)
     assert llm.draft("q", []) == [] and len(calls) == 2 and llm.last_error.startswith("TimeoutError")
+
+
+def test_a_document_filter_narrows_retrieval_and_never_widens_access(db):
+    from ra.retrieve import retrieve
+
+    pub = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    memo = db.execute("SELECT id FROM documents WHERE title='Strategy Memo'").fetchone()["id"]
+    assert {p.doc_id for p in retrieve(db, "bob", "board approved merger output", 12)} == {pub, memo}
+    assert {p.doc_id for p in retrieve(db, "bob", "board approved merger output", 12, only={memo})} == {memo}
+    assert retrieve(db, "alice", "board approved merger", 12, only={memo}) == []  # alice holds no grant on the memo's library
+    res = ask(db, ScriptedLLM([]), "bob", "What did the board approve?", only={memo})
+    assert res.trace[0]["only"] == [memo] and {p.doc_id for p in res.closest} == {memo}

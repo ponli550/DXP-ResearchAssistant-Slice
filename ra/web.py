@@ -7,6 +7,7 @@ authentication. Access is still enforced in retrieval and on the page route.
 import json
 import os
 import re
+import threading
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
@@ -79,6 +80,13 @@ class LayoutBody(BaseModel):
 class MeLayoutBody(BaseModel):
     user: str
     layout: dict
+
+
+class AnalysisBody(BaseModel):
+    user: str
+    name: str
+    questions: list[str]
+    doc_ids: list[int]
 
 
 def _hash_key(key):
@@ -375,6 +383,7 @@ WIDGETS = {
 # The user catalogue: four widgets, each something MARC Online does not show. Same document shape, same rules.
 USER_WIDGETS = {
     "library": {"title": "Your library", "span": 12},
+    "analyses": {"title": "Your analyses", "span": 12},
     "answers": {"title": "Your recent answers", "span": 8},
     "usage": {"title": "Your usage", "span": 4},
     "ratings": {"title": "Your ratings", "span": 6},
@@ -426,7 +435,7 @@ def get_layout(con, owner, catalogue=WIDGETS):
     return {"owner": owner, "layout": json.loads(row["doc"]), "saved": True, "updated_at": row["updated_at"], "catalogue": catalogue}
 
 
-USER_WIDGET_PARTS = {"library": ("library",), "answers": ("answers",), "usage": ("usage",), "ratings": ("ratings",), "reviews": ("reviews",)}
+USER_WIDGET_PARTS = {"library": ("library",), "analyses": ("analyses",), "answers": ("answers",), "usage": ("usage",), "ratings": ("ratings",), "reviews": ("reviews",)}
 USER_HEAD_PARTS = ("now", "brief", "usage", "ratings", "reviews")
 
 
@@ -465,6 +474,9 @@ def user_board(con, user, model_name, parts=None):
                  for d in docs]
         items.sort(key=lambda x: (x["library"], -x["edition"][0], -x["edition"][1], x["title"]))
         out["library"] = items
+    if need("analyses"):
+        out["analyses"] = [{"id": r["id"], "name": r["name"], "status": r["status"], "created_at": r["created_at"]}
+                           for r in con.execute("SELECT id, name, status, created_at FROM analyses WHERE user=? ORDER BY id DESC", (user,))]
     if need("answers"):
         out["answers"] = [{"at": r["at"], "question": r["question"], "status": r["status"], "audit_id": r["id"],
                            "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
@@ -497,7 +509,96 @@ def put_layout(con, owner, doc):
     con.commit()
 
 
-def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None):
+def answer_json(con, res, model_name):
+    titles = {r["id"]: r["title"] for r in con.execute("SELECT id, title FROM documents")}
+    return {
+        "audit_id": res.audit_id,
+        "status": res.status,
+        "model": model_name,
+        "attempts": res.attempts,
+        "retrieved": [{"doc_id": p.doc_id, "title": p.title, "page": p.page, "text": p.text[:700]} for p in res.closest],
+        "claims": [{"text": c.text, "doc_id": c.doc_id, "title": titles[c.doc_id], "page": c.page, "quote": c.quote} for c in res.claims],
+        "rejected": len(res.rejected),
+        "rejected_claims": [
+            {"text": c.text, "doc_id": c.doc_id, "title": titles.get(c.doc_id, "unknown document"), "page": c.page, "quote": c.quote, "reason": why}
+            for c, why in res.rejected
+        ],
+        "closest": [{"title": p.title, "doc_id": p.doc_id, "page": p.page} for p in res.closest[:3]],
+        "trace": [{**st, "model": model_name} if st["kind"] == "draft" else st for st in res.trace],
+    }
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Analyses: a user's own question list run across the reports they choose. Every cell is one pass through the same
+# pipeline (retrieve inside that one report, draft, check, retry, refuse), stored on the audit log like any answer.
+# Nothing here summarises or invents: a cell is a checked claim with its page, or a refusal.
+MAX_ANALYSIS_QUESTIONS = 10
+MAX_ANALYSIS_CELLS = 60
+_analysis_lock = threading.Lock()
+
+
+def _analysis_row(con, user, analysis_id):
+    row = con.execute("SELECT * FROM analyses WHERE id=? AND user=?", (analysis_id, user)).fetchone()
+    if not row:
+        raise HTTPException(404, "No analysis with that id for this user.")
+    return row
+
+
+def analysis_view(con, user, analysis_id):
+    """One analysis as the page shows it: questions down, reports across, each cell a stored answer or a refusal."""
+    row = _analysis_row(con, user, analysis_id)
+    questions, doc_ids = json.loads(row["questions"]), json.loads(row["doc_ids"])
+    from .retrieve import EDITION_RE
+    marks = ",".join("?" * len(doc_ids)) or "NULL"
+    docs = {r["id"]: r for r in con.execute(f"SELECT id, title FROM documents WHERE id IN ({marks})", doc_ids)}
+    def short(title):
+        m = EDITION_RE.search(title)
+        return (m.group(1).title()[:3] + " " + m.group(2)) if m else title[:18]
+    cells = {}
+    for c in con.execute("SELECT c.qi, c.doc_id, c.audit_id, c.status, a.answer FROM analysis_cells c LEFT JOIN audit a ON a.id = c.audit_id WHERE c.analysis_id=?", (analysis_id,)):
+        cell = {"status": c["status"], "audit_id": c["audit_id"], "claim": None, "page": None, "claims": 0}
+        if c["answer"]:
+            ans = json.loads(c["answer"])
+            if ans.get("claims"):
+                cell.update(claim=ans["claims"][0]["text"], page=ans["claims"][0]["page"], claims=len(ans["claims"]))
+        cells[f"{c['qi']}:{c['doc_id']}"] = cell
+    total = len(questions) * len(doc_ids)
+    done = sum(1 for c in cells.values() if c["status"] in ("answered", "not_found", "error"))
+    return {"id": row["id"], "name": row["name"], "status": row["status"], "questions": questions,
+            "docs": [{"id": d, "title": docs[d]["title"], "short": short(docs[d]["title"])} for d in doc_ids if d in docs],
+            "cells": cells, "total": total, "done": done, "answered": sum(1 for c in cells.values() if c["status"] == "answered"),
+            "created_at": row["created_at"], "started_at": row["started_at"], "finished_at": row["finished_at"]}
+
+
+def run_analysis(db_path, llm, model_name, user, analysis_id):
+    """Ask every pending cell, one report at a time, and store each answer on the audit log. Runs on its own connection."""
+    con = connect(db_path)
+    try:
+        row = _analysis_row(con, user, analysis_id)
+        questions, doc_ids = json.loads(row["questions"]), json.loads(row["doc_ids"])
+        con.execute("UPDATE analyses SET status='running', started_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?", (analysis_id,))
+        con.commit()
+        for qi, q in enumerate(questions):
+            for d in doc_ids:
+                if con.execute("SELECT 1 FROM analysis_cells WHERE analysis_id=? AND qi=? AND doc_id=? AND status != 'pending'", (analysis_id, qi, d)).fetchone():
+                    continue
+                res = ask(con, llm, user, q, only={d})
+                out = answer_json(con, res, model_name)
+                con.execute("UPDATE audit SET answer=? WHERE id=?", (json.dumps(out, separators=(",", ":")), res.audit_id))
+                con.execute("UPDATE analysis_cells SET audit_id=?, status=? WHERE analysis_id=? AND qi=? AND doc_id=?",
+                            (res.audit_id, res.status, analysis_id, qi, d))
+                con.commit()
+        con.execute("UPDATE analyses SET status='done', finished_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?", (analysis_id,))
+        con.commit()
+    except Exception:
+        con.execute("UPDATE analyses SET status='failed', finished_at=strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE id=?", (analysis_id,))
+        con.commit()
+        raise
+    finally:
+        con.close()
+
+
+def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", admin_token=None, background=True):
     app = FastAPI(title="Research assistant demo")
     llm, model_name = llm_factory()
     # The admin board is behind a token, typed once per device. The demo default is "demo"; set ADMIN_TOKEN for anything shared.
@@ -550,7 +651,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         if not allowed_libraries(con, body.user):
             raise HTTPException(403, "This user has no library access.")
         res = ask(con, llm, body.user, question)
-        out = answer_json(con, res)
+        out = answer_json(con, res, model_name)
         # The checked answer is kept with its audit row, so history replays it without a model call.
         con.execute("UPDATE audit SET answer=? WHERE id=?", (json.dumps(out, separators=(",", ":")), res.audit_id))
         con.commit()
@@ -565,23 +666,6 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
             raise HTTPException(404, "No stored answer with that id for this user.")
         return {**json.loads(row["answer"]), "replayed": True, "at": row["at"], "question": row["question"]}
 
-    def answer_json(con, res):
-        titles = {r["id"]: r["title"] for r in con.execute("SELECT id, title FROM documents")}
-        return {
-            "audit_id": res.audit_id,
-            "status": res.status,
-            "model": model_name,
-            "attempts": res.attempts,
-            "retrieved": [{"doc_id": p.doc_id, "title": p.title, "page": p.page, "text": p.text[:700]} for p in res.closest],
-            "claims": [{"text": c.text, "doc_id": c.doc_id, "title": titles[c.doc_id], "page": c.page, "quote": c.quote} for c in res.claims],
-            "rejected": len(res.rejected),
-            "rejected_claims": [
-                {"text": c.text, "doc_id": c.doc_id, "title": titles.get(c.doc_id, "unknown document"), "page": c.page, "quote": c.quote, "reason": why}
-                for c, why in res.rejected
-            ],
-            "closest": [{"title": p.title, "doc_id": p.doc_id, "page": p.page} for p in res.closest[:3]],
-            "trace": [{**st, "model": model_name} if st["kind"] == "draft" else st for st in res.trace],
-        }
 
     @app.post("/api/feedback")
     def feedback(body: FeedbackBody):
@@ -703,6 +787,74 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         if kind not in USER_WIDGET_PARTS:
             raise HTTPException(404, f"No widget called {kind!r}; known: {', '.join(USER_WIDGET_PARTS)}")
         return user_board(con, user, model_name, USER_WIDGET_PARTS[kind])
+
+    @app.get("/api/me/analyses")
+    def list_analyses(user: str):
+        con = db()
+        user = known(con, user)
+        rows = con.execute("SELECT id FROM analyses WHERE user=? ORDER BY id DESC", (user,)).fetchall()
+        views = [analysis_view(con, user, r["id"]) for r in rows]
+        docs = [{"id": r["id"], "title": r["title"]} for r in con.execute(
+            "SELECT d.id, d.title FROM documents d JOIN grants g ON g.library_id = d.library_id AND g.user = ? ORDER BY d.title", (user,))]
+        return {"analyses": [{k: v[k] for k in ("id", "name", "status", "total", "done", "answered", "created_at", "finished_at")} | {"questions": len(v["questions"]), "reports": len(v["docs"])} for v in views],
+                "docs": docs, "limits": {"questions": MAX_ANALYSIS_QUESTIONS, "cells": MAX_ANALYSIS_CELLS}, "model": model_name}
+
+    @app.post("/api/me/analyses")
+    def create_analysis(body: AnalysisBody):
+        con = db()
+        user = known(con, body.user)
+        name = body.name.strip()[:80]
+        questions = [q.strip() for q in body.questions if q.strip()]
+        if not name:
+            raise HTTPException(400, "An analysis needs a name.")
+        if not 1 <= len(questions) <= MAX_ANALYSIS_QUESTIONS or any(len(q) > 300 for q in questions):
+            raise HTTPException(400, f"Between 1 and {MAX_ANALYSIS_QUESTIONS} questions, each up to 300 characters.")
+        granted = {r["id"] for r in con.execute("SELECT d.id FROM documents d JOIN grants g ON g.library_id = d.library_id AND g.user = ?", (user,))}
+        doc_ids = [d for d in dict.fromkeys(body.doc_ids) if d in granted]
+        if not doc_ids:
+            raise HTTPException(400, "Pick at least one report you may search.")
+        if len(questions) * len(doc_ids) > MAX_ANALYSIS_CELLS:
+            raise HTTPException(400, f"That is {len(questions) * len(doc_ids)} model calls; the limit is {MAX_ANALYSIS_CELLS}. Fewer questions or reports.")
+        cur = con.execute("INSERT INTO analyses(user, name, questions, doc_ids) VALUES (?,?,?,?)", (user, name, json.dumps(questions), json.dumps(doc_ids)))
+        aid = cur.lastrowid
+        con.executemany("INSERT INTO analysis_cells(analysis_id, qi, doc_id) VALUES (?,?,?)", [(aid, qi, d) for qi in range(len(questions)) for d in doc_ids])
+        con.commit()
+        return analysis_view(con, user, aid)
+
+    @app.get("/api/me/analyses/{analysis_id}")
+    def read_analysis(analysis_id: int, user: str):
+        con = db()
+        return analysis_view(con, known(con, user), analysis_id)
+
+    @app.post("/api/me/analyses/{analysis_id}/run")
+    def start_analysis(analysis_id: int, user: str):
+        con = db()
+        user = known(con, user)
+        row = _analysis_row(con, user, analysis_id)
+        if row["status"] == "running":
+            raise HTTPException(409, "This analysis is already running.")
+        if not _analysis_lock.acquire(blocking=False):
+            raise HTTPException(409, "Another analysis is running; one at a time on this server.")
+        def job():
+            try:
+                run_analysis(db_path, llm, model_name, user, analysis_id)
+            finally:
+                _analysis_lock.release()
+        if background:
+            threading.Thread(target=job, daemon=True).start()
+        else:
+            job()
+        return analysis_view(db(), user, analysis_id)
+
+    @app.delete("/api/me/analyses/{analysis_id}")
+    def delete_analysis(analysis_id: int, user: str):
+        con = db()
+        user = known(con, user)
+        _analysis_row(con, user, analysis_id)
+        con.execute("DELETE FROM analysis_cells WHERE analysis_id=?", (analysis_id,))
+        con.execute("DELETE FROM analyses WHERE id=?", (analysis_id,))
+        con.commit()
+        return {"deleted": analysis_id}
 
     @app.get("/api/me/layout")
     def me_layout(user: str):
@@ -1032,6 +1184,11 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);font:inherit;letter-spacing:0;text-transform:none;padding:0 var(--s1);cursor:pointer;margin-left:auto}h2 .exp:hover{border-color:var(--line)}h2 .exp[aria-pressed=true]{color:var(--accent)}
 .panel.open table{width:auto;min-width:60%}.panel.open table:has(td.wrap){width:100%}td.wrap{white-space:normal}
 .panel td a{color:var(--accent);text-decoration:none}.panel td a:hover{text-decoration:underline}
+.ana{display:grid;grid-template-columns:minmax(16rem,1fr) 2fr;gap:var(--s4)}@media(max-width:900px){.ana{grid-template-columns:1fr}}
+.anaform{display:grid;gap:var(--s2);margin-top:var(--s2)}.anaform input,.anaform textarea{font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);width:100%}.anaform .docs{display:grid;gap:2px;font-size:.8rem;max-height:9rem;overflow:auto}.anaform .row2{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
+details summary{cursor:pointer;color:var(--accent);font-size:.85rem;margin-top:var(--s2)}
+.anahead{display:flex;gap:var(--s2);align-items:baseline;margin-bottom:var(--s2);flex-wrap:wrap}
+table.matrix td,table.matrix th{white-space:normal;vertical-align:top;border-bottom:1px solid var(--line);padding:.3rem .4rem}table.matrix td.qq{font:1rem/1.35 var(--serif);min-width:12rem}table.matrix td.cell{font-size:.8rem;min-width:7rem}table.matrix td.cell.answered a{color:var(--fg)}table.matrix td.cell.not_found{color:var(--dim)}table.matrix td.cell.pending{color:var(--dim)}
 .filter{width:100%;max-width:28rem;margin:0 0 var(--s2);font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
 .layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
@@ -1128,6 +1285,7 @@ const T={
  users:{title:"Users",sub:'<span id="usersN"></span>',body:'<table id="users"></table>'},
  people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'},
  library:{title:"Your library",sub:'<span id="libN"></span>',body:'<input id="libFilter" class="filter" placeholder="Filter by title or year" aria-label="Filter reports"><table id="library"></table>'},
+ analyses:{title:"Your analyses",sub:'<span id="anaN"></span>',body:'<div class="ana"><div><table id="analyses"></table><details id="anaNew"><summary>New analysis</summary><form id="anaForm" class="anaform"><input id="anaName" maxlength="80" placeholder="Name, for example: Growth outlook by edition" required><textarea id="anaQs" rows="4" placeholder="One question per line, written to fit any edition: What GDP growth is projected for the coming year?"></textarea><div id="anaDocs" class="docs"></div><div class="row2"><span class="meta" id="anaCost"></span><button class="go">Create and run</button></div></form></details></div><div id="anaView" class="meta">Pick an analysis to see its table, or make one. Each cell is one question asked inside one report: a checked claim with its page, or a refusal.</div></div>'},
  answers:{title:"Your recent answers",sub:'<span id="ansN"></span>',body:'<table id="answers"></table>'},
  usage:{title:"Your usage",sub:'<span id="useN"></span>',body:'<table id="myuse"></table><p class="meta" id="mylibs"></p>'},
  ratings:{title:"Your ratings",sub:'<span id="ratN"></span>',body:'<table id="ratings"></table>'},
@@ -1152,6 +1310,32 @@ async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CA
 async function resetLayout(){const r=await fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{method:"DELETE",headers:hdr()});if(r.ok){LAYOUT=await r.json();buildGrid();}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
+let ANA_DOCS=null,ANA_TIMER=null;
+async function anaFormInit(){const f=$("anaForm");if(!f||f.dataset.wired)return;f.dataset.wired="1";
+ const r=await fetch(api("/api/me/analyses"),{headers:hdr()});if(!r.ok)return;const j=await r.json();ANA_DOCS=j.docs;const box=$("anaDocs");box.textContent="";
+ j.docs.forEach(d=>{const lab=el("label");const c=el("input");c.type="checkbox";c.value=d.id;c.checked=true;lab.appendChild(c);lab.appendChild(document.createTextNode(" "+d.title));box.appendChild(lab);});
+ const cost=()=>{const q=$("anaQs").value.split("\n").filter(x=>x.trim()).length,n=box.querySelectorAll("input:checked").length;$("anaCost").textContent=q&&n?q+" question"+(q===1?"":"s")+" × "+n+" report"+(n===1?"":"s")+" = "+(q*n)+" model calls, about "+Math.round(q*n*10/60)+" min on "+j.model+(q*n>j.limits.cells?" · over the limit of "+j.limits.cells:""):"";};
+ $("anaQs").addEventListener("input",cost);box.addEventListener("change",cost);cost();
+ f.onsubmit=async e=>{e.preventDefault();const btn=f.querySelector("button");btn.disabled=true;btn.textContent="Creating…";
+  const body={user:ME,name:$("anaName").value,questions:$("anaQs").value.split("\n").filter(x=>x.trim()),doc_ids:[...box.querySelectorAll("input:checked")].map(c=>+c.value)};
+  try{const r=await fetch("/api/me/analyses",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const j=await r.json();
+   if(!r.ok){$("anaView").textContent=j.detail||("Could not create ("+r.status+")");return;}
+   const run=await fetch("/api/me/analyses/"+j.id+"/run?user="+encodeURIComponent(ME),{method:"POST"});if(!run.ok){const e2=await run.json();$("anaView").textContent=e2.detail||"Could not start";}
+   $("anaNew").open=false;delete DATA.analyses;loadWidget("analyses");openAnalysis(j.id);}
+  finally{btn.disabled=false;btn.textContent="Create and run";}};}
+async function openAnalysis(id){clearTimeout(ANA_TIMER);const v=$("anaView");if(!v)return;const r=await fetch("/api/me/analyses/"+id+"?user="+encodeURIComponent(ME));if(!r.ok){v.textContent="Could not load that analysis ("+r.status+").";return;}
+ const a=await r.json();v.textContent="";v.className="ana-view";
+ const head=el("div","anahead");head.appendChild(el("b","",a.name));head.appendChild(el("span","meta"," · "+a.status+" · "+a.done+" of "+a.total+" cells, "+a.answered+" answered"+(a.finished_at?" · finished "+hm(a.finished_at):"")));
+ if(a.status==="done"||a.status==="failed"){const del=el("button","link","delete");del.type="button";del.onclick=async()=>{if(!confirm("Delete this analysis? Its answers stay in your history."))return;await fetch("/api/me/analyses/"+id+"?user="+encodeURIComponent(ME),{method:"DELETE"});delete DATA.analyses;loadWidget("analyses");v.className="meta";v.textContent="Deleted.";};head.appendChild(del);}
+ v.appendChild(head);
+ const t=el("table","matrix");const hr=el("tr");hr.appendChild(el("th","","question"));a.docs.forEach(d=>{const th=el("th","n",d.short);th.title=d.title;hr.appendChild(th);});t.appendChild(hr);
+ a.questions.forEach((q,qi)=>{const row=el("tr");row.appendChild(td("qq",q,q));a.docs.forEach(d=>{const c=a.cells[qi+":"+d.id]||{status:"pending"};const cell=el("td","cell "+c.status);
+  if(c.status==="answered"){const l=el("a","",c.claim);l.href="/?user="+encodeURIComponent(ME)+"&a="+c.audit_id;l.title="p. "+c.page+(c.claims>1?" · "+c.claims+" claims":"")+" · opens the stored answer";cell.appendChild(l);cell.appendChild(el("span","meta"," p."+c.page));}
+  else if(c.status==="not_found"){const l=el("a","dim","not found");l.href="/?user="+encodeURIComponent(ME)+"&a="+c.audit_id;cell.appendChild(l);}
+  else cell.textContent=c.status==="pending"?(a.status==="running"?"…":"not run"):c.status;
+  row.appendChild(cell);});t.appendChild(row);});
+ v.appendChild(t);
+ if(a.status==="running"||a.status==="new")ANA_TIMER=setTimeout(()=>openAnalysis(id),3000);}
 function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===type&&w.span===12));}
 // The head loads first and once: brief, key figures, sources. Each widget then fetches only its own slice when it
 // scrolls into view, and keeps it, so expanding or shrinking re-fills from memory without another request.
@@ -1186,6 +1370,8 @@ const FILL={
     const ask=el("a","","ask");ask.href="/?user="+encodeURIComponent(ME)+"&q="+encodeURIComponent("What does the "+(r.edition[2]?r.edition[2]+" edition":r.title)+" say about ");ask.title="Open the chat with this report named, so the search stays inside it";c.appendChild(ask);row.appendChild(c);return row;}),
     isOpen("library")?["edition","title","library",">pages","",">cited",""]:null,f?"No report matches that filter.":"No library grants yet; ask the admin.");};
   draw();const inp=$("libFilter");if(inp&&!inp.dataset.wired){inp.dataset.wired="1";inp.addEventListener("input",draw);} },
+ analyses(d){ setT("anaN",d.analyses.length+" saved"); fillT("analyses",d.analyses.map(a=>{const row=tr([td("",a.name),td(a.status==="done"?"ok":(a.status==="failed"?"bad":"dim"),a.status),td("t",hm(a.created_at))]);const c=el("td");const o=el("a","","open");o.href="#analysis="+a.id;o.onclick=e=>{e.preventDefault();openAnalysis(a.id);};c.appendChild(o);row.appendChild(c);return row;}),null,"No analyses yet. Make one below: your questions, run across the reports you choose.");
+  anaFormInit();const h=location.hash.match(/analysis=(\d+)/);if(h)openAnalysis(+h[1]); },
  answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&a="+r.audit_id;a.title="Shows the stored answer; no model call";const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
  usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
  ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("q w dim",r.reason||"",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
