@@ -377,3 +377,19 @@ def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
     assert not client.delete("/api/me/layout", params={"user": "alice"}).json()["saved"]
     # the chat page links to the user's own board
     assert 'id="melink"' in client.get("/").text
+
+
+def test_a_stored_answer_replays_for_its_owner_without_the_model(web):
+    client, llm, doc, memo, path = web
+    llm.responses = [[good(doc)]]
+    j = client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"}).json()
+    calls = len(llm.calls)
+    r = client.get(f"/api/answer/{j['audit_id']}", params={"user": "alice"}).json()
+    assert r["replayed"] and r["question"] == "How did palm oil output change?" and r["claims"] == j["claims"] and r["trace"] == j["trace"]
+    assert len(llm.calls) == calls  # no model call
+    assert client.get(f"/api/answer/{j['audit_id']}", params={"user": "bob"}).status_code == 404  # not bob's
+    assert client.get("/api/answer/999", params={"user": "alice"}).status_code == 404
+    page = client.get("/").text
+    assert "async function replay" in page and 'u.get("a")' in page
+    ans = client.get("/api/me/widget/answers", params={"user": "alice"}).json()["answers"][0]
+    assert ans["audit_id"] == j["audit_id"]

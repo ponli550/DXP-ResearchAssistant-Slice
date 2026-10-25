@@ -80,4 +80,8 @@ def connect(path=":memory:"):
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(SCHEMA)
+    # Columns added after the first release: added in place so an existing database keeps its rows.
+    if "answer" not in {r["name"] for r in con.execute("PRAGMA table_info(audit)")}:
+        con.execute("ALTER TABLE audit ADD COLUMN answer TEXT")
+        con.commit()
     return con

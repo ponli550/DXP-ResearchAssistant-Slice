@@ -144,7 +144,7 @@ def _usage(con, model_name):
         u["bar"] = _bar(u["asked"], top_asked)
     usage = {"asked": len(rows), "answered": sum(1 for r in rows if r["status"] == "answered"),
              "not_found": sum(1 for r in rows if r["status"] != "answered"), "model": model_name, "users": users}
-    recent = [{"at": r["at"], "user": r["user"], "question": r["question"], "status": r["status"],
+    recent = [{"at": r["at"], "user": r["user"], "question": r["question"], "status": r["status"], "audit_id": r["id"],
                "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
 
     return {"rows": rows, "usage": usage, "recent": recent, "users": users}
@@ -523,6 +523,22 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         if not allowed_libraries(con, body.user):
             raise HTTPException(403, "This user has no library access.")
         res = ask(con, llm, body.user, question)
+        out = answer_json(con, res)
+        # The checked answer is kept with its audit row, so history replays it without a model call.
+        con.execute("UPDATE audit SET answer=? WHERE id=?", (json.dumps(out, separators=(",", ":")), res.audit_id))
+        con.commit()
+        return out
+
+    @app.get("/api/answer/{audit_id}")
+    def replay(audit_id: int, user: str):
+        """A stored answer, exactly as it was shown, for the user who asked it. No model is called."""
+        con = db()
+        row = con.execute("SELECT at, question, answer FROM audit WHERE id=? AND user=?", (audit_id, user)).fetchone()
+        if not row or not row["answer"]:
+            raise HTTPException(404, "No stored answer with that id for this user.")
+        return {**json.loads(row["answer"]), "replayed": True, "at": row["at"], "question": row["question"]}
+
+    def answer_json(con, res):
         titles = {r["id"]: r["title"] for r in con.execute("SELECT id, title FROM documents")}
         return {
             "audit_id": res.audit_id,
@@ -901,8 +917,11 @@ async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$(
 $("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
 function meLink(){$("melink").href="/dashboard?user="+encodeURIComponent($("user").value);}
 $("user").addEventListener("change",meLink);
+async function replay(id){$("go").disabled=true;try{const j=await api("/api/answer/"+id+"?user="+encodeURIComponent($("user").value));lastAudit=j.audit_id;$("q").value=j.question;switchTab("canvas");renderSteps(j,j.question);nodes=build(j,j.question);canvas.replaceChildren(...nodes);buildNav();
+    nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call"}
+  catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
 loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
-  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
+  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """
 
@@ -1077,7 +1096,7 @@ const FILL={
  runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
  users(d){ setT("usersN",d.usage.users.length); fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet."); },
  people(d){ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open"); const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)]))); fillT("people",prow,null,"No open review requests and no thumbs-down reasons."); },
- answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&q="+encodeURIComponent(r.question);const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
+ answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&a="+r.audit_id;a.title="Shows the stored answer; no model call";const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
  usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
  ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("dim",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
  reviews(d){ setT("revN",d.reviews.open+" open"); fillT("reviews",d.reviews.recent.map(r=>tr([td("t",hm(r.at)),td(r.status==="open"?"bad":"ok",r.status),td("q",r.question,r.question),td("dim",r.note||"")])),null,"No review requests. Ask for one when an answer needs a person."); },
