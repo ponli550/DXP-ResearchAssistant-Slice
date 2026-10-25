@@ -762,6 +762,7 @@ INDEX_HTML = r"""<!doctype html>
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .top{padding:.7rem 16px;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
 h1{font-size:1rem;margin:0;font-weight:650}.sub{color:var(--muted);margin:0;font-size:.8rem}
+.nav{display:flex;gap:.2rem}.nav a{color:var(--muted);text-decoration:none;padding:4px 12px;border:1px solid transparent;border-radius:6px;font-size:.85rem;transition:background .15s ease-out}.nav a:hover{background:var(--card)}.nav a[aria-current=page]{color:var(--fg);border-color:var(--line);background:var(--card)}
 .banner{background:var(--warnbg);color:var(--warn);padding:.45rem 16px;font-size:.85rem}
 .askbar{display:flex;gap:.5rem;padding:.6rem 16px;border-bottom:1px solid var(--line);align-items:flex-start}
 textarea,select,button{font:inherit;color:inherit;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:.45rem .65rem;transition:background .15s ease-out,border-color .15s ease-out}
@@ -817,7 +818,7 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 @media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}.flash{animation:none}}
 </style></head><body>
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
-<div style="display:flex;gap:1rem;align-items:end"><a id="melink" href="/dashboard?user=alice" style="font-size:.85rem;color:var(--accent)">Your board</a><a id="dashlink" href="/dashboard" style="font-size:.85rem;color:var(--accent)">Admin</a><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
+<div style="display:flex;gap:1rem;align-items:center"><nav class="nav" aria-label="Pages"><a href="/" aria-current="page">Chat</a><a id="melink" href="/dashboard?user=alice">Your board</a><a id="dashlink" href="/dashboard">Admin</a></nav><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
 <div id="banner" class="banner" hidden></div>
 <div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
 <div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button></div>
@@ -979,6 +980,7 @@ main{max-width:1200px;margin:0 auto;padding:var(--s3) var(--s4) var(--s5)}
 .top{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:.5rem}
 h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 .meta{color:var(--dim);font-size:.8rem}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.nav{display:flex;gap:.2rem;padding-right:var(--s3);border-right:1px solid var(--line)}.nav a{color:var(--dim);text-decoration:none;padding:var(--s1) var(--s3);border:1px solid transparent;border-radius:6px;font-size:.85rem;transition:background .15s ease-out}.nav a:hover{background:var(--card)}.nav a[aria-current=page]{color:var(--fg);border-color:var(--line);background:var(--card)}
 .tabs{display:flex;gap:.2rem}.tabs button{background:none;border:1px solid transparent;border-radius:6px;padding:var(--s1) var(--s3);color:var(--dim);font:inherit;cursor:pointer;transition:background .15s ease-out}.tabs button:hover{background:var(--card)}
 .tabs button[aria-selected=true]{color:var(--fg);border-color:var(--line);background:var(--card)}
 .brief{margin:var(--s3) 0 var(--s3);font:1.08rem/1.4 var(--serif);text-wrap:balance;max-inline-size:90ch}.brief .meta{display:block;margin-top:var(--s1)}
@@ -1016,6 +1018,7 @@ button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:
 [hidden]{display:none!important}
 </style></head><body><main>
 <div class="top"><h1 id="h1">Research assistant · admin</h1><span class="meta" id="model"></span>
+<nav class="nav" aria-label="Pages"><a href="/" id="navChat">Chat</a><a id="navMe" href="/dashboard" hidden>Your board</a><a href="/dashboard" id="navAdmin" aria-current="page">Admin</a></nav>
 <div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-v="board">Board</button><button role="tab" aria-selected="false" data-v="tools">Try a question · keys</button></div>
 <button class="link" id="helpBtn" type="button">what is this?</button><button class="link" id="forget" type="button">forget token</button></div>
 <div id="msg" class="meta bad"></div>
@@ -1178,7 +1181,7 @@ $("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.
  const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
  out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
-(()=>{if(ME){["helpBtn","forget","help"].forEach(id=>$(id).hidden=true);document.querySelector(".tabs").hidden=true;$("login").hidden=true;const a=el("a","link","ask a question");a.href="/?user="+encodeURIComponent(ME);document.querySelector(".top").appendChild(a);load("");return;}
+(()=>{if(ME){["helpBtn","forget","help"].forEach(id=>$(id).hidden=true);document.querySelector(".tabs").hidden=true;$("login").hidden=true;$("navChat").href="/?user="+encodeURIComponent(ME);$("navMe").hidden=false;$("navMe").href="/dashboard?user="+encodeURIComponent(ME);$("navMe").setAttribute("aria-current","page");$("navAdmin").remove();document.querySelector(".nav").style.cssText="border-right:0;padding-right:0";load("");return;}
  let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
  if(!t)t=tok();if(t)load(t);else show("login");})();
 </script></body></html>"""

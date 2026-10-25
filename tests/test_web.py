@@ -375,8 +375,11 @@ def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
     admin_doc["widgets"][0]["type"] = "answers"
     assert client.put("/api/admin/layout", json={"layout": admin_doc}, headers={"X-Token": "demo"}).status_code == 400
     assert not client.delete("/api/me/layout", params={"user": "alice"}).json()["saved"]
-    # the chat page links to the user's own board
-    assert 'id="melink"' in client.get("/").text
+    # one page navigation on both pages: Chat, Your board, Admin, with the current page marked
+    chat, board = client.get("/").text, client.get("/dashboard").text
+    assert 'aria-label="Pages"' in chat and 'aria-label="Pages"' in board
+    assert '<a href="/" aria-current="page">Chat</a>' in chat and 'id="melink"' in chat and 'id="dashlink"' in chat
+    assert 'id="navChat"' in board and 'id="navAdmin" aria-current="page"' in board
 
 
 def test_a_stored_answer_replays_for_its_owner_without_the_model(web):
