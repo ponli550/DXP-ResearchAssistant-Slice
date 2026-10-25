@@ -9,7 +9,7 @@ import os
 import re
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from .answer import ask
@@ -591,7 +591,24 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         ).fetchone()
         if not row:
             raise HTTPException(403, "No access to this page, or it does not exist.")
-        return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None}
+        has_file = bool(con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"])
+        return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None,
+                "pdf": f"/files/{doc_id}?user={user}#page={p}" if has_file else None}
+
+    @app.get("/files/{doc_id}")
+    def file(doc_id: int, user: str):
+        """The original PDF, for a user who holds a grant on its library. Open at a page with #page=N."""
+        con = db()
+        row = con.execute(
+            "SELECT d.title, d.source FROM documents d JOIN grants g ON g.library_id = d.library_id AND g.user = ? WHERE d.id = ?",
+            (user, doc_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(403, "No access to this document, or it does not exist.")
+        if not row["source"] or not os.path.exists(row["source"]):
+            raise HTTPException(404, "The original file is not on this server.")
+        return FileResponse(row["source"], media_type="application/pdf", filename=os.path.basename(row["source"]),
+                            content_disposition_type="inline", headers={"Cache-Control": "private, no-store"})
 
     @app.get("/api/audit")
     def audit(user: str):
@@ -796,6 +813,7 @@ ol{padding-left:1.2rem;margin:.4rem 0}li{margin:.6rem 0}
 #zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:4px;z-index:3;touch-action:auto}#zoom button{width:2.2rem;padding:.3rem 0;text-align:center}
 #pane{position:fixed;top:0;right:0;height:100%;width:min(520px,100%);background:var(--card);border-left:1px solid var(--line);z-index:10;transform:translateX(102%);transition:transform .5s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:.8rem 1rem}
 #pane.open{transform:none}#pane header{display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.5rem}
+a.pdf{font-size:.82rem;color:var(--accent);margin-right:.5rem}#pnote{margin:.5rem 0 0}
 pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;overflow:auto;flex:1}mark{background:var(--mark);color:inherit;border-radius:3px}
 #tabs{display:flex;gap:.25rem;padding:.35rem 16px 0;border-bottom:1px solid var(--line)}
 #tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:.35rem .8rem;color:var(--muted)}
@@ -827,7 +845,7 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
 <div id="canvas"></div></div>
 <div id="steps" hidden aria-label="Investigation steps"><div class="grid"><nav id="rail" aria-label="Steps"></nav><div id="steplist"><p class="muted">Ask a question to see how the answer was found.</p></div></div></div>
-<aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><button id="pclose" aria-label="Close">Close</button></header><pre id="ptext"></pre></aside>
+<aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><span><a id="ppdf" class="pdf" target="_blank" rel="noopener" hidden>Open the PDF at this page</a> <button id="pclose" aria-label="Close">Close</button></span></header><pre id="ptext"></pre><p class="muted" id="pnote">Extracted text of the page, with the quote marked. The PDF link opens the original file at the same page.</p></aside>
 <script>
 const $=id=>document.getElementById(id);
 const el=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Object.entries(p)){if(a==="class")e.className=v;else if(a in e)e[a]=v;else e.setAttribute(a,v)}k.flat().forEach(x=>e.append(x));return e};
@@ -855,7 +873,7 @@ $("zin").onclick=()=>zoomAt(1.2,stage.clientWidth/2,stage.clientHeight/2);$("zou
 addEventListener("resize",()=>nodes.length&&spy());
 /* page pane */
 async function showPage(c){try{const u=new URLSearchParams({user:$("user").value,doc_id:c.doc_id,p:c.page,quote:c.quote||""});const j=await api("/api/page?"+u);
-  $("phead").textContent=j.title+", page "+j.page;const pre=$("ptext");pre.replaceChildren();$("pane").classList.add("open");
+  $("phead").textContent=j.title+", page "+j.page;const pre=$("ptext");pre.replaceChildren();$("pane").classList.add("open");const pl=$("ppdf");pl.hidden=!j.pdf;if(j.pdf)pl.href=j.pdf;
   if(j.span){pre.append(j.text.slice(0,j.span[0]),el("mark",{textContent:j.text.slice(j.span[0],j.span[1])}),j.text.slice(j.span[1]));const m=pre.querySelector("mark");pre.scrollTop=Math.max(0,m.offsetTop-pre.clientHeight/3)}else pre.textContent=j.text}
   catch(e){$("phead").textContent=e.message;$("ptext").textContent="";$("pane").classList.add("open")}}
 $("pclose").onclick=()=>$("pane").classList.remove("open");

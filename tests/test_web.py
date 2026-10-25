@@ -416,3 +416,16 @@ def test_admin_adds_a_user_as_a_name_plus_grants(web):
     llm.responses = [[good(doc)]]
     assert client.post("/api/ask", json={"user": "carol", "question": "How did palm oil output change?"}).json()["status"] in ("answered", "not_found")
     assert 'id="newuser"' in client.get("/dashboard").text
+
+
+def test_the_original_pdf_is_served_only_behind_the_grant(web):
+    client, llm, doc, memo, path = web
+    r = client.get(f"/files/{doc}", params={"user": "alice"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("application/pdf") and r.content[:4] == b"%PDF"
+    assert "inline" in r.headers["content-disposition"] and r.headers["cache-control"] == "private, no-store"
+    assert client.get(f"/files/{memo}", params={"user": "alice"}).status_code == 403  # alice holds no grant on the restricted library
+    assert client.get(f"/files/{memo}", params={"user": "bob"}).status_code == 200
+    assert client.get("/files/999", params={"user": "alice"}).status_code == 403
+    page = client.get("/api/page", params={"user": "alice", "doc_id": doc, "p": 1}).json()
+    assert page["pdf"] == f"/files/{doc}?user=alice#page=1"
+    assert 'id="ppdf"' in client.get("/").text

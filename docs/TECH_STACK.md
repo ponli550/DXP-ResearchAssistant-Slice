@@ -162,7 +162,9 @@ Defence in depth: even if a page id is guessed, the join on grants returns nothi
         ).fetchone()
         if not row:
             raise HTTPException(403, "No access to this page, or it does not exist.")
-        return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None}
+        has_file = bool(con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"])
+        return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None,
+                "pdf": f"/files/{doc_id}?user={user}#page={p}" if has_file else None}
 ```
 
 ### 6. The scoring that decides whether an answer counts
