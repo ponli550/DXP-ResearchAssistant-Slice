@@ -362,7 +362,7 @@ def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
     assert client.get("/api/me/board", params={"user": "nobody"}).status_code == 404
 
     lay = client.get("/api/me/layout", params={"user": "alice"}).json()
-    assert lay["owner"] == "user:alice" and [w["type"] for w in lay["layout"]["widgets"]] == ["answers", "usage", "ratings", "reviews"]
+    assert lay["owner"] == "user:alice" and [w["type"] for w in lay["layout"]["widgets"]] == ["library", "answers", "usage", "ratings", "reviews"]
     doc_ = lay["layout"]
     doc_["widgets"][0]["span"] = 12
     assert client.put("/api/me/layout", json={"user": "alice", "layout": doc_}).json()["saved"]
@@ -429,3 +429,29 @@ def test_the_original_pdf_is_served_only_behind_the_grant(web):
     page = client.get("/api/page", params={"user": "alice", "doc_id": doc, "p": 1}).json()
     assert page["pdf"] == f"/files/{doc}?user=alice#page=1"
     assert 'id="ppdf"' in client.get("/").text
+
+
+def test_the_library_widget_lists_only_granted_reports_with_edition_and_links(web):
+    client, llm, doc, memo, path = web
+    llm.responses = [[good(doc)]]
+    client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"})
+    lib = client.get("/api/me/widget/library", params={"user": "alice"}).json()["library"]
+    assert [r["title"] for r in lib] == ["Sector Outlook 2025"]  # not the restricted memo
+    r = lib[0]
+    assert r["pages"] == 1 and r["cited"] == 1 and r["pdf"] == f"/files/{doc}?user=alice" and r["edition"] == [0, 0, ""]
+    bob = client.get("/api/me/widget/library", params={"user": "bob"}).json()["library"]
+    assert {r["title"] for r in bob} == {"Sector Outlook 2025", "Strategy Memo"} and all(r["cited"] == 0 for r in bob)
+    assert 'id="libFilter"' in client.get("/dashboard").text
+
+
+def test_edition_is_read_from_the_title_and_sorted_newest_first(tmp_path):
+    from ra.web import user_board
+    from tests.pdfmaker import make_pdf
+
+    con = connect(str(tmp_path / "e.db"))
+    for title in ("Monitor April 2024", "Monitor October 2025", "Monitor June 2015"):
+        ingest_pdf(con, "wb", title, make_pdf(tmp_path / (title + ".pdf"), [["Growth was 4.1 percent in 2025."]]))
+    con.execute("INSERT INTO grants VALUES ('alice','wb')")
+    con.commit()
+    lib = user_board(con, "alice", "m", ["library"])["library"]
+    assert [r["edition"][2] for r in lib] == ["October 2025", "April 2024", "June 2015"]

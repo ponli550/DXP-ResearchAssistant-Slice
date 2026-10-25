@@ -374,6 +374,7 @@ WIDGETS = {
 }
 # The user catalogue: four widgets, each something MARC Online does not show. Same document shape, same rules.
 USER_WIDGETS = {
+    "library": {"title": "Your library", "span": 12},
     "answers": {"title": "Your recent answers", "span": 8},
     "usage": {"title": "Your usage", "span": 4},
     "ratings": {"title": "Your ratings", "span": 6},
@@ -425,7 +426,7 @@ def get_layout(con, owner, catalogue=WIDGETS):
     return {"owner": owner, "layout": json.loads(row["doc"]), "saved": True, "updated_at": row["updated_at"], "catalogue": catalogue}
 
 
-USER_WIDGET_PARTS = {"answers": ("answers",), "usage": ("usage",), "ratings": ("ratings",), "reviews": ("reviews",)}
+USER_WIDGET_PARTS = {"library": ("library",), "answers": ("answers",), "usage": ("usage",), "ratings": ("ratings",), "reviews": ("reviews",)}
 USER_HEAD_PARTS = ("now", "brief", "usage", "ratings", "reviews")
 
 
@@ -443,6 +444,27 @@ def user_board(con, user, model_name, parts=None):
         libs = [r["name"] for r in con.execute("SELECT l.name FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user=? ORDER BY l.name", (user,))]
         out["usage"] = {"user": user, "asked": len(rows), "answered": answered, "not_found": len(rows) - answered, "model": model_name,
                         "libraries": libs, "first_at": rows[-1]["at"] if rows else None, "last_at": rows[0]["at"] if rows else None}
+    if need("library"):
+        # Every report the user may search, newest edition first, with how often their own answers cited it.
+        from .retrieve import EDITION_RE, MONTHS
+        cited = {}
+        for r in rows:
+            for c in r["cited"].split(","):
+                if c:
+                    did = int(c.split(":")[0])
+                    cited[did] = cited.get(did, 0) + 1
+        low = {r["doc_id"]: r["n"] for r in con.execute("SELECT doc_id, COUNT(*) AS n FROM pages WHERE low_text = 1 GROUP BY doc_id")}
+        docs = con.execute(
+            "SELECT d.id, d.title, d.pages, d.source, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id "
+            "JOIN grants g ON g.library_id = d.library_id AND g.user = ? ORDER BY l.name, d.title", (user,)).fetchall()
+        def edition(title):
+            m = EDITION_RE.search(title)
+            return [int(m.group(2)), MONTHS.index(m.group(1).lower()) + 1, m.group(1).title() + " " + m.group(2)] if m else [0, 0, ""]
+        items = [{"id": d["id"], "title": d["title"], "library": d["library"], "pages": d["pages"], "low_text_pages": low.get(d["id"], 0),
+                  "cited": cited.get(d["id"], 0), "edition": edition(d["title"]), "pdf": f"/files/{d['id']}?user={user}" if d["source"] else None}
+                 for d in docs]
+        items.sort(key=lambda x: (x["library"], -x["edition"][0], -x["edition"][1], x["title"]))
+        out["library"] = items
     if need("answers"):
         out["answers"] = [{"at": r["at"], "question": r["question"], "status": r["status"], "audit_id": r["id"],
                            "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
@@ -972,7 +994,7 @@ async function replay(id){$("go").disabled=true;try{const j=await api("/api/answ
     nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call"}
   catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
 loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
-  if(u.get("q"))$("q").value=u.get("q").slice(0,500);placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
+  if(u.get("q")){$("q").value=u.get("q").slice(0,500);$("q").focus();$("q").setSelectionRange($("q").value.length,$("q").value.length);}placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """
 
@@ -1009,6 +1031,8 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 @media(max-width:900px){.panel,.panel[data-x]{grid-column:span 12}}
 h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);font:inherit;letter-spacing:0;text-transform:none;padding:0 var(--s1);cursor:pointer;margin-left:auto}h2 .exp:hover{border-color:var(--line)}h2 .exp[aria-pressed=true]{color:var(--accent)}
 .panel.open table{width:auto;min-width:60%}.panel.open table:has(td.wrap){width:100%}td.wrap{white-space:normal}
+.panel td a{color:var(--accent);text-decoration:none}.panel td a:hover{text-decoration:underline}
+.filter{width:100%;max-width:28rem;margin:0 0 var(--s2);font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
 .layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
 h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
@@ -1103,6 +1127,7 @@ const T={
  runs:{title:"Runs",sub:'<span>wrong and confident</span>',body:'<table id="runs"></table>'},
  users:{title:"Users",sub:'<span id="usersN"></span>',body:'<table id="users"></table>'},
  people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'},
+ library:{title:"Your library",sub:'<span id="libN"></span>',body:'<input id="libFilter" class="filter" placeholder="Filter by title or year" aria-label="Filter reports"><table id="library"></table>'},
  answers:{title:"Your recent answers",sub:'<span id="ansN"></span>',body:'<table id="answers"></table>'},
  usage:{title:"Your usage",sub:'<span id="useN"></span>',body:'<table id="myuse"></table><p class="meta" id="mylibs"></p>'},
  ratings:{title:"Your ratings",sub:'<span id="ratN"></span>',body:'<table id="ratings"></table>'},
@@ -1113,10 +1138,11 @@ let LAYOUT=null,CAT={},OWNER=ME?"user:"+ME:"admin";
 function api(path){if(!ME)return path;return path.replace("/api/admin/","/api/me/")+(path.includes("?")?"&":"?")+"user="+encodeURIComponent(ME);}
 function hdr(extra){return Object.assign(ME?{}:{"X-Token":tok()},extra||{});}
 function buildGrid(){const g=$("grid");g.textContent="";
- LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
+ LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const home=CAT[w.type]?CAT[w.type].span:4;const open=w.span===12&&home!==12;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
   if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
-  const h=el("h2");h.innerHTML=t.title+" "+t.sub;const b=el("button","exp",w.span===12?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",w.span===12?"true":"false");b.setAttribute("aria-label",(w.span===12?"Shrink ":"Expand ")+t.title);
-  b.onclick=()=>toggle(i);h.appendChild(b);p.appendChild(h);const body=el("div","pbody");body.innerHTML=t.body;p.appendChild(body);if(w.span===12)p.classList.add("open");p.dataset.type=w.type;if(!DATA[w.type])p.classList.add("skel");g.appendChild(p);if(DATA[w.type])fillWidget(w.type);else watch(p);});
+  const h=el("h2");h.innerHTML=t.title+" "+t.sub;p.appendChild(h);
+  if(home!==12){const b=el("button","exp",open?"shrink":"expand");b.type="button";b.setAttribute("aria-pressed",open?"true":"false");b.setAttribute("aria-label",(open?"Shrink ":"Expand ")+t.title);b.onclick=()=>toggle(i);h.appendChild(b);}
+  const body=el("div","pbody");body.innerHTML=t.body;p.appendChild(body);if(open)p.classList.add("open");p.dataset.type=w.type;if(!DATA[w.type])p.classList.add("skel");g.appendChild(p);if(DATA[w.type])fillWidget(w.type);else watch(p);});
  let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
  n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
  if(LAYOUT.saved){const r=el("button","link","reset to default");r.type="button";r.onclick=resetLayout;n.appendChild(r);}}
@@ -1153,6 +1179,13 @@ const FILL={
  runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
  users(d){ setT("usersN",d.usage.users.length); fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet."); },
  people(d){ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open"); const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)]))); fillT("people",prow,null,"No open review requests and no thumbs-down reasons."); },
+ library(d){ setT("libN",d.library.length+" report"+(d.library.length===1?"":"s")+" you may search");
+  const draw=()=>{const f=($("libFilter")?$("libFilter").value:"").trim().toLowerCase();const rows=d.library.filter(r=>!f||(r.title+" "+r.library+" "+r.edition[2]).toLowerCase().includes(f));
+   fillT("library",rows.map(r=>{const row=tr([td("t mono",r.edition[2]||"undated"),td("q",r.title,r.title),td("dim",r.library),td("n",r.pages),td("n dim",r.low_text_pages?r.low_text_pages+" ocr":"","pages flagged for OCR"),td("n dim",r.cited?r.cited+" cited":"","times your answers cited it")]);
+    const c=el("td");if(r.pdf){const a=el("a","dim","PDF");a.href=r.pdf;a.target="_blank";a.rel="noopener";c.appendChild(a);c.appendChild(document.createTextNode(" "));}
+    const ask=el("a","","ask");ask.href="/?user="+encodeURIComponent(ME)+"&q="+encodeURIComponent("What does the "+(r.edition[2]?r.edition[2]+" edition":r.title)+" say about ");ask.title="Open the chat with this report named, so the search stays inside it";c.appendChild(ask);row.appendChild(c);return row;}),
+    isOpen("library")?["edition","title","library",">pages","",">cited",""]:null,f?"No report matches that filter.":"No library grants yet; ask the admin.");};
+  draw();const inp=$("libFilter");if(inp&&!inp.dataset.wired){inp.dataset.wired="1";inp.addEventListener("input",draw);} },
  answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&a="+r.audit_id;a.title="Shows the stored answer; no model call";const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
  usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
  ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("q w dim",r.reason||"",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
