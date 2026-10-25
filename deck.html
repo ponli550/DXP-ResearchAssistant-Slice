@@ -177,7 +177,7 @@
       '<div class="stack"><h3 class="ok">Expected outcome at week 10</h3>' + cards("ok", [
         "<b>Minutes, not hours.</b> One question searches the whole permitted library and returns a cited answer.",
         "<b>Every claim has a page.</b> Click a citation and see the quote highlighted on the real page.",
-        "<b>No confident errors.</b> Wrong-and-confident measured on an agreed question set. Target zero.",
+        "<b>No false figures.</b> Measured on an agreed question set: zero figures stated that the page does not say. An answer beside the point goes to review, and is counted.",
         "<b>Access that cannot leak.</b> A user only ever sees passages from libraries they are granted.",
         "<b>A go or no-go number.</b> Pilot data that sizes the enterprise build, or shows cheaply why not."]) + '</div></div>',
       note: "Left is from the brief. Right is our proposal of what success means; the client has to agree it, especially the last row. Ask which of the five matters most." },
@@ -269,14 +269,14 @@
       title("Technology: what we propose and why") +
       table("sm wrap", ["Layer", "Pilot choice", "Why", "In the slice today"], [
         ["Back end", "Python, FastAPI", "Strong PDF and evaluation libraries, typed API, easy to test", "{ok}Same"],
-        ["Store and search", "PostgreSQL with pgvector, beside MARC Online’s database", "Passages, vectors and audit in one store; entitlements and metadata synced from theirs. If their engine is PostgreSQL, same instance", "{warn}SQLite FTS5, keyword only"],
+        ["Store and search", "PostgreSQL with pgvector, our own, encrypted at rest", "Passages, vectors and audit in one store. Nothing read from or written to MARC Online; metadata and entitlements come from the API you license to us", "{warn}SQLite FTS5, keyword only"],
         ["PDF reading", "poppler page extraction, OCR fallback, table extraction", "Keeps page numbers, which citations need; reading-order mode handles two-column pages", "{warn}poppler only, OCR flagged not run"],
         ["Model", "Any Anthropic or OpenAI-compatible model, behind a thin interface", "Provider, region and retention decided with you in week 1. One adapter file to swap", "{ok}Measured on Qwen 3.8 27B, Gemini 4 Argon and Claude Sonnet 5.5, one adapter"],
         ["Front end", "React web app", "Chat, page viewer and admin screens need component state and accessibility work", "{warn}One plain HTML page"],
         ["Files", "Private object storage", "Original PDFs, page images, retention rules", "{warn}Local files"],
-        ["Login", "Your single sign-on, else email login", "Matches how your customers already sign in", "{danger}Demo user picker"],
-        ["Hosting", "Decided with you in week 1: your cloud, on-prem, or a Malaysian region", "Data residency for paid research decides this, not us", "{danger}Laptop"]]) +
-      '<p class="dim" style="font-size:15px">The gate, the answer loop, the trace, the access rule and the question set carry over unchanged when the store and front end are swapped, because they depend on a retrieval function and a model interface, not on SQLite or on the page.</p>',
+        ["Login", "Our app’s login: your identity provider if you allow it, else invited users", "A standalone system; nothing changes in MARC Online", "{danger}Demo user picker"],
+        ["Hosting", "Our own, in a Malaysian region unless you say otherwise", "Licensed research text: encrypted, access-logged, retained on your terms, never sent to a model provider without your consent", "{danger}Laptop"]]) +
+      '<p class="dim" style="font-size:14px">The gate, loop, trace, access rule and question set carry over unchanged when store and front end are swapped: they depend on a retrieval function and a model interface, not on SQLite or the page.</p>',
       note: "The right column is deliberate: the slice used the lightest thing that proves each idea. Migration is weeks 2 to 3 and does not touch the parts that matter. A mandated cloud or provider changes two rows and nothing else." },
 
     { sec: "TECHNOLOGY", html:
@@ -322,9 +322,9 @@
       title("The 10-week plan") +
       table("sm wrap", ["Weeks", "Milestone", "Work", "Done when"], [
         ["1", "<b>Discovery and first measurement</b>", "Five sample reports ingested and the 22-question harness run on them, three times. Pilot series, users and gate thresholds agreed. Provider, region, retention decided. Question set drafting starts with your staff.", "Wrong-and-confident measured on your reports. Client signs off series, gates and provider."],
-        ["2 to 3", "<b>Connect to MARC Online and ingest its reports</b>", "Read entitlements, issuers and report metadata from your database. PostgreSQL with vectors and full-text. OCR path. Ingestion quality report. Edition and sector filters.", "Right page in the top results for the agreed retrieval questions on your reports."],
-        ["4 to 5", "<b>Answer and verify</b>", "Comparison questions rewritten per report. Follow-up rewriting. Table extraction and citation. Citation page viewer. React front end.", "No unverified claim reaches a user. Cross-report questions answered."],
-        ["6", "<b>Access and admin</b>", "Single sign-on or email login. Roles and library grants. Admin upload, replace, retire. Audit log export.", "Every access question in the set is refused correctly."],
+        ["2 to 3", "<b>Our store, your data</b>", "Ingest the reports and metadata from the API and samples you license to us; nothing touches MARC Online. PostgreSQL with vectors and full-text, encrypted storage, access logging. OCR path. Ingestion quality report. Edition and sector filters.", "Right page in the top results for the agreed retrieval questions on your reports."],
+        ["4 to 5", "<b>Answer and verify</b>", "Comparison questions asked one side at a time and joined in plain code: the one failure three models share. Follow-up rewriting. Table extraction and citation. Citation page viewer. React front end.", "No unverified claim reaches a user. Both sides of every comparison cited."],
+        ["6", "<b>Access and admin</b>", "Login to our app. Roles and library grants from your subscriber export. Admin upload, replace, retire. Audit log export. Buffer week: the admin and user boards are already built.", "Every access question in the set is refused correctly."],
         ["7", "<b>Evaluate</b>", "Evaluation dashboard on the full question set. Feedback loop into the set. Baseline timing of five questions done by hand.", "Dashboard runs on every change. Baseline recorded."],
         ["8 to 9", "<b>Pilot</b>", "Real users on the pilot library. Track questions, share with verified citations, ratings, time versus baseline, cost per question. Fix what the pilot finds.", "Two weeks of pilot data collected."],
         ["10", "<b>Gate and handover</b>", "Results against the agreed thresholds. Enterprise sizing from measured volume and cost. Runbook, tests and question set handed over.", "Go or no-go decision made on measured results."]]) +
@@ -361,10 +361,10 @@
       title("What we need to ask you before week 1") +
       '<div class="cols c3 qa">' +
       card("", '<h3>Workflow</h3><ul><li>Who answers cross-report questions today, how often, and how long does one take?</li><li>What are the five most common questions customers ask?</li><li>Who reviews an answer before a customer sees it?</li></ul>') +
-      card("", '<h3>The library</h3><ul><li>Which report series is the pilot, and how many reports and pages does it hold?</li><li>Which database engine sits behind MARC Online? Can we have read access or an export, and a dev tenant like the one we saw?</li><li>Can we have the PDFs for the issues in that tenant, including the oldest still sold and the most table-heavy?</li></ul>') +
+      card("", '<h3>The library</h3><ul><li>Which report series is the pilot, and how many reports and pages does it hold?</li><li>What does the API licence expose: reports, metadata, issuers, subscriber entitlements? Rate limits and terms?</li><li>Can we have sample PDFs with their metadata, including the oldest still sold and the most table-heavy?</li></ul>') +
       card("", '<h3>People and grading</h3><ul><li>Who from the research team will help write and grade 60 to 100 questions, and how much time can they give?</li><li>Who are the pilot users, and are any of them customers?</li><li>What rating, time saving and cost per question would justify an enterprise build?</li></ul>') +
-      card("", '<h3>Data and providers</h3><ul><li>May paid research text go to a third-party model API, and in which region? This decides provider and hosting before anything else.</li><li>Are there retention or no-training terms we must meet?</li><li>Are report entitlements contractual per customer, so access is a compliance matter?</li></ul>') +
-      card("", '<h3>Access and environment</h3><ul><li>Will your team add one script tag to MARC Online in week 1? If not, the pilot runs as a browser extension on pilot users’ machines.</li><li>Do we host on our cloud or yours? Who provisions accounts and network access?</li><li>Who else should query this besides subscribers: analysts in an AI assistant, MARC Data?</li></ul>') +
+      card("", '<h3>Data and providers</h3><ul><li>May paid research text go to a third-party model API, and in which region? This decides provider and hosting before anything else.</li><li>Retention, no-training and encryption terms for licensed text? Who audits that we meet them?</li><li>Are report entitlements contractual per customer, so access is a compliance matter?</li></ul>') +
+      card("", '<h3>Access and environment</h3><ul><li>We never touch MARC Online. Pilot users open our app beside it: is that acceptable for the pilot?</li><li>Login through your identity provider, or users we invite? Where does the subscriber list come from?</li><li>Who else should query this besides subscribers: analysts in an AI assistant, MARC Data?</li></ul>') +
       card("soft", '<h3>Blocks week 1</h3><ul><li>Five sample reports, this week</li><li>A named research contact for the question set</li><li>A decision on provider and region</li><li>A named client sponsor who can sign off the gates</li></ul>') + '</div>',
       note: "Assign each box to one team member to ask. Write the answers down in the meeting; they feed the assumptions slide. The pink box is the ask to close on." },
 
@@ -379,14 +379,14 @@
         "Nice-to-haves: history, filters, admin, feedback, tables, roles. Project length is 10 weeks."]) + '</div>' +
       '<div class="stack">' + card("warn", '<h3 class="warn">We are assuming</h3>') + cards("", [
         "Reports are mostly born-digital English PDFs, like the World Bank set we tested on. Scanned pages are a minority.",
-        "MARC Online is the system of record for users, purchases and report metadata, and we can read it. The pilot series is hundreds of reports, not tens of thousands.",
+        "MARC Online stays the system of record and we never read it; what we need arrives through the API licence and sample data. The pilot series is hundreds of reports, not tens of thousands.",
         "An API model provider is acceptable with no-training and regional terms. Self-hosting is not required.",
         "Research staff can give about half a day a week to the question set in weeks 1 to 7.",
-        "A standalone pilot site is acceptable; no portal integration in 10 weeks."]) + '</div>' +
+        "A standalone system is what you want: we build our own store and front end and never touch MARC Online."]) + '</div>' +
       '<div class="stack">' + card("soft", '<h3>Must confirm with you</h3>') + cards("", [
-        "Which report series, how many reports, who the pilot users are, and a dev tenant for the team.",
+        "Which report series, how many reports, who the pilot users are.",
         "Model provider, hosting region, data retention and no-training terms.",
-        "The database engine behind MARC Online, and whether we get read access or an export.",
+        "What the API licence exposes and the sample data we get. We never read MARC Online’s database.",
         "The week 10 thresholds: time saving, rating and cost per question that justify an enterprise build.",
         "Whether library boundaries are contractual, which makes access a compliance matter, not only a feature."]) + '</div></div>' +
       '<p class="dim" style="font-size:14px">The brief gave no volumes, library size or thresholds; nothing on this slide is a measured client fact.</p>',
