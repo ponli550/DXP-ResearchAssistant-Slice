@@ -449,10 +449,13 @@ def user_board(con, user, model_name, parts=None):
     out = {"now": now.isoformat(timespec="seconds")}
     rows = con.execute("SELECT id, at, question, status, cited FROM audit WHERE user=? ORDER BY id DESC", (user,)).fetchall()
     answered = sum(1 for r in rows if r["status"] == "answered")
+    # Analysis cells are answers too, and count, but they are listed under their analysis, not as recent questions.
+    in_analysis = {r["audit_id"] for r in con.execute("SELECT audit_id FROM analysis_cells WHERE audit_id IS NOT NULL")}
     if need("usage", "brief"):
         libs = [r["name"] for r in con.execute("SELECT l.name FROM libraries l JOIN grants g ON g.library_id = l.id AND g.user=? ORDER BY l.name", (user,))]
         out["usage"] = {"user": user, "asked": len(rows), "answered": answered, "not_found": len(rows) - answered, "model": model_name,
-                        "libraries": libs, "first_at": rows[-1]["at"] if rows else None, "last_at": rows[0]["at"] if rows else None}
+                        "libraries": libs, "first_at": rows[-1]["at"] if rows else None, "last_at": rows[0]["at"] if rows else None,
+                        "from_analyses": sum(1 for r in rows if r["id"] in in_analysis)}
     if need("library"):
         # Every report the user may search, newest edition first, with how often their own answers cited it.
         from .retrieve import EDITION_RE, MONTHS
@@ -479,7 +482,7 @@ def user_board(con, user, model_name, parts=None):
                            for r in con.execute("SELECT id, name, status, created_at FROM analyses WHERE user=? ORDER BY id DESC", (user,))]
     if need("answers"):
         out["answers"] = [{"at": r["at"], "question": r["question"], "status": r["status"], "audit_id": r["id"],
-                           "citations": len([c for c in r["cited"].split(",") if c])} for r in rows[:12]]
+                           "citations": len([c for c in r["cited"].split(",") if c])} for r in rows if r["id"] not in in_analysis][:12]
     if need("ratings", "brief"):
         fb = con.execute("SELECT f.at, f.rating, f.reason, a.question FROM feedback f JOIN audit a ON a.id = f.audit_id WHERE f.user=? ORDER BY f.id DESC", (user,)).fetchall()
         out["ratings"] = {"up": sum(1 for r in fb if r["rating"] == "up"), "down": sum(1 for r in fb if r["rating"] == "down"),
@@ -1373,7 +1376,7 @@ const FILL={
  analyses(d){ setT("anaN",d.analyses.length+" saved"); fillT("analyses",d.analyses.map(a=>{const row=tr([td("",a.name),td(a.status==="done"?"ok":(a.status==="failed"?"bad":"dim"),a.status),td("t",hm(a.created_at))]);const c=el("td");const o=el("a","","open");o.href="#analysis="+a.id;o.onclick=e=>{e.preventDefault();openAnalysis(a.id);};c.appendChild(o);row.appendChild(c);return row;}),null,"No analyses yet. Make one below: your questions, run across the reports you choose.");
   anaFormInit();const h=location.hash.match(/analysis=(\d+)/);if(h)openAnalysis(+h[1]); },
  answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&a="+r.audit_id;a.title="Shows the stored answer; no model call";const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
- usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
+ usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","of which, cells of your analyses"),td("n dim",u.from_analyses)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
  ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("q w dim",r.reason||"",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
  reviews(d){ setT("revN",d.reviews.open+" open"); fillT("reviews",d.reviews.recent.map(r=>tr([td("t",hm(r.at)),td(r.status==="open"?"bad":"ok",r.status),td("q",r.question,r.question),td("q w dim",r.note||"",r.note||"")])),null,"No review requests. Ask for one when an answer needs a person."); },
  timeline(d){ if($("tl"))timeline(d.graph); }};

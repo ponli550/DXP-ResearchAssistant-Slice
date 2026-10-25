@@ -82,7 +82,14 @@ Expand a panel (Runs or Recent) to show the layout document at work: more column
 
 ## 6. The user's own board (`/dashboard?user=alice`)
 
-Four widgets, nothing about other users: recent answers that open in the chat, usage and the libraries she may search, her ratings, her review requests. Say that this is the "history" and "dashboard" from the brief, that the layout is a JSON document per user, and that the widget catalogue is code.
+The user flow, in the order MARC described it: see the dashboard, find a document, ask, check the source, open the PDF, run an analysis.
+
+- **Your library**, top of the board: six reports, newest first. Type "2025" in the filter. Click **PDF** on the October 2025 edition: the original file opens. Click **ask**: the chat opens with "What does the October 2025 edition say about " typed and the cursor waiting; the search stays inside that edition.
+- **Check the source** from any answer: "Show the quote", then the citation chip, then "Open the PDF at this page" in the viewer. Three steps from a claim to the page in the real document.
+- **Your analyses**: open "Growth outlook by edition", seeded before the meeting. Two questions down, five editions across, each cell a checked claim with its page or "not found", and every cell opens as a stored answer. Then show the form: name, one question per line, tick the reports, and the cost line ("2 questions × 5 reports = 10 model calls, about 2 min"). Do not run one live unless there is time to wait; a run polls and fills in cell by cell, which is fine to leave running in a second tab.
+- Then recent answers, usage, ratings, review requests. Say that this is the "history", "dashboard" and "analysis" from the brief, that the layout is a JSON document per user, and that the widget catalogue is code.
+
+What to say about analyses, honestly: it is the same pipeline many times, not a summary. Cells are blank where the model refused, and on the small model that is often. The point is that nothing in the table is unverified.
 
 ## Questions MARC may ask, and the honest answer
 

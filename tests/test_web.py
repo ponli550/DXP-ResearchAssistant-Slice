@@ -483,6 +483,9 @@ def test_an_analysis_runs_every_question_inside_each_chosen_report_and_stores_th
     assert client.post("/api/me/analyses", json={"user": "alice", "name": "x", "questions": [], "doc_ids": [doc]}).status_code == 400
     assert client.post("/api/me/analyses", json={"user": "alice", "name": "x", "questions": ["q"] * 11, "doc_ids": [doc]}).status_code == 400
     assert client.get("/api/me/widget/analyses", params={"user": "bob"}).json()["analyses"][0]["status"] == "done"
+    # cells count as questions but do not crowd the recent list
+    me = client.get("/api/me/board", params={"user": "bob", "parts": "usage,answers"}).json()
+    assert me["usage"]["asked"] == 4 and me["usage"]["from_analyses"] == 4 and me["answers"] == []
     assert client.delete(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).json() == {"deleted": a["id"]}
     assert client.get(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).status_code == 404
     assert 'id="anaForm"' in client.get("/dashboard").text
