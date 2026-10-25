@@ -114,6 +114,7 @@
   #stage.accent .prog { background: var(--almond); }
   .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 8px; font-size: 15px; line-height: 1.4; }
   #stage.notes .note { display: block; }
+.b{opacity:0;transform:translateY(6px)}table tr,.card{transition:opacity .25s ease-out,transform .25s ease-out}@media (prefers-reduced-motion:reduce){table tr,.card{transition:none}}
 </style>
 </head>
 <body>
@@ -242,16 +243,18 @@
     // ---------- 3 WHAT EXISTS ----------
     { sec: "WHAT EXISTS", theme: "panel", html:
       title("What runs today: a working demo slice") +
-      '<p class="dim">Built on five public World Bank Malaysia Economic Monitor reports, about 490 pages. 73 automated tests. Not a prototype on your documents yet.</p>' +
-      table("wrap", ["Part", "State", "Note"], [
-        ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "Core pipeline. No runtime dependencies beyond the standard library."],
-        ["Evaluation harness and 22-question set", "{ok}Built", "Baselines scored. Three real models, nineteen runs, see next slide."],
-        ["Web demo: canvas, steps view, feedback, review request", "{ok}Built", "Checked in headless Chrome and jsdom. Camera and drag not exercised."],
-        ["Real-model run on the question set", "{ok}Run, nineteen times", "Three models. No false figure in any run. Small model timid; large models answer beside the point once or twice a run, with a true figure."],
-        ["Cross-report comparison questions", "{warn}Retrieved, split", "Both reports reach the model. The small model declines to compare; the large ones answer two of three."],
-        ["Embeddings, OCR, production login", "{danger}Not started", "Weeks 2 to 6 of the plan."]]) +
-      '<p class="dim" style="font-size:14px">Status as of 25 October 2026</p>',
-      note: "Do not oversell. It proves the design works end to end on real reports. It does not prove answer quality and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
+      '<p class="dim">Five public World Bank Malaysia Economic Monitor reports, about 490 pages. 87 automated tests. Real reports, not yet yours.</p>' +
+      table("wrap sm", ["Part", "State", "Note"], [
+        ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "The core. A model that goes down is a recorded refusal, not an error."],
+        ["Chat: sources, checks, cited answer, quote on the page, the PDF at that page", "{ok}Built", "Three clicks from a claim to the page in the real document."],
+        ["History, library, analyses", "{ok}Built", "Every answer replays without a model call. Your questions run across the editions you choose; every cell is checked."],
+        ["Boards: user and admin, add user, API keys, layouts as documents", "{ok}Built", "Counts and names, never answer text. One JSON document per owner."],
+        ["Evaluation: 22 questions, three models, nineteen runs", "{ok}Measured", "No false figure. See next slide."],
+        ["Cross-report comparisons", "{warn}Split", "Small model declines; large ones answer with one true side. Week 2 to 3 item."],
+        ["PostgreSQL, React, OCR, encryption, your login", "{danger}Not started", "Weeks 2 to 6. The parts above carry over unchanged."]]) +
+      '<p class="dim" style="font-size:14px">Status as of 26 October 2026</p>',
+      build: true,
+      note: "Reveal the rows one at a time. Do not oversell: it proves the design end to end on real reports and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
 
     { sec: "WHAT EXISTS", html:
       title("Results so far: what is measured, what is not") +
@@ -322,13 +325,14 @@
       title("The 10-week plan") +
       table("sm wrap", ["Weeks", "Milestone", "Work", "Done when"], [
         ["1", "<b>Discovery and first measurement</b>", "Five sample reports ingested and the 22-question harness run on them, three times. Pilot series, users and gate thresholds agreed. Provider, region, retention decided. Question set drafting starts with your staff.", "Wrong-and-confident measured on your reports. Client signs off series, gates and provider."],
-        ["2 to 3", "<b>Our store, your data</b>", "Ingest the reports and metadata from the API and samples you license to us; nothing touches MARC Online. PostgreSQL with vectors and full-text, encrypted storage, access logging. OCR path. Ingestion quality report. Edition and sector filters.", "Right page in the top results for the agreed retrieval questions on your reports."],
-        ["4 to 5", "<b>Answer and verify</b>", "Comparison questions asked one side at a time and joined in plain code: the one failure three models share. Follow-up rewriting. Table extraction and citation. Citation page viewer. React front end.", "No unverified claim reaches a user. Both sides of every comparison cited."],
+        ["2 to 3", "<b>Your reports answered while the store is built</b>", "The demo keeps answering your sample reports from week 1; PostgreSQL, encrypted storage and access logging are built beside it. Comparisons asked one side at a time, joined in plain code. Analyses across your editions. OCR path, ingestion report, filters.", "Right page in the top results on your reports. Both sides of every comparison cited. One analysis across your editions."],
+        ["4 to 5", "<b>Answer and verify, on the production front end</b>", "Follow-up rewriting. Table extraction and citation. React front end over the same API, page viewer and PDF link carried across. The store switch, question set run before and after.", "No unverified claim reaches a user. The question set scores the same on the new store."],
         ["6", "<b>Access and admin</b>", "Login to our app. Roles and library grants from your subscriber export. Admin upload, replace, retire. Audit log export. Buffer week: the admin and user boards are already built.", "Every access question in the set is refused correctly."],
         ["7", "<b>Evaluate</b>", "Evaluation dashboard on the full question set. Feedback loop into the set. Baseline timing of five questions done by hand.", "Dashboard runs on every change. Baseline recorded."],
         ["8 to 9", "<b>Pilot</b>", "Real users on the pilot library. Track questions, share with verified citations, ratings, time versus baseline, cost per question. Fix what the pilot finds.", "Two weeks of pilot data collected."],
         ["10", "<b>Gate and handover</b>", "Results against the agreed thresholds. Enterprise sizing from measured volume and cost. Runbook, tests and question set handed over.", "Go or no-go decision made on measured results."]]) +
-      '<p class="dim" style="font-size:15px">If time is short, we cut from the bottom: charts beyond captions, conversation polish, extra filters. We never cut quote verification or access control.</p>',
+      '<p class="dim" style="font-size:14px">Cut from the bottom if short, never the gate or access control. The model is the measured quality lever: see slide 11 before choosing a provider.</p>',
+      build: true,
       note: "Week 1 is front-loaded with client decisions. If they slip, everything slips. Weeks 8 to 9 depend on pilot users actually using it; ask the client to name them now." },
 
     { sec: "PLAN", html:
@@ -408,7 +412,7 @@
       '<div class="stack" style="gap:14px"><div class="kicker">To close</div><h1 style="font-size:60px;max-width:1100px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' +
       '<div class="cols c3">' +
       card("ink2", '<div class="lbl">We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
-      card("ink2", '<div class="lbl">You get at the end of week 1</div><p>Your own reports running in the demo, and the same four-run measurement on them.</p>') +
+      card("ink2", '<div class="lbl">You get at the end of week 1</div><p>Your own reports in the demo, three models measured on them, and your first analysis across editions.</p>') +
       card("accent", '<div class="lbl">At week 10</div><p>A go or no-go decision on your numbers, not ours.</p>') + '</div>' +
       '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali</p>',
       note: "End on the three boxes and stop talking. Then ask for the sponsor’s name and the date for the five sample reports before the meeting ends." }
@@ -423,11 +427,14 @@
     view.innerHTML = '<div class="slide ' + (s.cls || "") + '">' + s.html + '</div>';
     document.getElementById("note").textContent = s.note || "";
     document.getElementById("meta").innerHTML = s.sec + ' &nbsp; <b>' + pad(state.i + 1) + ' / ' + S.length + '</b>';
-    document.getElementById("hint").textContent = "← → slides | N notes | F fullscreen | Home / End";
+    document.getElementById("hint").textContent = (s.build ? "→ reveals, then " : "") + "← → slides | N notes | F fullscreen | Home / End";
     document.getElementById("prog").style.width = ((state.i + 1) / S.length * 100) + "%";
     try { location.hash = String(state.i + 1); } catch (e) {}
+    if (s.build) { view.querySelectorAll("table tr:not(:first-child), .cols > .card").forEach(function (el) { el.classList.add("b"); }); }
   }
-  function go(d) { var n = Math.max(0, Math.min(S.length - 1, state.i + d)); if (n !== state.i) { state.i = n; render(); } }
+  // Don't show everything at once: on a build slide, the right arrow reveals the next row before it moves on.
+  function reveal() { var next = view.querySelector(".b"); if (!next) return false; next.classList.remove("b"); return true; }
+  function go(d) { if (d > 0 && reveal()) return; var n = Math.max(0, Math.min(S.length - 1, state.i + d)); if (n !== state.i) { state.i = n; render(); } }
 
   document.addEventListener("keydown", function (e) {
     var k = e.key;

@@ -2,6 +2,18 @@
 
 A rehearsal order and a prompt list for the MARC meeting. Every answer shown is real: the model named in `.env` answers, the gate checks, refusals stay refusals. The only preparation is a seeded database, built before the meeting through the same pipeline, so that history can be shown in seconds and one or two questions asked live.
 
+## The story, in one breath
+
+The saved storytelling notes give the order: stakes, struggle, turn, detail, lesson. Use it.
+
+- **Stakes.** A figure copied by hand has no link back to its page, and errors travel into a rating note. That is what MARC sells.
+- **Struggle.** The small model refuses half of what it could answer, and every comparison. Say it before they find it.
+- **Turn.** The gate caught a model reading a growth figure off a chart's axis: the quote was real, the number was in it, and the rule still said no. That is the moment the design proved itself.
+- **Detail.** 0 of 285. Three models, nineteen runs, no false figure stated as fact.
+- **Lesson, turned outward.** For MARC: every answer carries its page, access cannot leak, and in ten weeks you get a number on your own reports, not ours.
+
+Slides 10 and 16 reveal one row at a time with the right arrow. Short lines on the slide; the longer sentence is yours to say.
+
 ## Before the meeting
 
 ```
