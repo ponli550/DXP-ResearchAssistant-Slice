@@ -522,3 +522,14 @@ def test_each_todo_count_opens_its_rows_and_a_review_can_be_closed(web, tmp_path
     todo = client.get("/api/admin/board", params={"parts": "todo"}, headers=h).json()["todo"]
     assert "reviews" not in {t["kind"] for t in todo}
     assert 'id="todoDetail"' in client.get("/dashboard").text
+
+
+def test_find_route_never_calls_the_model(web):
+    client, llm, doc, memo, path = web
+    r = client.get("/api/find", params={"user": "alice", "q": "palm oil"}).json()
+    assert r["model_called"] is False and r["hits"][0]["doc_id"] == doc and r["hits"][0]["page"] == 1 and any(m for _, m in r["hits"][0]["snippet"])
+    assert r["query"] == '"palm" AND "oil"' and r["ms"] < 1000 and llm.calls == []
+    assert client.get("/api/find", params={"user": "nobody", "q": "palm"}).status_code == 403
+    assert client.get("/api/find", params={"user": "alice", "q": '"'}).json()["hits"] == []
+    page = client.get("/").text
+    assert 'id="findBtn"' in page and 'id="tab-find"' in page

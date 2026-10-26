@@ -24,6 +24,133 @@ def fts_query(question):
     return " OR ".join(f'"{t}"' for t in dict.fromkeys(toks))
 
 
+def find_query(text):
+    """A search box query as an FTS5 MATCH expression: every word must appear unless the user says otherwise.
+
+    Supports "quoted phrases", AND (the default between words), OR, NOT and a leading minus, and parentheses.
+    Every word and phrase is quoted for FTS5, so punctuation in the text cannot break the expression.
+    Returns None when nothing searchable is left.
+    """
+    out = []
+    i = 0
+    text = text.strip()
+    while i < len(text):
+        c = text[i]
+        if c.isspace():
+            i += 1
+            continue
+        if c in "()":
+            out.append(c)
+            i += 1
+            continue
+        if c == '"':
+            j = text.find('"', i + 1)
+            if j == -1:
+                j = len(text)
+            phrase = re.findall(r"[A-Za-z0-9]+", text[i + 1:j])
+            if phrase:
+                out.append('"' + " ".join(phrase) + '"')
+            i = j + 1
+            continue
+        if c == "-" and i + 1 < len(text) and not text[i + 1].isspace():
+            out.append("NOT")
+            i += 1
+            continue
+        j = i
+        while j < len(text) and not text[j].isspace() and text[j] not in '()"':
+            j += 1
+        word = text[i:j]
+        i = j
+        up = word.upper()
+        if up in ("AND", "OR", "NOT"):
+            out.append(up)
+            continue
+        toks = re.findall(r"[A-Za-z0-9]+", word)
+        for t in toks:
+            if len(t) > 1 or t.isdigit():
+                out.append('"' + t.lower() + '"')
+    # implicit AND between two terms; drop operators and parentheses with nothing to bind
+    expr, prev, depth = [], None, 0
+    for tok in out:
+        is_op = tok in ("AND", "OR", "NOT")
+        if is_op:
+            if tok == "NOT" and prev is None:
+                continue
+            if tok in ("AND", "OR") and (prev is None or prev in ("AND", "OR", "NOT", "(")):
+                continue
+        elif tok == "(":
+            if prev is not None and prev not in ("AND", "OR", "NOT", "("):
+                expr.append("AND")
+            depth += 1
+        elif tok == ")":
+            if depth == 0:
+                continue
+            while expr and expr[-1] in ("AND", "OR", "NOT"):
+                expr.pop()
+            if expr and expr[-1] == "(":  # empty group
+                expr.pop()
+                depth -= 1
+                prev = expr[-1] if expr else None
+                continue
+            depth -= 1
+        elif prev is not None and prev not in ("AND", "OR", "NOT", "("):
+            expr.append("AND")
+        expr.append(tok)
+        prev = tok
+    while expr and expr[-1] in ("AND", "OR", "NOT", "("):
+        expr.pop()
+    while depth > 0 and "(" in expr:
+        expr.remove("(")
+        depth -= 1
+    if not any(t not in ("AND", "OR", "NOT", "(", ")") for t in expr):
+        return None
+    return " ".join(expr)
+
+
+_FIND_SQL = """
+    SELECT p.doc_id, d.title, p.page, bm25(passages_fts) AS score,
+           snippet(passages_fts, 0, '\u0001', '\u0002', '…', 28) AS snip
+    FROM passages_fts
+    JOIN passages p ON p.id = passages_fts.rowid
+    JOIN documents d ON d.id = p.doc_id
+    JOIN grants g ON g.library_id = d.library_id AND g.user = ?
+    WHERE passages_fts MATCH ? {doc_filter}
+    ORDER BY score
+    LIMIT ?
+"""
+
+
+def find(con, user, text, k=20):
+    """Pages matching a search box query, inside the user's grant, with a highlighted snippet. No model is involved.
+
+    A named edition in the query narrows the search to it, as it does for a question. Returns (query, hits).
+    """
+    docs = named_documents(con, user, text)
+    q = find_query(search_terms(text, docs))
+    if q is None:
+        return None, []
+    args = [user, q]
+    doc_filter = ""
+    if docs:
+        docs = docs[:MAX_NAMED]
+        doc_filter = "AND p.doc_id IN (" + ",".join("?" * len(docs)) + ")"
+        args += docs
+    args.append(k)
+    rows = con.execute(_FIND_SQL.format(doc_filter=doc_filter), args).fetchall()
+    seen, hits = set(), []
+    for r in rows:
+        if (r["doc_id"], r["page"]) in seen:
+            continue
+        seen.add((r["doc_id"], r["page"]))
+        parts, marked = [], False
+        for piece in re.split("[\u0001\u0002]", r["snip"]):
+            if piece:
+                parts.append([piece, marked])
+            marked = not marked
+        hits.append({"doc_id": r["doc_id"], "title": r["title"], "page": r["page"], "score": round(r["score"], 3), "snippet": parts})
+    return q, hits
+
+
 MAX_NAMED = 3  # editions a single question may pull in, each with a full share of k slots
 MONTHS = "january february march april may june july august september october november december".split()
 EDITION_RE = re.compile(r"\b(" + "|".join(MONTHS) + r")\s+(20\d\d|19\d\d)\b", re.I)

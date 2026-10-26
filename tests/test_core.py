@@ -416,3 +416,32 @@ def test_a_sentence_wrapped_onto_a_short_line_is_still_a_sentence(db):
     db.commit()
     page = db.execute("SELECT text FROM pages WHERE doc_id=? AND page=1", (d,)).fetchone()["text"]
     assert not check_claim(Claim("Growth is projected to moderate to 4.4 percent.", d, 1, chart), page, {(d, 1)}).ok
+
+
+def test_find_query_parses_phrases_and_operators():
+    from ra.retrieve import find_query
+
+    assert find_query("palm oil output") == '"palm" AND "oil" AND "output"'
+    assert find_query('"palm oil" 2024') == '"palm oil" AND "2024"'
+    assert find_query("palm OR rubber") == '"palm" OR "rubber"'
+    assert find_query("palm -rubber") == '"palm" NOT "rubber"'
+    assert find_query("palm NOT rubber") == '"palm" NOT "rubber"'
+    assert find_query("(palm OR rubber) output") == '( "palm" OR "rubber" ) AND "output"'
+    assert find_query("palm AND") == '"palm"' and find_query("OR palm") == '"palm"'
+    assert find_query('"') is None and find_query("") is None and find_query("a") is None
+    assert find_query('y/y) in Q4 2025') == '"in" AND "q4" AND "2025"'  # single letters and a stray bracket drop
+    assert find_query("(palm") == '"palm"' and find_query("palm ()") == '"palm"'
+
+
+def test_find_returns_pages_inside_the_grant_with_marked_words(db):
+    from ra.retrieve import find
+
+    q, hits = find(db, "alice", "palm oil output")
+    assert q == '"palm" AND "oil" AND "output"' and hits and hits[0]["title"] == "Sector Outlook 2025" and hits[0]["page"] == 1
+    assert ["Palm", True] in hits[0]["snippet"] or ["palm", True] in [[a.lower(), b] for a, b in hits[0]["snippet"]]
+    assert find(db, "alice", "board approved merger")[1] == []  # the memo is behind a grant alice does not hold
+    assert find(db, "bob", "board approved merger")[1][0]["title"] == "Strategy Memo"
+    assert find(db, "alice", '"output rose 4.2 percent"')[1][0]["page"] == 1
+    assert find(db, "alice", '"rose 4.2 output"')[1] == []  # a phrase is exact
+    assert find(db, "alice", "palm -oil")[1] == []
+    assert find(db, "alice", "")[0] is None

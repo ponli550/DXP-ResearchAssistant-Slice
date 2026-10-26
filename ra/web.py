@@ -8,12 +8,14 @@ import json
 import os
 import re
 import threading
+import time
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from .answer import ask
+from .retrieve import find
 from .baselines import Extractive
 from .db import connect
 
@@ -426,6 +428,13 @@ def todo_detail(con, kind, results_dir):
                 "why": "each is an answer the scorer counted wrong: a true quote beside the point, or an answer where it should have refused"}
     raise HTTPException(404, "Unknown to-do kind; known: " + ", ".join(TODO_KINDS))
 
+def _titles_for(con, user, question):
+    from .retrieve import named_documents
+    ids = named_documents(con, user, question)
+    if not ids:
+        return []
+    return [r["title"] for r in con.execute(f"SELECT title FROM documents WHERE id IN ({','.join('?' * len(ids))}) ORDER BY title", ids)]
+
 # The board is a document, not markup. Each owner has one; the page builds its grid from it, and the only thing
 # the pilot writes back is a width when a panel is expanded. The fields a builder would need (x, y, h) exist from
 # day one so that adding one later is a front end, not a schema change. The widget catalogue is code: a document
@@ -763,6 +772,17 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None,
                 "pdf": f"/files/{doc_id}?user={user}#page={p}" if has_file else None}
 
+    @app.get("/api/find")
+    def find_route(user: str, q: str, limit: int = 20):
+        """Find pages by their words: phrases in quotes, AND by default, OR, NOT. Plain full-text search, no model call."""
+        con = db()
+        if not allowed_libraries(con, user):
+            raise HTTPException(403, "This user has no library access.")
+        t = time.perf_counter()
+        query, hits = find(con, user, q.strip()[:300], max(1, min(limit, 50)))
+        return {"query": query, "hits": hits, "ms": round((time.perf_counter() - t) * 1000, 1), "model_called": False,
+                "editions": _titles_for(con, user, q)}
+
     @app.get("/files/{doc_id}")
     def file(doc_id: int, user: str):
         """The original PDF, for a user who holds a grant on its library. Open at a page with #page=N."""
@@ -1067,6 +1087,7 @@ ol{padding-left:1.2rem;margin:.4rem 0}li{margin:.6rem 0}
 a.pdf{font-size:.82rem;color:var(--accent);margin-right:.5rem}#pnote{margin:.5rem 0 0}
 pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;overflow:auto;flex:1}mark{background:var(--mark);color:inherit;border-radius:3px}
 #tabs{display:flex;gap:.25rem;padding:.35rem 16px 0;border-bottom:1px solid var(--line)}
+#find{flex:1;overflow:auto}.findwrap{max-width:900px;margin:0 auto;padding:1rem 16px 3rem}#findList{padding-left:1.2rem;margin:.6rem 0}.hit{margin:.7rem 0}.hittop{display:flex;gap:.6rem;align-items:center}.hit .snip{margin:.3rem 0 0;color:var(--fg);font-size:.9rem;line-height:1.5}#findBtn{border-color:var(--line)}
 #tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:.35rem .8rem;color:var(--muted)}
 #tabs button[aria-selected=true]{color:var(--fg);border-color:var(--accent);font-weight:600}
 #steps{flex:1;overflow:auto;position:relative}
@@ -1089,12 +1110,13 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
 <div style="display:flex;gap:1rem;align-items:center"><nav class="nav" aria-label="Pages"><a href="/" aria-current="page">Chat</a><a id="melink" href="/dashboard?user=alice">Your board</a><a id="dashlink" href="/dashboard">Admin</a></nav><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
 <div id="banner" class="banner" hidden></div>
-<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><span id="status" class="muted" role="status"></span></div>
-<div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button></div>
+<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><button id="findBtn" type="button" title="Find pages by their words. No model call: quotes for a phrase, OR, NOT, -word">Find</button><span id="status" class="muted" role="status"></span></div>
+<div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button><button id="tab-find" role="tab" aria-selected="false">Find</button></div>
 <div id="stage" aria-label="Answer canvas">
 <nav id="spy" aria-label="Sections"></nav>
 <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
 <div id="canvas"></div></div>
+<div id="find" hidden aria-label="Find results"><div class="findwrap"><p class="muted" id="findHead">Type words from a report and press Find. Pages that contain them, with the words marked, in under a second and without a model call. Put a phrase in quotes; OR widens; -word excludes.</p><ol id="findList"></ol></div></div>
 <div id="steps" hidden aria-label="Investigation steps"><div class="grid"><nav id="rail" aria-label="Steps"></nav><div id="steplist"><p class="muted">Ask a question to see how the answer was found.</p></div></div></div>
 <aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><span><a id="ppdf" class="pdf" target="_blank" rel="noopener" hidden>Open the PDF at this page</a> <button id="pclose" aria-label="Close">Close</button></span></header><pre id="ptext"></pre><p class="muted" id="pnote">Extracted text of the page, with the quote marked. The PDF link opens the original file at the same page.</p></aside>
 <script>
@@ -1175,7 +1197,7 @@ async function ask(){const q=$("q").value.trim();if(!q)return;$("go").disabled=t
     $("status").textContent="Model: "+j.model}
   catch(e){waitStage(false);$("status").textContent=e.message}finally{waitStage(false);$("go").disabled=false}}
 /* tabs and the steps view */
-function switchTab(t){$("stage").hidden=t!=="canvas";$("steps").hidden=t!=="steps";$("tab-canvas").setAttribute("aria-selected",String(t==="canvas"));$("tab-steps").setAttribute("aria-selected",String(t==="steps"));
+function switchTab(t){$("stage").hidden=t!=="canvas";$("steps").hidden=t!=="steps";$("find").hidden=t!=="find";["canvas","steps","find"].forEach(x=>$("tab-"+x).setAttribute("aria-selected",String(t===x)));
   if(t==="canvas"&&nodes.length)requestAnimationFrame(()=>focusNode(current||nodes[0]))}
 $("tab-canvas").onclick=()=>switchTab("canvas");$("tab-steps").onclick=()=>switchTab("steps");
 const fmtMs=ms=>ms<1000?ms+" ms":(ms/1000).toFixed(1)+" s";
@@ -1216,14 +1238,22 @@ let stepsIO=null;
 /* page setup */
 async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
   if(j.model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant."}}
-$("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
+$("go").onclick=ask;$("findBtn").onclick=findPages;$("tab-find").onclick=()=>switchTab("find");
+async function findPages(){const q=$("q").value.trim();if(!q)return;const list=$("findList"),head=$("findHead");switchTab("find");list.replaceChildren();head.textContent="Finding…";
+  try{const j=await api("/api/find?"+new URLSearchParams({user:$("user").value,q}));
+    head.textContent=(j.hits.length?j.hits.length+" page"+(j.hits.length===1?"":"s")+" for ":"No page for ")+(j.query||"nothing searchable")+(j.editions.length?" in "+j.editions.join(", "):"")+" · "+j.ms+" ms · no model call";
+    if(!j.hits.length){list.appendChild(el("li",{class:"muted",textContent:"No page contains all of those words. Try fewer words, OR between alternatives, or a phrase in quotes."}));return;}
+    j.hits.forEach(h=>{const li=el("li",{class:"hit"});const top=el("div",{class:"hittop"});const t=el("button",{type:"button",class:"chip",textContent:h.title+", p. "+h.page,onclick:()=>showPage({doc_id:h.doc_id,page:h.page,quote:""})});top.appendChild(t);
+      const pdf=el("a",{class:"pdf",href:"/files/"+h.doc_id+"?user="+encodeURIComponent($("user").value)+"#page="+h.page,target:"_blank",rel:"noopener",textContent:"PDF"});top.appendChild(pdf);li.appendChild(top);
+      const sn=el("p",{class:"snip"});h.snippet.forEach(([t,m])=>sn.appendChild(m?el("mark",{textContent:t}):document.createTextNode(t)));li.appendChild(sn);list.appendChild(li);});}
+  catch(e){head.textContent=e.message}};$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
 function meLink(){$("melink").href="/dashboard?user="+encodeURIComponent($("user").value);}
 $("user").addEventListener("change",meLink);
 async function replay(id){$("go").disabled=true;try{const j=await api("/api/answer/"+id+"?user="+encodeURIComponent($("user").value));lastAudit=j.audit_id;$("q").value=j.question;switchTab("canvas");renderSteps(j,j.question);nodes=build(j,j.question);canvas.replaceChildren(...nodes);buildNav();
     nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call";if(new URLSearchParams(location.search).get("tab")==="steps")switchTab("steps")}
   catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
 loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
-  if(u.get("q")){$("q").value=u.get("q").slice(0,500);$("q").focus();$("q").setSelectionRange($("q").value.length,$("q").value.length);}placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
+  if(u.get("q")){$("q").value=u.get("q").slice(0,500);$("q").focus();$("q").setSelectionRange($("q").value.length,$("q").value.length);}placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("find")==="1")findPages();else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
 </script></body></html>
 """
 
