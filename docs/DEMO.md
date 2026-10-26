@@ -84,6 +84,8 @@ What to say: this is the whole surface MARC Online would need, a key per integra
 
 In order, top to bottom: the brief (what happened since this device last looked), the key row (wrong-and-confident in the latest run, share answered with checked citations, pages searchable, to-do count), To do with the reason each item is there, the reports-by-edition timeline, coverage with pages flagged for OCR, recent questions across users, saved runs, users, people.
 
+Click a To do row: the review requests open under it with an **open** link and a **done** action; close one and the brief, the key row and the people panel update. Click "wrong-and-confident in the latest run" to show the one comparison answer with its three cited sentences, and say why the scorer counted it. `/dashboard#token=demo&todo=wrong` opens it directly.
+
 Then the Tools tab:
 
 - Add a user: a name and the libraries they may search. Open `/?user=NAME` and ask as them.

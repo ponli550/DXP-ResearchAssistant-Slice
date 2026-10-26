@@ -187,7 +187,7 @@ def _runs(results_dir):
             j = json.load(open(f))
         except (OSError, ValueError):
             continue
-        runs.append({"name": os.path.splitext(os.path.basename(f))[0], "date": date.fromtimestamp(os.path.getmtime(f)).isoformat(),
+        runs.append({"name": os.path.splitext(os.path.basename(f))[0], "file": f, "date": date.fromtimestamp(os.path.getmtime(f)).isoformat(),
                      "questions": j.get("questions"), "answerable": j.get("answerable"), "retrieval": j.get("retrieval_hit_rate"),
                      "correct": j.get("correct"), "timid": j.get("timid"), "correct_refusal": j.get("correct_refusal"),
                      "wrong_and_confident": j.get("wrong_and_confident")})
@@ -257,23 +257,23 @@ def _todo(now, people, libraries, runs):
     # What to do: each item is a count with a reason, and appears only when the count is not zero.
     todo = []
     if people["reviews_open"]:
-        todo.append({"n": len(people["reviews_open"]), "what": "review request" + ("s" if len(people["reviews_open"]) != 1 else "") + " waiting for a person",
+        todo.append({"kind": "reviews", "n": len(people["reviews_open"]), "what": "review request" + ("s" if len(people["reviews_open"]) != 1 else "") + " waiting for a person",
                      "why": "someone pressed Create review request and nothing happens until a person reads it"})
     flagged = sum(x["low_text_pages"] for x in libraries)
     if flagged:
-        todo.append({"n": flagged, "what": "page" + ("s" if flagged != 1 else "") + " flagged for OCR", "why": "pdftotext read almost nothing on them; they are not searchable until OCR runs"})
+        todo.append({"kind": "ocr", "n": flagged, "what": "page" + ("s" if flagged != 1 else "") + " flagged for OCR", "why": "pdftotext read almost nothing on them; they are not searchable until OCR runs"})
     if people["down_reasons"]:
-        todo.append({"n": len(people["down_reasons"]), "what": "thumbs-down reason" + ("s" if len(people["down_reasons"]) != 1 else "") + " to read",
+        todo.append({"kind": "down", "n": len(people["down_reasons"]), "what": "thumbs-down reason" + ("s" if len(people["down_reasons"]) != 1 else "") + " to read",
                      "why": "a reason becomes a new test question once a person has checked it"})
     if runs:
         bad = [r for r in runs if r["wrong_and_confident"]]
         age = (now.date() - date.fromisoformat(runs[0]["date"])).days
         if bad and bad[0] is runs[0]:
-            todo.append({"n": runs[0]["wrong_and_confident"], "what": "wrong-and-confident in the latest run", "why": "the target is zero; read those answers before anything else"})
+            todo.append({"kind": "wrong", "n": runs[0]["wrong_and_confident"], "what": "wrong-and-confident in the latest run", "why": "the target is zero; read those answers before anything else"})
         if age > 7:
-            todo.append({"n": age, "what": "days since the question set was last run", "why": "the harness runs on every change; a stale run means a change went unmeasured"})
+            todo.append({"kind": "stale", "n": age, "what": "days since the question set was last run", "why": "the harness runs on every change; a stale run means a change went unmeasured"})
     else:
-        todo.append({"n": 0, "what": "evaluation runs saved", "why": "nothing says how well answers hold up until the question set is run"})
+        todo.append({"kind": "stale", "n": 0, "what": "evaluation runs saved", "why": "nothing says how well answers hold up until the question set is run"})
 
     return todo
 
@@ -366,6 +366,56 @@ def board_data(con, model_name, results_dir="evals/results", since=None, db_path
         out["brief"], out["brief_why"] = _brief(now, since, use["rows"], ppl["fb"], ppl["rv"], runs)
     return out
 
+
+TODO_KINDS = ("reviews", "ocr", "down", "wrong", "stale")
+
+
+def _short_title(title):
+    """'Malaysia Economic Monitor October 2025' -> 'Oct 2025'; a title without an edition keeps its first words."""
+    from .retrieve import EDITION_RE
+
+    m = EDITION_RE.search(title)
+    return (m.group(1).title()[:3] + " " + m.group(2)) if m else title[:18]
+
+
+def todo_detail(con, kind, results_dir):
+    """The rows behind one to-do count. Names, questions, reasons and pages; never answer text, which opens in the chat."""
+    import json as _json
+
+    titles = {r["id"]: r["title"] for r in con.execute("SELECT id, title FROM documents")}
+    if kind == "reviews":
+        rows = con.execute("SELECT r.id, r.at, r.user, r.note, r.audit_id, a.question FROM reviews r JOIN audit a ON a.id = r.audit_id WHERE r.status='open' ORDER BY r.id DESC").fetchall()
+        return {"kind": kind, "rows": [dict(r) for r in rows], "why": "someone pressed Create review request; mark it done once a person has read the answer"}
+    if kind == "ocr":
+        rows = con.execute("SELECT p.doc_id, p.page FROM pages p WHERE p.low_text = 1 ORDER BY p.doc_id, p.page").fetchall()
+        by_doc = {}
+        for r in rows:
+            by_doc.setdefault(r["doc_id"], []).append(r["page"])
+        return {"kind": kind, "rows": [{"doc_id": d, "title": titles.get(d, "?"), "pages": pg} for d, pg in by_doc.items()],
+                "why": "pdftotext read almost nothing on these pages; run OCR on them and re-ingest the report"}
+    if kind == "down":
+        rows = con.execute("SELECT f.id, f.at, f.user, f.reason, f.audit_id, a.question FROM feedback f JOIN audit a ON a.id = f.audit_id WHERE f.rating='down' AND f.reason != '' ORDER BY f.id DESC").fetchall()
+        return {"kind": kind, "rows": [dict(r) for r in rows], "why": "a reason becomes a new test question once a person has checked it"}
+    if kind in ("wrong", "stale"):
+        runs = _runs(results_dir)
+        if not runs:
+            return {"kind": kind, "rows": [], "run": None, "why": "no saved run; run the question set"}
+        latest = runs[0]
+        if kind == "stale":
+            return {"kind": kind, "rows": [], "run": {"name": latest["name"], "date": latest["date"]},
+                    "why": "run the question set after every change: uv run --python 3.14 python -m ra --db data/ra.db eval --llm hermes --out evals/results/<model>.json"}
+        try:
+            j = _json.load(open(latest["file"]))
+        except (OSError, ValueError):
+            j = {}
+        rows = []
+        for r in j.get("rows", []):
+            if r.get("outcome") == "wrong_and_confident":
+                rows.append({"id": r.get("id"), "question": r.get("q"), "answerable": r.get("answerable"),
+                             "claims": [{"text": c[0], "title": titles.get(c[1], f"doc {c[1]}"), "short": _short_title(titles.get(c[1], f"doc {c[1]}")), "page": c[2]} for c in r.get("answer", [])]})
+        return {"kind": kind, "rows": rows, "run": {"name": latest["name"], "date": latest["date"]},
+                "why": "each is an answer the scorer counted wrong: a true quote beside the point, or an answer where it should have refused"}
+    raise HTTPException(404, "Unknown to-do kind; known: " + ", ".join(TODO_KINDS))
 
 # The board is a document, not markup. Each owner has one; the page builds its grid from it, and the only thing
 # the pilot writes back is a width when a panel is expanded. The fields a builder would need (x, y, h) exist from
@@ -882,6 +932,21 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         con.commit()
         return get_layout(con, "user:" + user, USER_WIDGETS)
 
+    @app.get("/api/admin/todo/{kind}")
+    def admin_todo(kind: str, x_token: str = Header(default="")):
+        admin(x_token)
+        return todo_detail(db(), kind, results_dir)
+
+    @app.post("/api/admin/reviews/{review_id}/close")
+    def close_review(review_id: int, x_token: str = Header(default="")):
+        admin(x_token)
+        con = db()
+        cur = con.execute("UPDATE reviews SET status='done' WHERE id=? AND status='open'", (review_id,))
+        con.commit()
+        if not cur.rowcount:
+            raise HTTPException(404, "No open review request with that id.")
+        return {"closed": review_id}
+
     @app.get("/api/admin/libraries")
     def admin_libraries(x_token: str = Header(default="")):
         admin(x_token)
@@ -1192,6 +1257,9 @@ h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var
 details summary{cursor:pointer;color:var(--accent);font-size:.85rem;margin-top:var(--s2)}
 .anahead{display:flex;gap:var(--s2);align-items:baseline;margin-bottom:var(--s2);flex-wrap:wrap}
 table.matrix td,table.matrix th{white-space:normal;vertical-align:top;border-bottom:1px solid var(--line);padding:.3rem .4rem}table.matrix td.qq{font:1rem/1.35 var(--serif);min-width:12rem}table.matrix td.cell{font-size:.8rem;min-width:7rem}table.matrix td.cell.answered a{color:var(--fg)}table.matrix td.cell.not_found{color:var(--dim)}table.matrix td.cell.pending{color:var(--dim)}
+.todo tr{cursor:pointer}.todo tr[aria-current=true] td{background:color-mix(in srgb,var(--accent) 12%,transparent)}.todo tr:focus-visible{outline:2px solid var(--accent)}
+.panel.focus{box-shadow:none}.panel.focus .tododetail{columns:1}
+.tododetail{margin-top:var(--s2);border-top:1px solid var(--line);padding-top:var(--s2);font-size:.8rem}.tododetail table{margin-bottom:var(--s1)}.tododetail td{white-space:normal}.tododetail p.meta{margin:var(--s1) 0 0}
 .filter{width:100%;max-width:28rem;margin:0 0 var(--s2);font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
 .layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
@@ -1280,7 +1348,7 @@ function timeline(g){const svg=$("tl");svg.textContent="";const ns="http://www.w
  const s=el("span","","dashed: next edition · hover a dot for the title");$("legend").appendChild(s);}
 // Widget catalogue, mirrored from WIDGETS in Python: type -> the panel's inner markup. Static strings only, so innerHTML is safe here.
 const T={
- todo:{title:"To do",sub:'<span id="todoN"></span>',body:'<table class="todo" id="todo"></table>'},
+ todo:{title:"To do",sub:'<span id="todoN"></span>',body:'<table class="todo" id="todo"></table><div id="todoDetail" class="tododetail" hidden></div>'},
  timeline:{title:"Reports by edition",sub:'<span>dot size: citations · bar: by user</span>',body:'<svg class="tl" id="tl" role="img" aria-label="Reports on a timeline per library, sized by citations"></svg><div class="legend" id="legend"></div>'},
  coverage:{title:"Coverage",sub:'<span id="covN"></span>',body:'<div class="cover"><svg viewBox="0 0 36 36" class="ring" aria-hidden="true"><circle cx="18" cy="18" r="15.9" class="track"/><circle cx="18" cy="18" r="15.9" class="fill" id="ringFill"/></svg><div><div class="big" id="covPct"></div><div class="meta" id="covText"></div></div></div><table id="libs"></table>'},
  recent:{title:"Recent",sub:'<span id="recentN"></span>',body:'<table id="recent"></table>'},
@@ -1313,6 +1381,18 @@ async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CA
 async function resetLayout(){const r=await fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{method:"DELETE",headers:hdr()});if(r.ok){LAYOUT=await r.json();buildGrid();}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
+let TODO_OPEN=null;
+function todoFocus(on){const p=$("todo")&&$("todo").closest(".panel");if(!p)return;const w=LAYOUT&&LAYOUT.layout.widgets.find(x=>x.type==="todo");const home=w?w.span:4;if(on){p.style.setProperty("--span",12);p.classList.add("open","focus");}else{p.style.setProperty("--span",home);p.classList.remove("open","focus");}}
+async function loadTodo(kind,row){const box=$("todoDetail");if(!box)return;if(TODO_OPEN===kind){box.hidden=true;TODO_OPEN=null;document.querySelectorAll("#todo tr").forEach(r=>r.removeAttribute("aria-current"));todoFocus(false);return;}
+ TODO_OPEN=kind;todoFocus(true);document.querySelectorAll("#todo tr").forEach(r=>r.removeAttribute("aria-current"));if(row)row.setAttribute("aria-current","true");box.hidden=false;box.textContent="Loading…";
+ const r=await fetch("/api/admin/todo/"+kind,{headers:{"X-Token":tok()}});if(!r.ok){box.textContent="Could not load ("+r.status+").";return;}const j=await r.json();box.textContent="";
+ const openLink=(user,aid)=>{const a=el("a","","open");a.href="/?user="+encodeURIComponent(user)+"&a="+aid;a.title="Opens the stored answer in the chat as "+user;return a;};
+ if(kind==="reviews"){const t=el("table");j.rows.forEach(x=>{const c=el("td");c.appendChild(openLink(x.user,x.audit_id));c.appendChild(document.createTextNode(" "));const b=el("button","link","done");b.type="button";b.onclick=async()=>{b.disabled=true;await fetch("/api/admin/reviews/"+x.id+"/close",{method:"POST",headers:{"X-Token":tok()}});delete DATA.todo;delete DATA.people;TODO_OPEN=null;loadWidget("todo");loadWidget("people");};c.appendChild(b);const row=tr([td("t",hm(x.at)),td("",x.user),td("q",x.question,x.question),td("dim",x.note||"")]);row.appendChild(c);t.appendChild(row);});box.appendChild(t);if(!j.rows.length)box.appendChild(el("p","empty","No open review requests."));}
+ else if(kind==="ocr"){const t=el("table");j.rows.forEach(x=>t.appendChild(tr([td("",x.title),td("n",x.pages.length),td("dim mono","p. "+x.pages.join(", "))])));box.appendChild(t);if(!j.rows.length)box.appendChild(el("p","empty","No page is flagged."));}
+ else if(kind==="down"){const t=el("table");j.rows.forEach(x=>{const row=tr([td("t",hm(x.at)),td("",x.user),td("q",x.question,x.question),td("",x.reason,x.reason)]);const c=el("td");c.appendChild(openLink(x.user,x.audit_id));row.appendChild(c);t.appendChild(row);});box.appendChild(t);if(!j.rows.length)box.appendChild(el("p","empty","No reasons to read."));}
+ else if(kind==="wrong"){if(j.run)box.appendChild(el("p","meta","Run "+j.run.name+" · "+j.run.date));const t=el("table");j.rows.forEach(x=>{const row=tr([td("mono dim",x.id),td("q",x.question,x.question),td(x.answerable?"dim":"bad",x.answerable?"answerable":"should refuse")]);t.appendChild(row);x.claims.forEach(c=>{const sub=tr([td("",""),td("q dim",c.text,c.text),td("t",c.short+", p. "+c.page,c.title)]);t.appendChild(sub);});});box.appendChild(t);if(!j.rows.length)box.appendChild(el("p","empty","Nothing wrong in the latest run."));}
+ else {box.appendChild(el("p","meta",j.run?("Latest run "+j.run.name+" on "+j.run.date):"No saved run."));}
+ box.appendChild(el("p","meta",j.why));}
 let ANA_DOCS=null,ANA_TIMER=null;
 async function anaFormInit(){const f=$("anaForm");if(!f||f.dataset.wired)return;f.dataset.wired="1";
  const r=await fetch(api("/api/me/analyses"),{headers:hdr()});if(!r.ok)return;const j=await r.json();ANA_DOCS=j.docs;const box=$("anaDocs");box.textContent="";
@@ -1360,7 +1440,7 @@ function renderHead(d){
  $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · rows are the audit log · libraries are documents behind grants · runs are the files in evals/results.";
 }
 const FILL={
- todo(d){ setT("todoN",d.todo.length?d.todo.length:"nothing waiting"); fillT("todo",d.todo.map(t=>tr([td("n",t.n),td("",t.what,"why: "+t.why)])),null,"Every count that would appear here is zero."); },
+ todo(d){ setT("todoN",d.todo.length?d.todo.length:"nothing waiting"); fillT("todo",d.todo.map(t=>{const row=tr([td("n",t.n),td("",t.what,"why: "+t.why)]);row.tabIndex=0;row.setAttribute("role","button");row.title="why: "+t.why+" · click for the details";row.onclick=()=>loadTodo(t.kind,row);row.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();loadTodo(t.kind,row);}};return row;}),null,"Every count that would appear here is zero."); const hk=location.hash.match(/todo=(\w+)/);if(hk&&TODO_OPEN!==hk[1]){const r=[...document.querySelectorAll("#todo tr")][d.todo.findIndex(t=>t.kind===hk[1])];loadTodo(hk[1],r);} },
  coverage(d){ if($("ringFill"))$("ringFill").style.strokeDasharray=d.coverage.pct+" 100";setT("covPct",d.coverage.pct+"%");setT("covN",d.coverage.pages+" pages"); setT("covText",d.coverage.searchable+" searchable · "+d.coverage.flagged+" wait for OCR"); fillT("libs",d.libraries.map(l=>tr([td("",l.library),el("td","bar",l.bar),td("n",l.pages),td("n dim",l.low_text_pages?l.low_text_pages+" ocr":"", "pages flagged for OCR"),td("n dim",l.users+" u","users granted")])),null,"No libraries."); },
  recent(d){ setT("recentN","last "+d.recent.length); fillT("recent",d.recent.map(r=>tr([td("t",hm(r.at)),td("",r.user),td(isOpen("recent")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")])),isOpen("recent")?["at","user","question","outcome",">cited"]:null,"No questions yet."); },
  runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
@@ -1422,6 +1502,6 @@ $("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
  out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
 (()=>{if(ME){["helpBtn","forget","help"].forEach(id=>$(id).hidden=true);document.querySelector(".tabs").hidden=true;$("login").hidden=true;$("navChat").href="/?user="+encodeURIComponent(ME);$("navMe").hidden=false;$("navMe").href="/dashboard?user="+encodeURIComponent(ME);$("navMe").setAttribute("aria-current","page");$("navAdmin").remove();document.querySelector(".nav").style.cssText="border-right:0;padding-right:0";load("");return;}
- let t="";if(location.hash.startsWith("#token=")){t=decodeURIComponent(location.hash.slice(7));try{sessionStorage.setItem("ra.token",t);}catch(e){}try{history.replaceState(null,"",location.pathname);}catch(e){}}
+ let t="";const hp=new URLSearchParams(location.hash.slice(1));if(hp.get("token")){t=hp.get("token");try{sessionStorage.setItem("ra.token",t);}catch(e){}hp.delete("token");try{history.replaceState(null,"",location.pathname+(hp.toString()?"#"+hp.toString():""));}catch(e){}}
  if(!t)t=tok();if(t)load(t);else show("login");})();
 </script></body></html>"""

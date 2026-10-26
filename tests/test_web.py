@@ -489,3 +489,36 @@ def test_an_analysis_runs_every_question_inside_each_chosen_report_and_stores_th
     assert client.delete(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).json() == {"deleted": a["id"]}
     assert client.get(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).status_code == 404
     assert 'id="anaForm"' in client.get("/dashboard").text
+
+
+def test_each_todo_count_opens_its_rows_and_a_review_can_be_closed(web, tmp_path):
+    _, llm, doc, memo, path = web
+    client = TestClient(create_app(path, lambda: (llm, "scripted"), results_dir=str(tmp_path / "r"), background=False))
+    h = {"X-Token": "demo"}
+    llm.responses = [[good(doc)]]
+    j = client.post("/api/ask", json={"user": "alice", "question": "How did palm oil output change?"}).json()
+    client.post("/api/review", json={"user": "alice", "audit_id": j["audit_id"], "note": "please check"})
+    client.post("/api/feedback", json={"user": "alice", "audit_id": j["audit_id"], "rating": "down", "reason": "wrong year"})
+    import json as _json
+    (tmp_path / "r").mkdir(exist_ok=True)
+    (tmp_path / "r" / "m.json").write_text(_json.dumps({"wrong_and_confident": 1, "correct": 0, "timid": 0, "correct_refusal": 0, "questions": 1, "answerable": 1, "rows": [
+        {"id": "A01", "q": "What was 2024 growth?", "answerable": True, "outcome": "wrong_and_confident", "answer": [["Output rose 4.2 percent.", doc, 1, "Palm oil output rose 4.2 percent in 2024"]]}]}))
+    todo = client.get("/api/admin/board", params={"parts": "todo"}, headers=h).json()["todo"]
+    kinds = {t["kind"]: t for t in todo}
+    assert {"reviews", "down", "wrong"} <= set(kinds) and kinds["reviews"]["n"] == 1 and kinds["wrong"]["n"] == 1
+    assert client.get("/api/admin/todo/reviews").status_code == 401
+    rv = client.get("/api/admin/todo/reviews", headers=h).json()
+    assert rv["rows"][0]["question"] == "How did palm oil output change?" and rv["rows"][0]["note"] == "please check" and rv["rows"][0]["audit_id"] == j["audit_id"]
+    down = client.get("/api/admin/todo/down", headers=h).json()
+    assert down["rows"][0]["reason"] == "wrong year" and down["rows"][0]["user"] == "alice"
+    wrong = client.get("/api/admin/todo/wrong", headers=h).json()
+    c = wrong["rows"][0]["claims"][0]
+    assert wrong["run"]["name"] == "m" and (c["text"], c["title"], c["short"], c["page"]) == ("Output rose 4.2 percent.", "Sector Outlook 2025", "Sector Outlook 2025", 1)
+    assert client.get("/api/admin/todo/ocr", headers=h).json()["rows"] == []
+    assert client.get("/api/admin/todo/nope", headers=h).status_code == 404
+    rid = rv["rows"][0]["id"]
+    assert client.post(f"/api/admin/reviews/{rid}/close", headers=h).json() == {"closed": rid}
+    assert client.post(f"/api/admin/reviews/{rid}/close", headers=h).status_code == 404
+    todo = client.get("/api/admin/board", params={"parts": "todo"}, headers=h).json()["todo"]
+    assert "reviews" not in {t["kind"] for t in todo}
+    assert 'id="todoDetail"' in client.get("/dashboard").text
