@@ -37,16 +37,25 @@ WORD_RE = re.compile(r"[A-Za-z]{3,}")
 MIN_WORDS_ON_LINE = 3
 
 
+CONTINUATION_RE = re.compile(r"[A-Za-z]{2,}")
+
+
 def numbers_in_prose(s):
-    """Numbers that appear on a line with at least three words, so a figure's axis labels and tick values do not count.
+    """Numbers that appear in a sentence, so a figure's axis labels and tick values do not count.
 
     A chart's text comes through pdftotext as runs of bare numbers ("5.1 4.4 3.6 3.3 4.1 2025f"). A number read from there
     is exactly the confident wrong figure the gate exists to stop, so a claim's number must be stated in a sentence.
+    A line counts as a sentence when it has at least three words. A short line directly after one is the sentence's
+    wrapped tail ("...year-on-year\n(y/y) in Q4 2025") when it still carries a word; a bare "5.1" after a caption is not.
     """
     out = set()
+    prev_prose = False
     for line in s.splitlines():
-        if len(WORD_RE.findall(line)) >= MIN_WORDS_ON_LINE:
+        prose = len(WORD_RE.findall(line)) >= MIN_WORDS_ON_LINE
+        tail = not prose and prev_prose and CONTINUATION_RE.search(line) is not None
+        if prose or tail:
             out |= numbers_in(line)
+        prev_prose = prose
     return out
 
 
@@ -94,7 +103,7 @@ def check_claim(claim, page_text, allowed_pages):
     missing = numbers_in(claim.text) - numbers_in(claim.quote)
     if missing:
         return Verdict(False, "number in the claim is not in the quote: " + ", ".join(sorted(missing)))
-    labels_only = numbers_in(claim.text) - numbers_in_prose(claim.quote)
+    labels_only = figures_in(claim.text) - numbers_in_prose(claim.quote)
     if labels_only:
         return Verdict(False, "number appears in the quote only as a figure label, not in a sentence: " + ", ".join(sorted(labels_only)))
     return Verdict(True)

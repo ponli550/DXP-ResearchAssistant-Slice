@@ -393,3 +393,26 @@ def test_a_document_filter_narrows_retrieval_and_never_widens_access(db):
     assert retrieve(db, "alice", "board approved merger", 12, only={memo}) == []  # alice holds no grant on the memo's library
     res = ask(db, ScriptedLLM([]), "bob", "What did the board approve?", only={memo})
     assert res.trace[0]["only"] == [memo] and {p.doc_id for p in res.closest} == {memo}
+
+
+def test_a_sentence_wrapped_onto_a_short_line_is_still_a_sentence(db):
+    from ra.ground import check_claim
+
+    d = db.execute("SELECT id FROM documents WHERE title='Sector Outlook 2025'").fetchone()["id"]
+    wrapped = "Real GDP grew by 6.3 percent year-on-year\n(y/y) in Q4 2025"
+    db.execute("UPDATE pages SET text = text || ? WHERE doc_id=? AND page=1", ("\n" + wrapped, d))
+    db.commit()
+    page = db.execute("SELECT text FROM pages WHERE doc_id=? AND page=1", (d,)).fetchone()["text"]
+    # the year and the quarter mark are dates, not figures, and the tail line continues the sentence
+    assert check_claim(Claim("Real GDP grew by 6.3 percent year-on-year (y/y) in Q4 2025.", d, 1, wrapped), page, {(d, 1)}).ok
+    tail_figure = "Palm oil output grew by\n4.2 percent."
+    db.execute("UPDATE pages SET text = text || ? WHERE doc_id=? AND page=1", ("\n" + tail_figure, d))
+    db.commit()
+    page = db.execute("SELECT text FROM pages WHERE doc_id=? AND page=1", (d,)).fetchone()["text"]
+    assert check_claim(Claim("Palm oil output grew by 4.2 percent.", d, 1, tail_figure), page, {(d, 1)}).ok
+    # a bare number after a caption line is still a figure label
+    chart = "Output growth is projected to moderate\n5.1\n4.4"
+    db.execute("UPDATE pages SET text = text || ? WHERE doc_id=? AND page=1", ("\n" + chart, d))
+    db.commit()
+    page = db.execute("SELECT text FROM pages WHERE doc_id=? AND page=1", (d,)).fetchone()["text"]
+    assert not check_claim(Claim("Growth is projected to moderate to 4.4 percent.", d, 1, chart), page, {(d, 1)}).ok
