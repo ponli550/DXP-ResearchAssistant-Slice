@@ -8,7 +8,8 @@ data/
 .env.*
 
 # dropped Cloudflare container attempt, kept local only
-deploy/
+deploy/cloudflare/
+deploy/deck/public/
 .dockerignore
 node_modules/
 .wrangler/

@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The proposal deck as a static site: one HTML file, served from Cloudflare's edge on the free plan.
+  // Public to anyone with the URL. Deploy with scripts/deploy_deck.sh from the repo root.
+  "name": "dxp-research-assistant-deck",
+  "compatibility_date": "2026-10-22",
+  "assets": { "directory": "./public", "not_found_handling": "single-page-application" }
+}

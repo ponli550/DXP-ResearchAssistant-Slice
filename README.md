@@ -91,7 +91,7 @@ HERMES_API_KEY=... HERMES_MODEL=anthropic/claude-sonnet-5.5 uv run --python 3.14
 
 ## The web demo
 
-For the client meeting: `docs/DEMO.md` is the rehearsal script, and `scripts/seed_demo.py` builds a clean demo database (`data/demo.db`, ignored by git) through the real pipeline, so history can be shown in seconds and one or two questions asked live.
+The proposal deck is `deck.html`, published as a static Cloudflare Worker at https://dxp-research-assistant-deck.nazrijz336.workers.dev (public to anyone with the link; `scripts/deploy_deck.sh` republishes it after a change). For the client meeting: `docs/DEMO.md` is the rehearsal script, and `scripts/seed_demo.py` builds a clean demo database (`data/demo.db`, ignored by git) through the real pipeline, so history can be shown in seconds and one or two questions asked live.
 
 ```
 uv run --python 3.14 python -m ra --db data/ra.db serve --port 8765
