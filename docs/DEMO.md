@@ -12,7 +12,7 @@ The saved storytelling notes give the order: stakes, struggle, turn, detail, les
 - **Detail.** 0 of 285. Three models, nineteen runs, no false figure stated as fact.
 - **Lesson, turned outward.** For MARC: every answer carries its page, access cannot leak, and in ten weeks you get a number on your own reports, not ours.
 
-Slides 10 and 16 reveal one row at a time with the right arrow. Short lines on the slide; the longer sentence is yours to say.
+Slides 6, 9, 10 and 11 carry screenshots of the live demo (`deck-assets/`, retaken with headless Chrome after a visible change; `scripts/deploy_deck.sh` ships them). Slides 8, 10, 14, 16 and 22 reveal one row at a time with the right arrow. Short lines on the slide; the longer sentence is yours to say.
 
 ## Before the meeting
 

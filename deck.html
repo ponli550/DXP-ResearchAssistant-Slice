@@ -115,6 +115,10 @@
   .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 8px; font-size: 15px; line-height: 1.4; }
   #stage.notes .note { display: block; }
 .b{opacity:0;transform:translateY(6px)}table tr,.card{transition:opacity .25s ease-out,transform .25s ease-out}@media (prefers-reduced-motion:reduce){table tr,.card{transition:none}}
+.shot{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 10px 36px rgba(27,22,19,.14)}.shot img{display:block;width:100%;height:auto}.shot.h img{height:430px;object-fit:cover;object-position:top}.shot.h2 img{height:350px;object-fit:cover;object-position:top}.shot figcaption{font-size:13px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line);background:var(--paper,#fff)}
+.kv{display:flex;gap:36px;margin:6px 0 14px}.kv div{display:flex;flex-direction:column}.kv b{font:600 40px/1 Fraunces,Georgia,serif;color:var(--ink)}.kv span{font-size:13px;color:var(--dim);margin-top:6px;letter-spacing:.04em;text-transform:uppercase}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--ink);background:#fff}.chip.ok{border-color:#2f7d4f;color:#2f7d4f}.chip.warn{border-color:#a8741a;color:#a8741a}.chip.danger{border-color:#9E3B33;color:#9E3B33}
+.steps5{display:grid;gap:12px}.steps5>div{display:flex;gap:12px;align-items:baseline}.steps5>div>div{display:block}.steps5 i{font:600 14px/1 Fraunces,serif;color:#fff;background:var(--ink);border-radius:999px;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-style:normal}.steps5 b{font-weight:600}.steps5 span{color:var(--dim);font-size:14px}
 </style>
 </head>
 <body>
@@ -141,6 +145,9 @@
   }
   function step(n, t, s, cls) { return card(cls, '<div class="lbl">' + n + '</div><div class="t">' + t + '</div><p class="dim">' + s + '</p>'); }
   function arr() { return '<div class="arr"></div>'; }
+  function shot(file, cap, h) { return '<figure class="shot' + (h === 2 ? ' h2' : h ? ' h' : '') + '"><img src="deck-assets/' + file + '" alt="' + cap + '">' + (cap ? '<figcaption>' + cap + '</figcaption>' : '') + '</figure>'; }
+  function kv(items) { return '<div class="kv">' + items.map(function (x) { return '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; }
+  function chips(items) { return '<div class="chips">' + items.map(function (x) { var m = /^\{(ok|warn|danger)\}(.*)$/.exec(x); return '<span class="chip ' + (m ? m[1] : '') + '">' + (m ? m[2] : x) + '</span>'; }).join('') + '</div>'; }
 
   var S = [
     // ---------- 1 PROBLEM ----------
@@ -190,71 +197,65 @@
       note: "Pause here. The differentiator is not AI over PDFs. It is the check that runs after the model and before the user, and that it is deterministic code anyone can audit." },
 
     { sec: "SOLUTION", html:
-      title("What the user sees, start to finish") +
-      '<div class="cols c3">' +
-      card("", '<div class="lbl">1 · Already signed in to MARC Online</div><p>The reports a subscriber has bought are the library. On an issue page the chat opens already scoped to that issuer and its related reports.</p>') +
-      card("", '<div class="lbl">2 · Ask in plain language</div><p>Optionally narrow by report type, sector or date. “The April 2024 monitor” in the question becomes a filter.</p>') +
-      card("", '<div class="lbl">3 · Watch the answer being built</div><p>Sources found, then each drafted claim with a green “Quote on page N” or a red “Removed” and the reason.</p>') +
-      card("", '<div class="lbl">4 · Read the cited answer</div><p>A claim from a report cites report and page; click it and the page opens with the quote highlighted. A rating fact cites the issue record and links to it.</p>') +
-      card("", '<div class="lbl">5 · Rate it, or escalate</div><p>Thumbs up, or down with a reason. “Create review request” hands it to a person. Nothing happens unless pressed.</p>') +
-      card("soft", '<div class="lbl">Or · an honest refusal</div><p>“I could not find this in the selected library”, with the closest passages shown. It does not guess.</p>') + '</div>' +
-      card("panel", '<p>A second tab, <b>Investigation steps</b>, shows the search, each model call, each quote check and any retry, in order, each marked “Model call” or “Plain code” with its duration. An auditor can replay how any answer was made.</p>') +
-      '<p class="dim" style="font-size:14px">Steps 1 to 5 and the steps tab run today in the demo slice.</p>',
-      note: "If a live demo is possible, run it here on the World Bank library: one single-report question, one that should refuse. The demo user picker is not a login; the real build gets SSO." },
+      title("What the user sees") +
+      '<div class="cols side" style="grid-template-columns:7fr 5fr;gap:28px">' + shot("chat-answer.png", "The demo, as it runs today: a stored answer, its citation chip, and the quote one click away.", true) +
+      '<div class="steps5" style="align-self:center">' +
+      '<div><i>1</i><div><b>Ask in plain language</b><br><span>“The April 2024 monitor” in the question becomes a filter.</span></div></div>' +
+      '<div><i>2</i><div><b>Watch the sources arrive</b><br><span>Only from reports this user may search.</span></div></div>' +
+      '<div><i>3</i><div><b>See every claim checked</b><br><span>Quote on page N, or removed with the reason.</span></div></div>' +
+      '<div><i>4</i><div><b>Read the cited answer</b><br><span>Click the chip: the quote on the page, and the PDF at that page.</span></div></div>' +
+      '<div><i>5</i><div><b>Rate it, or hand it to a person</b><br><span>Nothing happens unless pressed.</span></div></div>' +
+      '<div><i>·</i><div><b>Or an honest refusal</b><br><span>“Not found in your library”, closest pages shown. It does not guess.</span></div></div>' +
+      '</div></div>',
+      note: "If a live demo is possible, run it here: one safe question from the script, one that should refuse. The user picker is not a login; the real build gets your identity provider." },
 
     { sec: "SOLUTION", html:
       title("Architecture: how an answer is made") +
       '<div class="flow">' +
-      card("", '<div class="lbl u">Ingest</div><div class="t">PDF, page by page</div><p class="dim">Text kept with its page number. Scanned pages flagged for OCR. Quality report per document.</p>') + arr() +
-      card("", '<div class="lbl u">Retrieve</div><div class="t">Bought reports only</div><p class="dim">Keyword plus meaning search, merged and re-ranked. The MARC Online entitlement is a join in the query.</p>') + arr() +
-      card("soft", '<div class="lbl u" style="color:var(--accent)">Draft · model</div><div class="t">Claims with exact quotes</div><p>Reads only the retrieved passages. Returns each claim with the word-for-word quote it relies on.</p>') + arr() +
-      card("ink", '<div class="lbl u" style="color:var(--almond)">Gate · plain code</div><div class="t">Quote on page? Numbers match?</div><p style="color:var(--almond)">Fails: retry once with the reasons. Still fails: remove the claim, or refuse.</p>') + arr() +
-      card("", '<div class="lbl u">Show · audit</div><div class="t">Cited answer, page viewer</div><p class="dim">Who asked what, which libraries, which sources, every outcome logged.</p>') + '</div>' +
-      '<div class="cols c3">' +
-      card("panel", '<div class="lbl">Front end</div><p>Web app: chat panel, canvas view, page viewer with highlighted quote, investigation steps, admin upload.</p>') +
-      card("panel", '<div class="lbl">Back end and MARC’s data</div><p>Python service. MARC Online’s database is the entity graph: issuer, issue, sector, report, rating history. We attach report passages to it and read entitlements from it.</p>') +
-      card("panel", '<div class="lbl">Model</div><p>Behind a thin interface. Provider, region and retention terms are decided with you in week 1.</p>') + '</div>' +
-      '<p class="dim" style="font-size:14px">The gate and the loop run today; meaning search and OCR are week 2 to 5 work.</p>',
+      card("", '<div class="lbl u">Ingest</div><div class="t">PDF, page by page</div><p class="dim">Page numbers kept. Scans flagged for OCR.</p>') + arr() +
+      card("", '<div class="lbl u">Retrieve</div><div class="t">Granted reports only</div><p class="dim">Keyword plus meaning search. The grant is a join in the query.</p>') + arr() +
+      card("soft", '<div class="lbl u" style="color:var(--accent)">Draft · model</div><div class="t">Claims with exact quotes</div><p>Sees only the retrieved passages.</p>') + arr() +
+      card("ink", '<div class="lbl u" style="color:var(--almond)">Gate · plain code</div><div class="t">Quote on page? Numbers match?</div><p style="color:var(--almond)">Fail: retry once. Fail again: remove, or refuse.</p>') + arr() +
+      card("", '<div class="lbl u">Show · audit</div><div class="t">Cited answer, page, PDF</div><p class="dim">Every question and outcome logged.</p>') + '</div>' +
+      chips(["{ok}Runs today: ingest, retrieve, draft, gate, show, audit", "Our own store and front end; nothing touches MARC Online", "Reports and entitlements arrive by your API licence", "Model behind one interface: provider decided with you", "{warn}Meaning search and OCR: weeks 2 to 5"]),
       note: "Walk left to right. The model only ever sees passages the user may see. The gate is deterministic string checks, so it is auditable and costs no model call. It cannot judge relevance, which is why wrong-and-confident is measured." },
 
     { sec: "SOLUTION", html:
       title("The grounding gate: three rules, no model") +
-      '<div class="cols side"><div class="stack">' +
-      card("", '<div class="t">The quote must be on the cited page</div><p class="dim">Exact text match after whitespace normalisation. A paraphrase fails.</p>') +
-      card("", '<div class="t">Every number in the claim must be in the quote</div><p class="dim">This is where a confident wrong figure would come from. It is caught before display.</p>') +
-      card("", '<div class="t">The claim may only cite a page the model was given</div><p class="dim">Stops the model citing a document it was never shown, including one the user may not see.</p>') +
-      card("panel", '<p>Fail: retry once with the reasons. Fail again: the claim is removed. Nothing survives: “Not found in this library”, with the closest passages.</p>') + '</div>' +
-      card("ink", '<h3>What the gate does not do</h3><div class="stack" style="margin-top:10px"><p>It proves the quote is on the page. It does not prove the claim <i>means</i> what the quote means, or that it answers the question.</p><p>So the model still has to judge relevance and refuse. Our labels say “Quote on page 14”, never “Verified”.</p><p style="color:var(--almond)">That gap is why wrong-and-confident is measured on a question set, not assumed from the gate.</p></div>') + '</div>' +
-      '<p class="dim" style="font-size:14px">Each rule has a test that fails when the rule is removed; that was checked by removing each one.</p>',
-      note: "Say the limit before the client finds it. A model-free baseline scored 21 of 22 wrong-and-confident for exactly this reason. The gate removes fabrication; the model and the eval remove irrelevance." },
+      '<div class="cols c3">' +
+      card("", '<div class="lbl">Rule 1</div><div class="t">The quote is on the cited page</div><p class="dim">Exact match. A paraphrase fails.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">“expanded by 4.4 percent in H1 2025” → <span class="ok">on p. 23</span></p>') +
+      card("", '<div class="lbl">Rule 2</div><div class="t">Every number in the claim is in the quote, in a sentence</div><p class="dim">A number read off a chart axis does not count.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">“5.1 4.4 3.6 3.3 4.1 2025f” → <span class="danger">removed</span></p>') +
+      card("", '<div class="lbl">Rule 3</div><div class="t">The page cited was one the model was shown</div><p class="dim">So it cannot cite a report the user may not see.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">doc 6, p. 1, no grant → <span class="danger">never retrieved</span></p>') + '</div>' +
+      '<div class="cols side" style="margin-top:18px"><div class="flow">' + card("soft", '<div class="t">Fail</div><p class="dim">Retry once, with the reasons.</p>') + arr() + card("soft", '<div class="t">Fail again</div><p class="dim">Remove the claim.</p>') + arr() + card("ink", '<div class="t">Nothing survives</div><p style="color:var(--almond)">“Not found”, closest pages shown.</p>') + '</div>' +
+      card("warn", '<p><b>What it cannot do.</b> Prove the claim answers the question. A true quote beside the point passes the gate; that is why wrong-and-confident is measured on a question set, not assumed.</p>') + '</div>',
+      build: true,
+      note: "Say the limit before the client finds it. Each rule has a test that fails when the rule is removed. The chart-axis example is a real catch from the Gemini runs." },
 
     { sec: "SOLUTION", html:
       title("Access control: enforced inside the search, not after it") +
-      '<div class="cols side"><div class="stack">' + cards("", [
-        "<b>Entitlements come from MARC Online.</b> Per report, as bought through the cart. We mirror them; we do not become a second source of truth.",
-        "<b>The grant is a join in the retrieval query.</b> A passage the user may not see is never returned, never reaches the model, and so can never be cited. There is no later filter that could be forgotten.",
-        "<b>The page viewer repeats the check.</b> A guessed page id returns nothing for a user without the grant.",
-        "<b>Audit log.</b> Who asked what, which libraries were searched, which sources were used, what the outcome was.",
-        "<b>Documents are data, not instructions.</b> Text inside a PDF cannot change the assistant’s behaviour. Superseded reports are flagged."]) + '</div>' +
-      '<div class="stack">' + card("panel", '<h3>Runs today</h3><p style="margin-top:8px">Grants table, the join in retrieval, the page route check, and the audit log. A test fails if the join is removed.</p>') +
-      card("warn", '<h3 class="warn">Not yet</h3><p style="margin-top:8px">Real authentication. The demo has a user picker. The pilot needs your single sign-on, or email login if SSO is not available in time.</p>') + '</div></div>',
-      note: "Access was a hard requirement in the brief. Design done and tested; login depends on them. Ask which identity provider they use and whether we get a test tenant in week 1." },
+      '<div class="cols side" style="grid-template-columns:5fr 7fr;gap:28px"><div class="steps5" style="align-self:center">' +
+      '<div><i>1</i><div><b>Entitlements come from your subscriber export</b><br><span>We never read MARC Online.</span></div></div>' +
+      '<div><i>2</i><div><b>The grant is a join in the search query</b><br><span>A passage you may not see is never returned, never reaches the model, is never cited.</span></div></div>' +
+      '<div><i>3</i><div><b>The page and the PDF repeat the check</b><br><span>A guessed id returns nothing without the grant.</span></div></div>' +
+      '<div><i>4</i><div><b>The trace names only your libraries</b><br><span>Every question, outcome and source is logged.</span></div></div>' +
+      '<div><i>5</i><div><b>Documents are data, not instructions</b><br><span>Text in a PDF cannot change the assistant.</span></div></div>' +
+      '<div><i>!</i><div><b class="warn">Not yet: real login</b><br><span>The demo has a user picker. The pilot gets your identity provider or invited users.</span></div></div>' +
+      '</div>' + shot("chat-steps.png", "Investigation steps: the search names only the libraries this user holds; each step marked plain code or model call, with its duration.", true) + '</div>',
+      note: "Access was a hard requirement in the brief. Design done and tested: a test fails if the join is removed. Login depends on their identity provider." },
 
     // ---------- 3 WHAT EXISTS ----------
     { sec: "WHAT EXISTS", theme: "panel", html:
-      title("What runs today: a working demo slice") +
-      '<p class="dim">Five public World Bank Malaysia Economic Monitor reports, about 490 pages. 87 automated tests. Real reports, not yet yours.</p>' +
-      table("wrap sm", ["Part", "State", "Note"], [
-        ["Ingest, access-controlled retrieval, grounding gate, retry, audit", "{ok}Built, tested", "The core. A model that goes down is a recorded refusal, not an error."],
-        ["Chat: sources, checks, cited answer, quote on the page, the PDF at that page", "{ok}Built", "Three clicks from a claim to the page in the real document."],
-        ["History, library, analyses", "{ok}Built", "Every answer replays without a model call. Your questions run across the editions you choose; every cell is checked."],
-        ["Boards: user and admin, add user, API keys, layouts as documents", "{ok}Built", "Counts and names, never answer text. One JSON document per owner."],
-        ["Evaluation: 22 questions, three models, nineteen runs", "{ok}Measured", "No false figure. See next slide."],
-        ["Cross-report comparisons", "{warn}Split", "Small model declines; large ones answer with one true side. Week 2 to 3 item."],
-        ["PostgreSQL, React, OCR, encryption, your login", "{danger}Not started", "Weeks 2 to 6. The parts above carry over unchanged."]]) +
-      '<p class="dim" style="font-size:14px">Status as of 26 October 2026</p>',
-      build: true,
-      note: "Reveal the rows one at a time. Do not oversell: it proves the design end to end on real reports and has never seen a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
+      title("What runs today") +
+      kv([["87", "automated tests"], ["5", "public reports, 490 pages"], ["3", "models, 19 measured runs"], ["0", "false figures in 285 attempts"]]) +
+      '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("user-board.png", "A subscriber’s board: library with PDF and ask links, an analysis across five editions, answers, ratings, review requests.", 2) +
+      '<div class="stack" style="gap:10px;align-self:center">' + chips(["{ok}Chat, sources, checks, cited answer", "{ok}Quote on the page, PDF at that page", "{ok}History replays without a model call", "{ok}Library, analyses, user board", "{ok}Admin board, add user, API keys", "{ok}Evaluation harness, three models", "{warn}Comparisons: split", "{danger}PostgreSQL, React, OCR, your login: weeks 2 to 6"]) + '</div></div>',
+      note: "Do not oversell: real reports, never a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
+
+    { sec: "WHAT EXISTS", theme: "panel", html:
+      title("What the admin sees") +
+      '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("admin-board.png", "One screen: a brief since the last look, key figures, what to do and why, reports by edition, coverage, recent questions, saved runs.", true) +
+      '<div class="stack" style="gap:10px;align-self:center">' + chips(["Counts and names, never answer text", "To do, each with its reason", "Reports on a timeline, sized by citations", "Pages flagged for OCR", "Every saved evaluation run", "Add a user, create and revoke API keys", "Try a question as any user", "Layout is a JSON document per owner"]) + '</div></div>',
+      note: "The admin never sees answer text; that stays with the user who asked. Expand a panel to show the layout document at work." },
 
     { sec: "WHAT EXISTS", html:
       title("Results so far: what is measured, what is not") +
@@ -284,14 +285,15 @@
 
     { sec: "TECHNOLOGY", html:
       title("Alternatives considered") +
-      table("sm wrap", ["Option", "Strength", "Why not for this pilot", "When it wins"], [
-        ["<b>Our build on MARC Online</b>: hybrid search, verified citations, entitlements in the query", "Quote and number check before display; per-page citations; access that cannot leak; measurable", "More engineering than a managed service. Quality depends on the question set we build with you", "{ok}When a wrong figure costs more than the build"],
-        ["Managed RAG service (Vertex AI Search, Azure AI Search with OpenAI, Bedrock Knowledge Bases)", "Days to a first answer. Hosted ingestion and vector search. ACL filtering built in", "Citations point at a chunk, not a checked quote on a page. No number check. Harder to audit how an answer was made", "If chunk-level citations are acceptable and speed beats control"],
-        ["Off-the-shelf assistant (Copilot, NotebookLM Enterprise)", "Zero build. Staff may already have licences", "No per-customer library access model, no eval harness, no audit of grounding. Not a product you can offer customers", "Internal staff use only"],
-        ["Dedicated vector database (Qdrant, Elasticsearch) beside Postgres", "Faster at millions of passages; richer ranking", "Two stores means the access rule is enforced in two places. A pilot library does not need the scale", "Enterprise phase, if volume demands it"],
-        ["Self-hosted open-weight model", "Data never leaves your network", "GPU cost and ops for a pilot; lower answer quality means more refusals", "If no API provider’s region or retention terms are acceptable"]]) +
-      card("soft", '<p><b>Candid view.</b> If you only need “chat with our PDFs” for staff, a managed service is cheaper and we would say so. The build is justified by two things the brief asks for that managed services do not do: claims checked against the page, and a measured wrong-and-confident rate you can put in front of customers.</p>'),
-      note: "Expect “why not just use Copilot or Vertex”. Answer it before it is asked. The model row is swappable: nothing stops us running on their preferred provider." },
+      table("sm wrap", ["Option", "Strength", "Why not here", "When it wins"], [
+        ["<b>This build</b>", "Quote and number checked before display; access in the query; measured", "More engineering; quality needs the question set", "{ok}A wrong figure costs more than the build"],
+        ["Managed RAG (Vertex, Azure, Bedrock)", "First answer in days", "Cites a chunk, not a checked quote; no number check", "Chunk citations are enough"],
+        ["Copilot, NotebookLM", "Zero build", "No per-customer library, no eval, no audit", "Internal staff only"],
+        ["Separate vector database", "Scale, richer ranking", "Access rule in two places", "Enterprise volume"],
+        ["Self-hosted open model", "Data never leaves", "GPU cost; more refusals", "No provider terms acceptable"]]) +
+      card("soft", '<p><b>Candid view.</b> “Chat with our PDFs” for staff is cheaper on a managed service, and we would say so. The build buys two things they do not: claims checked against the page, and a wrong-and-confident rate you can show customers.</p>'),
+      build: true,
+      note: "Expect “why not just use Copilot or Vertex”. Answer it before it is asked. The model is swappable; nothing stops us running on their preferred provider." },
 
     { sec: "TECHNOLOGY", html:
       title("Expected running cost of the pilot") +
@@ -364,49 +366,49 @@
     { sec: "PLAN", html:
       title("What we need to ask you before week 1") +
       '<div class="cols c3 qa">' +
-      card("", '<h3>Workflow</h3><ul><li>Who answers cross-report questions today, how often, and how long does one take?</li><li>What are the five most common questions customers ask?</li><li>Who reviews an answer before a customer sees it?</li></ul>') +
-      card("", '<h3>The library</h3><ul><li>Which report series is the pilot, and how many reports and pages does it hold?</li><li>What does the API licence expose: reports, metadata, issuers, subscriber entitlements? Rate limits and terms?</li><li>Can we have sample PDFs with their metadata, including the oldest still sold and the most table-heavy?</li></ul>') +
-      card("", '<h3>People and grading</h3><ul><li>Who from the research team will help write and grade 60 to 100 questions, and how much time can they give?</li><li>Who are the pilot users, and are any of them customers?</li><li>What rating, time saving and cost per question would justify an enterprise build?</li></ul>') +
-      card("", '<h3>Data and providers</h3><ul><li>May paid research text go to a third-party model API, and in which region? This decides provider and hosting before anything else.</li><li>Retention, no-training and encryption terms for licensed text? Who audits that we meet them?</li><li>Are report entitlements contractual per customer, so access is a compliance matter?</li></ul>') +
-      card("", '<h3>Access and environment</h3><ul><li>We never touch MARC Online. Pilot users open our app beside it: is that acceptable for the pilot?</li><li>Login through your identity provider, or users we invite? Where does the subscriber list come from?</li><li>Who else should query this besides subscribers: analysts in an AI assistant, MARC Data?</li></ul>') +
-      card("soft", '<h3>Blocks week 1</h3><ul><li>Five sample reports, this week</li><li>A named research contact for the question set</li><li>A decision on provider and region</li><li>A named client sponsor who can sign off the gates</li></ul>') + '</div>',
+      card("", '<h3>Workflow</h3><ul><li>Who answers cross-report questions today, and how long does one take?</li><li>The five questions customers ask most?</li><li>Who reviews an answer before a customer sees it?</li></ul>') +
+      card("", '<h3>The library</h3><ul><li>Which series is the pilot, how many reports?</li><li>What does the API licence expose, and its limits?</li><li>Sample PDFs with metadata: the oldest sold, the most table-heavy?</li></ul>') +
+      card("", '<h3>People and grading</h3><ul><li>Who writes and grades 60 to 100 questions with us?</li><li>Who are the pilot users?</li><li>What rating, time saving and cost justify an enterprise build?</li></ul>') +
+      card("", '<h3>Data and providers</h3><ul><li>May research text go to a model API, and in which region?</li><li>Retention, no-training, encryption terms? Who audits us?</li><li>Are entitlements contractual, so access is compliance?</li></ul>') +
+      card("", '<h3>Access</h3><ul><li>Our app beside MARC Online: acceptable for the pilot?</li><li>Your identity provider, or users we invite?</li><li>Who else queries this: analysts, MARC Data?</li></ul>') +
+      card("soft", '<h3>Blocks week 1</h3><ul><li>Five sample reports, this week</li><li>A research contact for the question set</li><li>Provider and region</li><li>A sponsor who signs off the gates</li></ul>') + '</div>',
       note: "Assign each box to one team member to ask. Write the answers down in the meeting; they feed the assumptions slide. The pink box is the ask to close on." },
 
     { sec: "PLAN", html:
       title("Assumptions: known, assumed, to confirm") +
-      '<div class="cols c3 tight">' +
-      '<div class="stack">' + card("ok", '<h3 class="ok">Known from the brief</h3>') + cards("", [
-        "Users ask questions across multiple reports and get grounded, cited answers with document name and page.",
-        "Reports are PDFs. Ingestion, indexing and retrieval must be efficient.",
+      '<div class="cols c3"><div class="stack">' + card("ok", '<h3 class="ok">Known from the brief</h3>') + cards("", [
+        "Questions span reports; answers cite document and page.",
+        "Reports are PDFs. Ingest and retrieval must be efficient.",
         "Access is restricted to authorised users and libraries.",
-        "Quality, relevance and source accuracy must be evaluated, and customer value shown before an enterprise build.",
-        "Nice-to-haves: history, filters, admin, feedback, tables, roles. Project length is 10 weeks."]) + '</div>' +
+        "Quality and value are evaluated before an enterprise build.",
+        "Ten weeks. Nice-to-haves: history, filters, admin, feedback, tables, roles."]) + '</div>' +
       '<div class="stack">' + card("warn", '<h3 class="warn">We are assuming</h3>') + cards("", [
-        "Reports are mostly born-digital English PDFs, like the World Bank set we tested on. Scanned pages are a minority.",
-        "MARC Online stays the system of record and we never read it; what we need arrives through the API licence and sample data. The pilot series is hundreds of reports, not tens of thousands.",
-        "An API model provider is acceptable with no-training and regional terms. Self-hosting is not required.",
-        "Research staff can give about half a day a week to the question set in weeks 1 to 7.",
-        "A standalone system is what you want: we build our own store and front end and never touch MARC Online."]) + '</div>' +
+        "Born-digital English PDFs; scans a minority.",
+        "MARC Online stays the system of record; we never read it. Data arrives by API licence and samples.",
+        "An API model provider is acceptable with no-training and regional terms.",
+        "Research staff give half a day a week to the question set, weeks 1 to 7.",
+        "A standalone system is what you want."]) + '</div>' +
       '<div class="stack">' + card("soft", '<h3>Must confirm with you</h3>') + cards("", [
-        "Which report series, how many reports, who the pilot users are.",
-        "Model provider, hosting region, data retention and no-training terms.",
-        "What the API licence exposes and the sample data we get. We never read MARC Online’s database.",
-        "The week 10 thresholds: time saving, rating and cost per question that justify an enterprise build.",
-        "Whether library boundaries are contractual, which makes access a compliance matter, not only a feature."]) + '</div></div>' +
+        "Pilot series, report count, pilot users.",
+        "Provider, region, retention, no-training terms.",
+        "What the API licence exposes; the sample data.",
+        "Week 10 thresholds: time saving, rating, cost per question.",
+        "Whether library boundaries are contractual."]) + '</div></div>' +
       '<p class="dim" style="font-size:14px">The brief gave no volumes, library size or thresholds; nothing on this slide is a measured client fact.</p>',
-      note: "Read the middle column aloud. Every item there changes the plan if wrong. The scanned-pages assumption is the most likely to be wrong and the costliest if it is." },
+      note: "Read the right column aloud and ask for answers on the spot. Anything unanswered becomes a week 1 blocker." },
 
     { sec: "PLAN", html:
       title("Risks, and how each is handled") +
-      table("sm wrap", ["Risk", "How it is handled", "Owner"], [
-        ["<b>The model states something the sources do not say</b>", "Quote and number check, one retry, then refusal. Wrong-and-confident tracked on every change; measured in week 1 before anything else.", "Irfan Ali"],
-        ["<b>Messy PDFs: scans, columns, charts, tables</b>", "Per-report ingestion quality report. Weak pages flagged to the admin, never silently trusted. Five ugly samples requested now.", "Adam"],
-        ["<b>Cross-report questions miss one side</b>", "Known today. Fix is a rewrite into one query per named report, then re-measure without tuning on the test questions.", "Fahim"],
-        ["<b>Customers see research they should not</b>", "Access enforced inside the search and on the page route, covered by tests and by access questions in the set.", "Shananth"],
-        ["<b>Sensitive research leaves the company</b>", "Provider chosen with you: no training on data, agreed region and retention. Only permitted passages are ever sent.", "Shananth"],
-        ["<b>Week 1 decisions slip</b>", "Everything downstream slips with them. We ask for a named sponsor and five sample reports today.", "Irfan Ali"],
-        ["<b>Pilot users do not use it</b>", "Named users and seeded questions agreed in week 1. Usage tracked weekly from week 8, not discovered at week 10.", "Irfan"]]),
-      note: "The two risks the client controls are the last two rows. Our part of the risk is engineering, theirs is decisions and participation, and the plan fails without both." },
+      table("sm wrap", ["Risk", "Handled by", "Owner"], [
+        ["<b>A figure the sources do not say</b>", "Quote and number check, one retry, then refusal. Measured on every change.", "Irfan Ali"],
+        ["<b>Messy PDFs</b>", "Ingestion report per document; weak pages flagged, never trusted.", "Adam"],
+        ["<b>A comparison misses one side</b>", "One query per report, joined in plain code; re-measured.", "Fahim"],
+        ["<b>A customer sees research they did not buy</b>", "Grant in the query and on the page route; tests and access questions.", "Shananth"],
+        ["<b>Research text leaves the company</b>", "Provider chosen with you: no training, agreed region and retention.", "Shananth"],
+        ["<b>Week 1 decisions slip</b>", "Named sponsor and five sample reports asked for today.", "Irfan Ali"],
+        ["<b>Pilot users do not use it</b>", "Named users and seeded questions in week 1; usage tracked weekly from week 8.", "Irfan"]]),
+      build: true,
+      note: "The two risks the client controls are the last two rows. Ours is engineering, theirs is decisions and participation; the plan fails without both." },
 
     { sec: "CLOSE", theme: "dark", cls: "between", html:
       '<div class="stack" style="gap:14px"><div class="kicker">To close</div><h1 style="font-size:60px;max-width:1100px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' +

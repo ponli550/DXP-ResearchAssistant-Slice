@@ -1146,7 +1146,7 @@ $("go").onclick=ask;$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e
 function meLink(){$("melink").href="/dashboard?user="+encodeURIComponent($("user").value);}
 $("user").addEventListener("change",meLink);
 async function replay(id){$("go").disabled=true;try{const j=await api("/api/answer/"+id+"?user="+encodeURIComponent($("user").value));lastAudit=j.audit_id;$("q").value=j.question;switchTab("canvas");renderSteps(j,j.question);nodes=build(j,j.question);canvas.replaceChildren(...nodes);buildNav();
-    nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call"}
+    nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call";if(new URLSearchParams(location.search).get("tab")==="steps")switchTab("steps")}
   catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
 loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
   if(u.get("q")){$("q").value=u.get("q").slice(0,500);$("q").focus();$("q").setSelectionRange($("q").value.length,$("q").value.length);}placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
