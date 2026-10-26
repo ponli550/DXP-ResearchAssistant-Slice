@@ -22,6 +22,14 @@ uv run --python 3.14 python scripts/seed_demo.py data/demo.db     # sixteen mode
 uv run --python 3.14 python -m ra --db data/demo.db serve --port 8765
 ```
 
+To show it from another machine or phone, a quick tunnel needs no account or domain and gives a public HTTPS URL that lives while the laptop and the command do:
+
+```
+cloudflared tunnel --url http://127.0.0.1:8765     # the URL is printed in the log; it changes every start
+```
+
+Set `ADMIN_TOKEN` in `.env` to something random before the URL leaves the room: anyone with the URL can use the chat and spend model tokens, and `demo` is not a secret.
+
 Open three tabs: the chat at `/?user=alice`, alice's board at `/dashboard?user=alice`, the admin board at `/dashboard#token=demo`.
 
 Rules for the live part. Qwen answers about half of the single-report questions in the set and refuses every comparison; a question typed on the spot is a coin flip. Ask live only from the "safe live" list, and show everything else from history, where the answer is already stored and opens without a model call. If a live question is refused, that is the product working: say so, and open the stored answer to the same question from the board.
