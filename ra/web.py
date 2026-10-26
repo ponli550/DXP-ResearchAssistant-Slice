@@ -375,7 +375,16 @@ def _short_title(title):
     from .retrieve import EDITION_RE
 
     m = EDITION_RE.search(title)
-    return (m.group(1).title()[:3] + " " + m.group(2)) if m else title[:18]
+    if m:
+        return m.group(1).title()[:3] + " " + m.group(2)
+    if len(title) <= 22:
+        return title
+    out = ""
+    for w in title.split():
+        if len(out) + len(w) + 1 > 20:
+            break
+        out = (out + " " + w).strip()
+    return (out or title[:20]) + "…"
 
 
 def todo_detail(con, kind, results_dir):
