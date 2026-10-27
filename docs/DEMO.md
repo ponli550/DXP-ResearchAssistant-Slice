@@ -32,7 +32,7 @@ Set `ADMIN_TOKEN` in `.env` to something random before the URL leaves the room: 
 
 Open three tabs: the chat at `/?user=alice`, alice's board at `/dashboard?user=alice`, the admin board at `/dashboard#token=demo`.
 
-Rules for the live part. Qwen answers about half of the single-report questions in the set and refuses every comparison; a question typed on the spot is a coin flip. Ask live only from the "safe live" list, and show everything else from history, where the answer is already stored and opens without a model call. If a live question is refused, that is the product working: say so, and open the stored answer to the same question from the board.
+Rules for the live part. The model is whatever `.env` names; check it before the call. On 27 October it was Claude Sonnet 5.5, and through the public tunnel all six questions in the safe list answered in 2 to 12 seconds (the October 2023 and social assistance ones needed a retry), and the Singapore wage question was refused. With Qwen 3.8 27B the same set answered about half and every comparison was refused, so a question typed on the spot was a coin flip. Either way, ask live only from the safe list, and keep the stored answers as backup: if a live question is refused, that is the product working, so say so and open the stored answer to the same question from the board. The organisers require the demo to be live, not pre-recorded: stored answers are support, never the show.
 
 ## Optional: the helper
 
