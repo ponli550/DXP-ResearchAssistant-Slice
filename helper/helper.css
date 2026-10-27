@@ -1,0 +1,54 @@
+/* The helper's own styles. Everything is namespaced .rah-* so it cannot touch the page it sits on.
+ * Flat surfaces with a one-pixel outline, 4px corners, one accent, a word on every control. Follows docs/DESIGN.md. */
+.rah-launch, .rah-panel, .rah-tip, .rah-toast, .rah-spot {
+  --rah-bg: #FFFDF8; --rah-fg: #1F1B16; --rah-dim: #6A6257; --rah-line: #E3D8C6; --rah-accent: #D9482B; --rah-teal: #0F3B3A; --rah-tint: #FFF1E6;
+  font: 14px/1.45 system-ui, -apple-system, "Instrument Sans", sans-serif; color: var(--rah-fg); box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  .rah-launch, .rah-panel, .rah-tip, .rah-toast, .rah-spot { --rah-bg: #1D1B16; --rah-fg: #ECE8DD; --rah-dim: #9A9486; --rah-line: #2E2B23; --rah-accent: #FF8D6E; --rah-teal: #9EE6C0; --rah-tint: #2A241C; }
+}
+.rah-launch *, .rah-panel *, .rah-tip *, .rah-toast * { box-sizing: border-box; }
+
+.rah-launch { position: fixed; left: 16px; bottom: 16px; z-index: 2147483000; padding: 8px 16px; background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; font-weight: 600; cursor: pointer; }
+.rah-launch:hover { background: var(--rah-tint); }
+.rah-launch:focus-visible, .rah-go:focus-visible, .rah-btn2:focus-visible, .rah-link:focus-visible, .rah-ex1:focus-visible { outline: 2px solid var(--rah-accent); outline-offset: 2px; }
+
+.rah-panel { position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 100%); z-index: 2147483001; background: var(--rah-bg); border-left: 1px solid var(--rah-line);
+  padding: 16px 24px 32px; overflow: auto; transform: translateX(102%); transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.rah-panel.open { transform: none; }
+.rah-head { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 2px solid var(--rah-accent); margin-bottom: 16px; }
+.rah-head strong { font-size: 18px; }
+.rah-h { font: 700 12px/1 ui-monospace, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--rah-accent); margin: 24px 0 8px; }
+.rah-wide { width: 100%; }
+.rah-task { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--rah-line); }
+.rah-task:first-of-type { border-top: 1px solid var(--rah-line); }
+.rah-ttext { display: grid; gap: 2px; }
+.rah-ttext span { color: var(--rah-dim); font-size: 13px; }
+.rah-note { margin: 6px 0; color: var(--rah-dim); font-size: 13px; }
+.rah-note b { color: var(--rah-fg); }
+
+.rah-go, .rah-btn2 { font: inherit; font-weight: 600; padding: 7px 14px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.rah-go { background: var(--rah-teal); color: var(--rah-bg); border: 1px solid var(--rah-teal); }
+.rah-btn2 { background: var(--rah-bg); color: var(--rah-fg); border: 1px solid var(--rah-line); }
+.rah-btn2:hover { border-color: var(--rah-teal); }
+.rah-btn2:disabled { opacity: .45; cursor: default; }
+.rah-link { background: none; border: 0; color: var(--rah-dim); text-decoration: underline; font: inherit; cursor: pointer; padding: 4px 0; }
+
+.rah-ex { display: grid; gap: 8px; }
+.rah-ex1 { display: grid; gap: 2px; text-align: left; font: inherit; color: inherit; background: var(--rah-bg); border: 1px solid var(--rah-line); border-radius: 4px; padding: 10px 12px; cursor: pointer; }
+.rah-ex1:hover { border-color: var(--rah-teal); }
+.rah-tag { font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--rah-accent); }
+.rah-q { font-weight: 600; }
+.rah-hint { color: var(--rah-dim); font-size: 12px; }
+
+.rah-spot { position: fixed; z-index: 2147483002; border: 2px solid var(--rah-accent); border-radius: 4px; box-shadow: 0 0 0 9999px rgba(15, 59, 58, .55); pointer-events: none; transition: all .2s ease-out; }
+.rah-tip { position: fixed; z-index: 2147483003; width: 320px; max-width: calc(100% - 24px); background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; padding: 14px 16px; }
+.rah-count { font: 600 11px ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--rah-accent); }
+.rah-ttl { display: block; font-size: 16px; margin: 4px 0; }
+.rah-body { margin: 0 0 12px; color: var(--rah-dim); }
+.rah-nav { display: flex; gap: 8px; align-items: center; }
+.rah-nav .rah-link { margin-left: auto; }
+
+.rah-toast { position: fixed; left: 16px; bottom: 64px; z-index: 2147483000; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; max-width: 360px; background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; padding: 10px 14px; }
+.rah-flash { outline: 2px solid var(--rah-accent, #D9482B) !important; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .rah-panel, .rah-spot { transition: none; } }

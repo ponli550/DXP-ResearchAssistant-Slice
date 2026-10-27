@@ -34,6 +34,10 @@ Open three tabs: the chat at `/?user=alice`, alice's board at `/dashboard?user=a
 
 Rules for the live part. Qwen answers about half of the single-report questions in the set and refuses every comparison; a question typed on the spot is a coin flip. Ask live only from the "safe live" list, and show everything else from history, where the answer is already stored and opens without a model call. If a live question is refused, that is the product working: say so, and open the stored answer to the same question from the board.
 
+## Optional: the helper
+
+Run `uv run --python 3.14 python helper/serve.py --app http://127.0.0.1:8765 --port 8770` and open :8770 (or tunnel it) to show the Help panel and the tour: a newcomer's route in. It is a separate layer in front of the app; see `helper/README.md`. Show it before section 0 when the audience has not seen the product.
+
 ## 0. Find, no model (chat, alice)
 
 Type words you know are in a report and press **Find**: `grew by 6.3 percent year-on-year`. Pages with the words marked, in a few milliseconds, no model call; click a page to see it, or PDF to open it there. Then `"real gdp grew" -2024` to show a phrase and an exclusion. The point: finding is plain full-text search over the library, free and instant. The model is only for a claim with a checked quote. `/?user=alice&q=...&find=1` opens straight into it.
