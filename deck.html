@@ -4,129 +4,155 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Research Assistant Client Proposal</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@400..700&family=Geist:wght@400..700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
   :root {
-    --bg: #FAF6EE;
-    --panel: #F4ECE0;
-    --card: #FFFFFF;
-    --fg: #1B1613;
-    --dim: #7A7066;
-    --line: #ECE3D6;
-    --accent: #9E3B33;
-    --accent-ink: #FDF0EE;
-    --accent-soft: #F3E1DE;
-    --accent-soft-ink: #7A2A24;
-    --almond: #EED3BA;
-    --ok: #3F7A54; --ok-soft: #E3F0E7; --ok-ink: #2C5B3C;
-    --warn: #B6791F; --warn-soft: #F6EAD2; --warn-ink: #7C5410;
-    --danger: #C0392B;
-    --ink: #1B1613; --ink2: #2A2320;
-    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
-    --sans: "Geist", "Helvetica Neue", Arial, system-ui, sans-serif;
+    --bg: #FFF9F0; --cream: #FFF9F0; --card: #FFFFFF; --fg: #1F1B16; --dim: #6F675D; --line: #EADFCF;
+    --teal: #0F3B3A; --teal2: #174A48; --teal3: #245C59;
+    --coral: #FF7A5C; --coral-ink: #D9482B; --coral-soft: #FFE1D8;
+    --yellow: #FFE18A; --yellow-soft: #FFF2C4; --yellow-ink: #7A5A00;
+    --mint: #9EE6C0; --mint-soft: #DDF5E7; --green: #1F7A4A;
+    --sky: #D4EAFF; --sky-ink: #1F4F8A; --lilac: #E6DCFF; --lilac-ink: #4B3A8F; --orange: #F4B45F;
+    --accent: var(--coral-ink); --ok: #1F7A4A; --warn: #A8741A; --danger: #D9482B;
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --sans: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: #1B1613; color: var(--fg); overflow: hidden; }
+  html, body { height: 100%; background: #0B2928; color: var(--fg); overflow: hidden; }
   body { font-family: var(--sans); display: grid; place-items: center; }
 
-  #stage {
-    width: 1280px; height: 720px; position: relative; flex: none;
-    transform-origin: center center; background: var(--bg); color: var(--fg);
-    border: 1px solid var(--line);
-  }
-  #stage.dark { background: var(--ink); color: var(--bg); }
-  #stage.accent { background: var(--accent); color: var(--accent-ink); }
-  #stage.panel { background: var(--panel); }
+  #stage { width: 1280px; height: 720px; position: relative; flex: none; transform-origin: center center; background: var(--bg); color: var(--fg); }
+  #stage.dark { background: var(--teal); color: var(--cream); }
+  #stage.accent { background: var(--sky); color: var(--fg); }
+  #stage.panel { background: #FFF3DD; }
 
-  .hdr {
-    position: absolute; top: 22px; left: 56px; right: 56px;
-    display: flex; justify-content: space-between;
-    font: 500 12px var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--dim);
-  }
-  .hdr b { color: var(--accent); font-weight: 600; }
-  #stage.dark .hdr, #stage.accent .hdr { color: var(--almond); }
-  #stage.dark .hdr b, #stage.accent .hdr b { color: var(--almond); }
+  .hdr { position: absolute; top: 20px; left: 56px; right: 56px; display: flex; justify-content: space-between; font: 600 12px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  #meta { background: var(--yellow); color: var(--fg); padding: 3px 12px; border-radius: 999px; }
+  #stage.dark #meta { background: var(--teal3); color: var(--mint); }
 
-  .slide { position: absolute; inset: 64px 56px 52px 56px; display: grid; gap: 22px; align-content: start; }
+  .slide { position: absolute; inset: 58px 56px 52px 56px; display: grid; gap: 20px; align-content: start; }
   .slide.center { align-content: center; }
   .slide.between { align-content: space-between; }
 
-  h1 { font: 500 72px/1.05 var(--serif); letter-spacing: -.01em; max-width: 1050px; }
-  h2 { font: 500 44px/1.1 var(--serif); letter-spacing: -.01em; }
-  h3 { font: 600 15px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
-  h3.ok { color: var(--ok); } h3.warn { color: var(--warn-ink); } h3.danger { color: var(--danger); }
-  .kicker { font: 600 14px var(--sans); letter-spacing: .22em; text-transform: uppercase; color: var(--accent); }
-  #stage.dark .kicker, #stage.accent .kicker { color: var(--almond); }
+  h1 { font: 900 66px/1.02 var(--display); font-stretch: 112%; letter-spacing: -.01em; }
+  h2 { font: 800 40px/1.1 var(--display); font-stretch: 108%; letter-spacing: -.005em; padding-bottom: 12px; border-bottom: 3px solid var(--coral); }
+  h2 .em { font-size: .9em; margin-right: .3em; }
+  h3 { font: 700 15px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--coral-ink); }
+  h3.ok { color: var(--green); } h3.warn { color: var(--yellow-ink); } h3.danger { color: var(--coral-ink); }
+  .kicker { font: 700 14px var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--coral-ink); }
+  #stage.dark .kicker { color: var(--yellow); }
   p, li { font-size: 18px; line-height: 1.4; }
   p.big { font-size: 24px; line-height: 1.35; }
   p.dim { color: var(--dim); }
-  #stage.dark p.dim { color: var(--almond); }
+  #stage.dark p.dim { color: var(--mint); }
   ul, ol { padding-left: 22px; display: grid; gap: 8px; }
-  ol li::marker { color: var(--accent); font-weight: 600; }
+  ol li::marker { color: var(--coral-ink); font-weight: 700; }
 
-  .cols { display: grid; gap: 20px; align-items: start; }
+  .cols { display: grid; gap: 18px; align-items: start; }
   .cols.c2 { grid-template-columns: 1fr 1fr; }
   .cols.c3 { grid-template-columns: 1fr 1fr 1fr; }
   .cols.c4 { grid-template-columns: repeat(4, 1fr); }
   .cols.side { grid-template-columns: 1fr 400px; }
   .stack { display: grid; gap: 10px; align-content: start; }
 
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; }
+  .card { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 14px 18px; }
   .card p { font-size: 17px; }
-  .card.soft { background: var(--accent-soft); border-color: var(--almond); color: var(--accent-soft-ink); }
-  .card.ok { background: var(--ok-soft); border-color: var(--ok-soft); color: var(--ok-ink); }
-  .card.warn { background: var(--warn-soft); border-color: var(--warn-soft); color: var(--warn-ink); }
-  .card.panel { background: var(--panel); border-color: var(--panel); }
-  .card.ink { background: var(--ink); border-color: var(--ink); color: var(--bg); }
-  .card.ink .lbl, .card.ink h3 { color: var(--almond); }
-  .card.ink2 { background: var(--ink2); border-color: var(--ink2); color: var(--bg); }
-  .card.ink2 .lbl { color: var(--almond); }
-  .card.accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-  .card.accent .lbl { color: var(--accent-ink); }
-  .card .lbl { font: 600 14px var(--sans); color: var(--accent); margin-bottom: 6px; }
-  .card .lbl.u { letter-spacing: .14em; text-transform: uppercase; font-size: 13px; color: var(--dim); }
-  .card .t { font-size: 19px; font-weight: 600; line-height: 1.25; margin-bottom: 4px; }
+  .card.c0 { background: var(--mint-soft); border-color: #BFE8D0; }
+  .card.c1 { background: var(--yellow-soft); border-color: #F6DE95; }
+  .card.c2 { background: var(--sky); border-color: #B5D6F5; }
+  .card.c3 { background: var(--lilac); border-color: #CBBDF2; }
+  .card.c4 { background: var(--coral-soft); border-color: #FFC4B4; }
+  .card.soft { background: var(--coral-soft); border-color: #FFC4B4; color: #7A2A1A; }
+  .card.ok { background: var(--mint-soft); border-color: #BFE8D0; color: #14573A; }
+  .card.warn { background: var(--yellow-soft); border-color: #F6DE95; color: #6B4E00; }
+  .card.panel { background: #fff; border-color: var(--line); }
+  .card.ink { background: var(--teal); border-color: var(--teal); color: var(--cream); }
+  .card.ink .lbl, .card.ink h3 { color: var(--yellow); }
+  .card.ink2 { background: var(--teal2); border-color: var(--teal3); color: var(--cream); }
+  .card.ink2 .lbl { color: var(--yellow); }
+  .card.ink .lbl.u, .card.ink2 .lbl.u { color: var(--mint); }
+  .card.accent { background: var(--coral); border-color: var(--coral); color: var(--fg); }
+  .card.accent .lbl { color: var(--fg); }
+  .card .lbl { font: 700 14px var(--sans); color: var(--coral-ink); margin-bottom: 6px; }
+  .card .lbl.u { letter-spacing: .12em; text-transform: uppercase; font-size: 13px; color: var(--dim); }
+  .card .t { font-size: 19px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
   .cols.tight .card { padding: 9px 13px; }
   .cols.tight .card p { font-size: 15px; line-height: 1.3; }
   .cols.tight .stack { gap: 7px; }
   .cols.qa .card { padding: 10px 14px; }
   .cols.qa ul { margin-top: 6px; gap: 5px; padding-left: 18px; }
   .cols.qa li { font-size: 15px; line-height: 1.3; }
-  .card .num { font: 500 56px/1 var(--serif); margin: 6px 0 10px; }
+  .card .num { font: 800 56px/1 var(--display); margin: 6px 0 10px; }
+  .card .em { font-size: 26px; display: block; margin-bottom: 4px; }
 
   .flow { display: flex; align-items: stretch; gap: 8px; }
   .flow .card { flex: 1; }
-  .flow .arr { align-self: center; width: 0; height: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 16px solid var(--almond); flex: none; }
+  .flow .arr { align-self: center; width: 0; height: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 16px solid var(--coral); flex: none; }
 
-  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--line); font-size: 16px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border: 2px solid var(--line); border-radius: 14px; overflow: hidden; font-size: 16px; }
   th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.3; }
-  th { background: var(--ink); color: var(--bg); font-weight: 600; font-size: 14px; letter-spacing: .04em; }
-  tr:nth-child(odd) td { background: var(--bg); }
+  th { background: var(--teal); color: var(--cream); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
+  tr:nth-child(odd) td { background: #FFFBF3; }
+  tr:last-child td { border-bottom: 0; }
   td:last-child { white-space: nowrap; }
   table.wrap td:last-child { white-space: normal; }
-  td.ok { color: var(--ok); font-weight: 600; } td.warn { color: var(--warn); font-weight: 600; } td.danger { color: var(--danger); font-weight: 600; }
+  td.ok { color: var(--green); font-weight: 700; } td.warn { color: var(--warn); font-weight: 700; } td.danger { color: var(--coral-ink); font-weight: 700; }
   table.sm { font-size: 15px; } table.sm th, table.sm td { padding: 7px 10px; }
 
-  .names { font-size: 17px; color: var(--almond); }
-  .ftr { position: absolute; left: 56px; right: 56px; bottom: 18px; display: flex; justify-content: space-between; font: 500 12px var(--sans); color: var(--dim); letter-spacing: .06em; }
-  #stage.dark .ftr, #stage.accent .ftr { color: var(--almond); }
-  .prog { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width .2s; }
-  #stage.accent .prog { background: var(--almond); }
-  .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--ink); color: var(--bg); padding: 12px 16px; border-radius: 8px; font-size: 15px; line-height: 1.4; }
+  .names { font-size: 17px; color: var(--mint); }
+  .ftr { position: absolute; left: 56px; right: 56px; bottom: 16px; display: flex; justify-content: space-between; font: 500 12px var(--sans); color: var(--dim); letter-spacing: .06em; }
+  #stage.dark .ftr { color: var(--mint); }
+  .prog { position: absolute; left: 0; bottom: 0; height: 5px; background: linear-gradient(90deg, var(--coral), var(--yellow), var(--mint)); transition: width .2s; }
+  .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--teal); color: var(--cream); padding: 12px 16px; border-radius: 12px; font-size: 15px; line-height: 1.4; }
   #stage.notes .note { display: block; }
-.b{opacity:0;transform:translateY(6px)}table tr,.card{transition:opacity .25s ease-out,transform .25s ease-out}@media (prefers-reduced-motion:reduce){table tr,.card{transition:none}}
-.shot{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 10px 36px rgba(27,22,19,.14)}.shot img{display:block;width:100%;height:auto}.shot.h img{height:430px;object-fit:cover;object-position:top}.shot.h2 img{height:350px;object-fit:cover;object-position:top}.shot figcaption{font-size:13px;color:var(--dim);padding:8px 12px;border-top:1px solid var(--line);background:var(--paper,#fff)}
-.kv{display:flex;gap:36px;margin:6px 0 14px}.kv div{display:flex;flex-direction:column}.kv b{font:600 40px/1 Fraunces,Georgia,serif;color:var(--ink)}.kv span{font-size:13px;color:var(--dim);margin-top:6px;letter-spacing:.04em;text-transform:uppercase}
-.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{font-size:13px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;color:var(--ink);background:#fff}.chip.ok{border-color:#2f7d4f;color:#2f7d4f}.chip.warn{border-color:#a8741a;color:#a8741a}.chip.danger{border-color:#9E3B33;color:#9E3B33}
-.steps5{display:grid;gap:12px}.steps5>div{display:flex;gap:12px;align-items:baseline}.steps5>div>div{display:block}.steps5 i{font:600 14px/1 Fraunces,serif;color:#fff;background:var(--ink);border-radius:999px;min-width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-style:normal}.steps5 b{font-weight:600}.steps5 span{color:var(--dim);font-size:14px}
+  .b { opacity: 0; transform: translateY(6px); }
+  table tr, .card { transition: opacity .25s ease-out, transform .25s ease-out; }
+  @media (prefers-reduced-motion: reduce) { table tr, .card { transition: none; } }
+
+  .shot { margin: 0; border: 3px solid var(--teal); border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 8px 8px 0 var(--coral); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .shot.h img { height: 430px; object-fit: cover; object-position: top; }
+  .shot.h2 img { height: 350px; object-fit: cover; object-position: top; }
+  .shot figcaption { font-size: 13px; color: var(--dim); padding: 8px 12px; border-top: 2px solid var(--teal); background: #fff; }
+  .kv { display: flex; gap: 40px; margin: 6px 0 12px; }
+  .kv div { display: flex; flex-direction: column; }
+  .kv b { font: 900 54px/1 var(--display); font-stretch: 112%; }
+  .kv div:nth-child(1) b { color: var(--coral-ink); } .kv div:nth-child(2) b { color: var(--teal3); } .kv div:nth-child(3) b { color: #D98A1E; } .kv div:nth-child(4) b { color: var(--green); }
+  .kv span { font-size: 13px; color: var(--dim); margin-top: 6px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 14px; font-weight: 600; padding: 5px 12px; border: 2px solid var(--line); border-radius: 999px; color: var(--fg); background: #fff; }
+  .chips .chip:nth-child(5n+1) { background: var(--sky); border-color: #B5D6F5; } .chips .chip:nth-child(5n+2) { background: var(--lilac); border-color: #CBBDF2; }
+  .chips .chip:nth-child(5n+3) { background: var(--yellow-soft); border-color: #F6DE95; } .chips .chip:nth-child(5n+4) { background: var(--coral-soft); border-color: #FFC4B4; } .chips .chip:nth-child(5n) { background: var(--mint-soft); border-color: #BFE8D0; }
+  .chip.ok { background: var(--mint-soft) !important; border-color: var(--green) !important; color: #14573A; }
+  .chip.warn { background: var(--yellow-soft) !important; border-color: var(--warn) !important; color: #6B4E00; }
+  .chip.danger { background: var(--coral-soft) !important; border-color: var(--coral-ink) !important; color: #8A2412; }
+  .steps5 { display: grid; gap: 12px; }
+  .steps5 > div { display: flex; gap: 12px; align-items: center; }
+  .steps5 > div > div { display: block; }
+  .steps5 i { font-style: normal; font-size: 20px; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; border: 2px solid var(--teal); }
+  .steps5 > div:nth-child(5n+1) i { background: var(--mint); } .steps5 > div:nth-child(5n+2) i { background: var(--yellow); } .steps5 > div:nth-child(5n+3) i { background: var(--sky); }
+  .steps5 > div:nth-child(5n+4) i { background: var(--lilac); } .steps5 > div:nth-child(5n) i { background: var(--coral-soft); }
+  .steps5 b { font-weight: 700; } .steps5 span { color: var(--dim); font-size: 14px; }
+
+  /* the FatherPeng pieces: caption, stamp, cat */
+  .capwrap { display: grid; justify-items: center; gap: 8px; text-align: center; }
+  .cap { display: inline-block; background: var(--yellow); color: #1F1B16; font: 800 24px/1.3 var(--display); text-transform: uppercase; padding: 2px 12px; }
+  .memerow { display: flex; align-items: center; justify-content: center; gap: 32px; margin-top: 4px; }
+  .stamp { display: inline-block; font: 900 44px/1 var(--display); font-stretch: 118%; letter-spacing: .02em; text-transform: uppercase; padding: 6px 22px; border: 6px solid; border-radius: 10px; transform: rotate(-6deg); }
+  .stamp.pass { color: var(--green); border-color: var(--green); } .stamp.fail { color: var(--coral); border-color: var(--coral); } .stamp.refused { color: #B8860B; border-color: #B8860B; }
+  .cat { display: block; }
+  .cat.hero { position: absolute; right: 10px; top: 70px; width: 330px; }
+  .cat.sm { width: 150px; } .cat.md { width: 230px; }
+  .cap.big { font-size: 34px; padding: 4px 16px; }
 </style>
 </head>
 <body>
 <div id="stage">
-  <div class="hdr"><span>DXP // <b>RESEARCH ASSISTANT PROPOSAL</b></span><span id="meta"></span></div>
+  <div class="hdr"><span></span><span id="meta"></span></div>
   <div id="view"></div>
   <div class="note" id="note"></div>
-  <div class="ftr"><span id="hint"></span><span>ANSWERS THAT CARRY THEIR PROOF</span></div>
+  <div class="ftr"><span id="hint"></span><span id="pg"></span></div>
   <div class="prog" id="prog"></div>
 </div>
 
@@ -134,7 +160,47 @@
 (function () {
   var state = { i: 0, notes: false };
 
-  function title(t) { return '<h2>' + t + '</h2>'; }
+  var SEC = { PROBLEM: "🧐", SOLUTION: "💡", "WHAT EXISTS": "✅", TECHNOLOGY: "🧰", PLAN: "🗓️", CLOSE: "🎉" };
+  var EM = {
+    "What we will cover, and what we are asking for": "🗺️", "How a cross-report question is answered today": "🐌", "Pain points, and what a good outcome looks like": "😿",
+    "What the user sees": "👀", "Architecture: how an answer is made": "🧩", "The grounding gate: three rules, no model": "🛡️",
+    "Access control: inside the search, not after it": "🔐", "What runs today": "✅", "What the admin sees": "🎛️",
+    "Results so far: what is measured, what is not": "📊", "Technology: what we propose and why": "🧰", "Alternatives considered": "⚖️",
+    "Expected running cost of the pilot": "💸", "Limitations and what it takes to maintain": "🔧", "The 10-week plan": "🗓️",
+    "What you will see at each checkpoint": "🏁", "Roles and responsibilities": "🧑‍🤝‍🧑", "What we need to ask you before week 1": "🙋",
+    "Assumptions: known, assumed, to confirm": "🧭", "Risks, and how each is handled": "⚠️"
+  };
+  function title(t) { return '<h2>' + (EM[t] ? '<span class="em">' + EM[t] + '</span>' : '') + t + '</h2>'; }
+  // The mascot, drawn as SVG so it stays sharp at any size. One orange cat, a coral roller, a different face per slide.
+  function cat(pose, cls) {
+    var K = "#1B1B1B", F = "#F4B45F", st = 'stroke="' + K + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"';
+    var roller = '<g transform="rotate(-38 196 124)"><rect x="176" y="100" width="44" height="24" rx="7" fill="#FF7A5C" ' + st + '/></g><path d="M196 122 L152 174" fill="none" ' + st + '/>';
+    var gavel = '<g transform="rotate(-38 176 120)"><rect x="152" y="98" width="46" height="24" rx="5" fill="#8B5A1B" ' + st + '/></g><path d="M176 122 L146 164" fill="none" ' + st + '/>';
+    var glass = '<circle cx="172" cy="100" r="22" fill="#DDF3EE" ' + st + '/><path d="M156 118 L134 156" fill="none" stroke="' + K + '" stroke-width="7" stroke-linecap="round"/>';
+    var nose = '<ellipse cx="110" cy="112" rx="4.5" ry="3.5" fill="' + K + '"/>';
+    var smile = '<path d="M100 120 Q110 130 120 120" fill="none" ' + st + '/>';
+    var happyEyes = '<path d="M82 102 Q91 90 100 102 M120 102 Q129 90 138 102" fill="none" ' + st + '/>';
+    var dots = '<circle cx="92" cy="102" r="4.5" fill="' + K + '"/><circle cx="128" cy="102" r="4.5" fill="' + K + '"/>';
+    var face = "", prop = roller, extra = "";
+    if (pose === "happy") face = happyEyes + nose + smile;
+    else if (pose === "party") {
+      face = happyEyes + nose + smile;
+      extra = '<polygon points="90,56 110,12 130,56" fill="#2F4E9E" ' + st + '/><circle cx="110" cy="12" r="7" fill="#FF7A5C" stroke="' + K + '" stroke-width="4"/>' +
+        '<rect x="30" y="40" width="9" height="9" fill="#FF7A5C" transform="rotate(25 34 44)"/><rect x="188" y="52" width="9" height="9" fill="#1F7A4A" transform="rotate(-20 192 56)"/>' +
+        '<circle cx="46" cy="78" r="5" fill="#2F4E9E"/><circle cx="196" cy="24" r="5" fill="#FF7A5C"/><rect x="24" y="110" width="9" height="9" fill="#1F7A4A"/><circle cx="204" cy="86" r="5" fill="#F4B45F"/>';
+    }
+    else if (pose === "worried") {
+      face = '<circle cx="92" cy="102" r="10" fill="#fff" ' + st + '/><path d="M82 100 H102" ' + st + '/><circle cx="128" cy="103" r="4.5" fill="' + K + '"/>' + nose + '<path d="M101 126 Q110 118 119 126" fill="none" ' + st + '/>';
+      prop = ""; extra = '<path d="M162 62 Q170 76 162 82 Q154 76 162 62 Z" fill="#7CC4F5" stroke="' + K + '" stroke-width="3"/>';
+    }
+    else if (pose === "stern") face = '<path d="M76 90 L100 100 M144 90 L120 100" fill="none" ' + st + '/>' + dots + nose + '<path d="M101 124 Q110 118 119 124" fill="none" ' + st + '/>';
+    else if (pose === "detective") { face = dots + nose + '<path d="M102 124 H118" fill="none" ' + st + '/>'; prop = glass; }
+    else if (pose === "judge") { face = '<path d="M80 102 H102 M118 102 H140" fill="none" ' + st + '/>' + nose + '<path d="M102 124 H118" fill="none" ' + st + '/>'; prop = gavel; }
+    return '<svg class="cat ' + (cls || '') + '" viewBox="0 0 220 210" aria-hidden="true"><path d="M8 94 H44 M10 110 H44 M176 94 H212 M176 110 H210" fill="none" stroke="' + K + '" stroke-width="3" stroke-linecap="round"/>' +
+      '<polygon points="52,88 60,28 106,60" fill="' + F + '" ' + st + '/><polygon points="168,88 160,28 114,60" fill="' + F + '" ' + st + '/>' +
+      '<rect x="86" y="150" width="48" height="54" fill="' + F + '" ' + st + '/><ellipse cx="110" cy="106" rx="64" ry="54" fill="' + F + '" ' + st + '/>' +
+      '<path d="M84 154 Q110 172 136 154" fill="none" stroke="#EAF3F0" stroke-width="9" stroke-linecap="round"/>' + face + prop + extra + '</svg>';
+  }
   function card(cls, inner) { return '<div class="card ' + (cls || '') + '">' + inner + '</div>'; }
   function cards(cls, items) { return items.map(function (x) { return card(cls, '<p>' + x + '</p>'); }).join(''); }
   function table(cls, head, rows) {
@@ -143,7 +209,7 @@
         var m = /^\{(ok|warn|danger)\}(.*)$/.exec(c);
         return m ? '<td class="' + m[1] + '">' + m[2] + '</td>' : '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
   }
-  function step(n, t, s, cls) { return card(cls, '<div class="lbl">' + n + '</div><div class="t">' + t + '</div><p class="dim">' + s + '</p>'); }
+  function step(n, t, s, cls) { return card(cls, '<span class="em">' + n + '</span><div class="t">' + t + '</div><p class="dim">' + s + '</p>'); }
   function arr() { return '<div class="arr"></div>'; }
   function shot(file, cap, h) { return '<figure class="shot' + (h === 2 ? ' h2' : h ? ' h' : '') + '"><img src="deck-assets/' + file + '" alt="' + cap + '">' + (cap ? '<figcaption>' + cap + '</figcaption>' : '') + '</figure>'; }
   function kv(items) { return '<div class="kv">' + items.map(function (x) { return '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; }
@@ -152,94 +218,92 @@
   var S = [
     // ---------- 1 PROBLEM ----------
     { sec: "PROBLEM", theme: "dark", cls: "between", html:
-      '<div class="stack" style="gap:14px"><div class="kicker">MARC · client rehearsal · consolidated proposal</div><h1>Answers that carry their proof</h1></div>' +
-      '<div class="stack" style="gap:12px"><p class="big" style="max-width:1000px">A reading room on top of MARC Online: ask a question across the reports a subscriber has bought, get the page for every claim, and have each quote checked against that page before anyone sees it.</p>' +
-      '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali (team lead) · AI Research Intelligence Assistant · 10-week pilot · October 2026</p></div>',
+      '<div class="stack" style="gap:16px;max-width:760px;margin-top:54px"><div class="kicker">🧐 MARC · client rehearsal · 10-week pilot</div><h1>Answers that carry their proof</h1><p class="big" style="color:var(--mint)">Ask across the reports a subscriber has bought. Every claim gets a page. Every quote is checked.</p></div>' + cat("happy", "hero") +
+      '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali (team lead) · October 2026</p>',
       note: "Open with the problem, in full, before anything else. Say who we are in one sentence, then go straight to how the client works today. Do not describe the solution on this slide." },
 
     { sec: "PROBLEM", html:
       title("What we will cover, and what we are asking for") +
-      '<div class="cols side"><ol style="font-size:20px;gap:10px">' +
-      '<li>The problem as we understand it, and how your staff work today</li><li>What we propose to build and how an answer is made, end to end</li><li>What already runs, with its measured and unmeasured results</li><li>Stack, alternatives considered, cost, limits and maintenance</li><li>The 10-week plan and who owns each part</li><li>What we need from you before week 1 can start</li></ol>' +
+      '<div class="cols side"><div class="steps5" style="gap:16px;align-self:center"><div><i>🧐</i><div><b style="font-size:20px">The problem as we understand it, and how your staff work today</b></div></div><div><i>💡</i><div><b style="font-size:20px">What we propose to build and how an answer is made, end to end</b></div></div><div><i>✅</i><div><b style="font-size:20px">What already runs, with its measured and unmeasured results</b></div></div><div><i>🧰</i><div><b style="font-size:20px">Stack, alternatives considered, cost, limits and maintenance</b></div></div><div><i>🗓️</i><div><b style="font-size:20px">The 10-week plan and who owns each part</b></div></div><div><i>🙋</i><div><b style="font-size:20px">What we need from you before week 1 can start</b></div></div></div>' +
       card("panel", '<h3>Three decisions we need today</h3><div class="stack" style="margin-top:10px"><p>Which library is the pilot, and who are the pilot users.</p><p>Which model provider and hosting region are acceptable for your research.</p><p>What result at week 10 would justify an enterprise build.</p></div>') + '</div>',
       note: "Name the three decisions up front. If they cannot decide today, ask who can and by when." },
 
-    { sec: "PROBLEM", html:
+    { sec: "PROBLEM", theme: "panel", html:
       title("How a cross-report question is answered today") +
-      '<p class="dim">A subscriber asks: how has the outlook for a sector changed over the last few reports? MARC Online filters by date and sorts by downloads. There is no search across report text, so a person does this loop by hand.</p>' +
-      '<div class="flow">' + step("1", "Open one PDF", "Guess which report might cover it") + arr() + step("2", "Search inside it", "Keyword find, scroll, read around the hit") + arr() +
-      step("3", "Note the figure", "Copy it out with the page, by hand") + arr() + step("4", "Open the next PDF", "Repeat for every report in scope") + arr() +
-      step("5", "Stitch it together", "Nobody re-checks the figures against the pages", "soft") + '</div>' +
-      card("panel", '<p><b>The knowledge is already in the company’s research.</b> The PDF format makes it slow to connect, so customers and the company’s own staff redo this work every time, and the result depends on who did it.</p>') +
-      '<p class="dim" style="font-size:14px">From the brief and a signed-in walkthrough of MARC Online. How often this happens, and how long it takes, is yours to tell us.</p>',
+      '<div class="flow">' + step("📄", "Open one PDF", "Guess which report") + arr() + step("🔎", "Search inside it", "Find, scroll, read around") + arr() +
+      step("✍️", "Note the figure", "Copy it, with its page, by hand") + arr() + step("📑", "Open the next PDF", "For every report in scope") + arr() +
+      step("🧵", "Stitch it together", "Nobody re-checks the figures", "soft") + '</div>' +
+      '<div class="memerow" style="margin-top:34px;gap:44px">' + cat("worried", "md") + '<div class="capwrap"><span class="cap big">Nobody:</span><span class="cap big">A subscriber: opens five PDFs, one by one</span></div></div>' +
+      '<p class="dim" style="font-size:14px;margin-top:18px">From the brief and a signed-in walkthrough of MARC Online. How often, and how long one question takes, is yours to tell us.</p>',
       note: "This is our reading, not an observation. Ask: is this how it actually happens, who does it, how often, and how long does one question take? Their answer is the pilot baseline." },
 
     { sec: "PROBLEM", html:
       title("Pain points, and what a good outcome looks like") +
       '<div class="cols c2"><div class="stack"><h3>What hurts today</h3>' + cards("", [
-        "<b>Slow.</b> Every cross-report question is a manual search across several PDFs.",
-        "<b>Repeated.</b> The same question is answered again by the next person, from scratch.",
-        "<b>Unverifiable.</b> A figure copied by hand has no link back to its page. Errors travel.",
-        "<b>Locked value.</b> Customers cannot query the research they pay for, so its value is capped.",
-        "<b>Investment risk.</b> An enterprise system is expensive before anyone has proved customers want it."]) + '</div>' +
+        "🐌 <b>Slow.</b> Every cross-report question is a manual search across several PDFs.",
+        "🔁 <b>Repeated.</b> The same question is answered again by the next person, from scratch.",
+        "🤷 <b>Unverifiable.</b> A figure copied by hand has no link back to its page. Errors travel.",
+        "🔒 <b>Locked value.</b> Customers cannot query the research they pay for, so its value is capped.",
+        "💸 <b>Investment risk.</b> An enterprise system is expensive before anyone has proved customers want it."]) + '</div>' +
       '<div class="stack"><h3 class="ok">Expected outcome at week 10</h3>' + cards("ok", [
-        "<b>Minutes, not hours.</b> One question searches the whole permitted library and returns a cited answer.",
-        "<b>Every claim has a page.</b> Click a citation and see the quote highlighted on the real page.",
-        "<b>No false figures.</b> Measured on an agreed question set: zero figures stated that the page does not say. An answer beside the point goes to review, and is counted.",
-        "<b>Access that cannot leak.</b> A user only ever sees passages from libraries they are granted.",
-        "<b>A go or no-go number.</b> Pilot data that sizes the enterprise build, or shows cheaply why not."]) + '</div></div>',
+        "⏱️ <b>Minutes, not hours.</b> One question searches the whole permitted library and returns a cited answer.",
+        "📄 <b>Every claim has a page.</b> Click a citation and see the quote highlighted on the real page.",
+        "✅ <b>No false figures.</b> Measured on an agreed question set: zero figures stated that the page does not say. An answer beside the point goes to review, and is counted.",
+        "🔐 <b>Access that cannot leak.</b> A user only ever sees passages from libraries they are granted.",
+        "🚦 <b>A go or no-go number.</b> Pilot data that sizes the enterprise build, or shows cheaply why not."]) + '</div></div>',
       note: "Left is from the brief. Right is our proposal of what success means; the client has to agree it, especially the last row. Ask which of the five matters most." },
 
     // ---------- 2 SOLUTION ----------
-    { sec: "SOLUTION", theme: "accent", cls: "center", html:
-      '<div class="kicker">Our answer in one line</div><h1 style="font-size:64px;max-width:1100px">The assistant never shows an answer it cannot back up.</h1>' +
-      '<p class="big" style="max-width:1000px">Every claim carries a page citation. Plain code, not a model, checks that the cited quote is on that page and that every number in the claim is in the quote. If the library does not support an answer, it says so.</p>',
+    { sec: "SOLUTION", theme: "accent", cls: "between", html:
+      '<div class="stack" style="gap:16px;max-width:800px;margin-top:40px"><div class="kicker">💡 Our answer in one line</div><h1 style="font-size:60px">The assistant never shows an answer it cannot back up.</h1><p class="big">A page for every claim. Plain code checks the quote is on it, and the numbers are in the quote.</p></div>' + cat("party", "hero") +
+      '<div style="margin-bottom:36px"><span class="stamp pass">Checked</span></div>',
       note: "Pause here. The differentiator is not AI over PDFs. It is the check that runs after the model and before the user, and that it is deterministic code anyone can audit." },
 
     { sec: "SOLUTION", html:
       title("What the user sees") +
       '<div class="cols side" style="grid-template-columns:7fr 5fr;gap:28px">' + shot("chat-answer.png", "The demo, as it runs today: a stored answer, its citation chip, and the quote one click away.", true) +
       '<div class="steps5" style="align-self:center">' +
-      '<div><i>1</i><div><b>Ask in plain language</b><br><span>“The April 2024 monitor” in the question becomes a filter.</span></div></div>' +
-      '<div><i>2</i><div><b>Watch the sources arrive</b><br><span>Only from reports this user may search.</span></div></div>' +
-      '<div><i>3</i><div><b>See every claim checked</b><br><span>Quote on page N, or removed with the reason.</span></div></div>' +
-      '<div><i>4</i><div><b>Read the cited answer</b><br><span>Click the chip: the quote on the page, and the PDF at that page.</span></div></div>' +
-      '<div><i>5</i><div><b>Rate it, or hand it to a person</b><br><span>Nothing happens unless pressed.</span></div></div>' +
-      '<div><i>·</i><div><b>Or an honest refusal</b><br><span>“Not found in your library”, closest pages shown. It does not guess.</span></div></div>' +
+      '<div><i>💬</i><div><b>Ask in plain language</b><br><span>“The April 2024 monitor” becomes a filter.</span></div></div>' +
+      '<div><i>🔎</i><div><b>Watch the sources arrive</b><br><span>Only from reports this user may search.</span></div></div>' +
+      '<div><i>✅</i><div><b>See every claim checked</b><br><span>Quote on page N, or removed with the reason.</span></div></div>' +
+      '<div><i>📄</i><div><b>Read the cited answer</b><br><span>Click the chip: the quote, then the PDF at that page.</span></div></div>' +
+      '<div><i>👍</i><div><b>Rate it, or hand it to a person</b><br><span>Nothing happens unless pressed.</span></div></div>' +
+      '<div><i>🙅</i><div><b>Or an honest refusal</b><br><span>“Not found in your library”. It does not guess.</span></div></div>' +
       '</div></div>',
       note: "If a live demo is possible, run it here: one safe question from the script, one that should refuse. The user picker is not a login; the real build gets your identity provider." },
 
     { sec: "SOLUTION", html:
       title("Architecture: how an answer is made") +
       '<div class="flow">' +
-      card("", '<div class="lbl u">Ingest</div><div class="t">PDF, page by page</div><p class="dim">Page numbers kept. Scans flagged for OCR.</p>') + arr() +
-      card("", '<div class="lbl u">Retrieve</div><div class="t">Granted reports only</div><p class="dim">Keyword plus meaning search. The grant is a join in the query.</p>') + arr() +
-      card("soft", '<div class="lbl u" style="color:var(--accent)">Draft · model</div><div class="t">Claims with exact quotes</div><p>Sees only the retrieved passages.</p>') + arr() +
-      card("ink", '<div class="lbl u" style="color:var(--almond)">Gate · plain code</div><div class="t">Quote on page? Numbers match?</div><p style="color:var(--almond)">Fail: retry once. Fail again: remove, or refuse.</p>') + arr() +
-      card("", '<div class="lbl u">Show · audit</div><div class="t">Cited answer, page, PDF</div><p class="dim">Every question and outcome logged.</p>') + '</div>' +
-      chips(["{ok}Runs today: ingest, retrieve, draft, gate, show, audit", "Our own store and front end; nothing touches MARC Online", "Reports and entitlements arrive by your API licence", "Model behind one interface: provider decided with you", "{warn}Meaning search and OCR: weeks 2 to 5"]),
+      card("", '<span class="em">📥</span><div class="lbl u">Ingest</div><div class="t">PDF, page by page</div><p class="dim">Page numbers kept. Scans flagged for OCR.</p>') + arr() +
+      card("", '<span class="em">🔎</span><div class="lbl u">Retrieve</div><div class="t">Granted reports only</div><p class="dim">Keyword plus meaning search. The grant is a join in the query.</p>') + arr() +
+      card("c1", '<span class="em">🤖</span><div class="lbl u">Draft · model</div><div class="t">Claims with exact quotes</div><p>Sees only the retrieved passages.</p>') + arr() +
+      card("ink", '<span class="em">🛡️</span><div class="lbl u">Gate · plain code</div><div class="t">Quote on page? Numbers match?</div><p style="color:var(--mint)">Fail: retry once. Fail again: remove, or refuse.</p>') + arr() +
+      card("", '<span class="em">📄</span><div class="lbl u">Show · audit</div><div class="t">Cited answer, page, PDF</div><p class="dim">Every question and outcome logged.</p>') + '</div>' +
+      chips(["{ok}✅ Runs today: ingest, retrieve, draft, gate, show, audit", "🏠 Our own store and front end; nothing touches MARC Online", "🔑 Reports and entitlements arrive by your API licence", "🔌 Model behind one interface: provider decided with you", "{warn}🚧 Meaning search and OCR: weeks 2 to 5"]),
       note: "Walk left to right. The model only ever sees passages the user may see. The gate is deterministic string checks, so it is auditable and costs no model call. It cannot judge relevance, which is why wrong-and-confident is measured." },
 
     { sec: "SOLUTION", html:
       title("The grounding gate: three rules, no model") +
       '<div class="cols c3">' +
-      card("", '<div class="lbl">Rule 1</div><div class="t">The quote is on the cited page</div><p class="dim">Exact match. A paraphrase fails.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">“expanded by 4.4 percent in H1 2025” → <span class="ok">on p. 23</span></p>') +
-      card("", '<div class="lbl">Rule 2</div><div class="t">Every number in the claim is in the quote, in a sentence</div><p class="dim">A number read off a chart axis does not count.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">“5.1 4.4 3.6 3.3 4.1 2025f” → <span class="danger">removed</span></p>') +
-      card("", '<div class="lbl">Rule 3</div><div class="t">The page cited was one the model was shown</div><p class="dim">So it cannot cite a report the user may not see.</p><p style="font-family:ui-monospace,monospace;font-size:13px;margin-top:10px">doc 6, p. 1, no grant → <span class="danger">never retrieved</span></p>') + '</div>' +
-      '<div class="cols side" style="margin-top:18px"><div class="flow">' + card("soft", '<div class="t">Fail</div><p class="dim">Retry once, with the reasons.</p>') + arr() + card("soft", '<div class="t">Fail again</div><p class="dim">Remove the claim.</p>') + arr() + card("ink", '<div class="t">Nothing survives</div><p style="color:var(--almond)">“Not found”, closest pages shown.</p>') + '</div>' +
-      card("warn", '<p><b>What it cannot do.</b> Prove the claim answers the question. A true quote beside the point passes the gate; that is why wrong-and-confident is measured on a question set, not assumed.</p>') + '</div>',
+      card("", '<span class="em">📍</span><div class="lbl">Rule 1</div><div class="t">The quote is on the cited page</div><p class="dim">Exact match. A paraphrase fails.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">“expanded by 4.4 percent in H1 2025” → <span class="ok" style="color:var(--green);font-weight:700">on p. 23</span></p>') +
+      card("", '<span class="em">🔢</span><div class="lbl">Rule 2</div><div class="t">Every number is in the quote, in a sentence</div><p class="dim">A number read off a chart axis does not count.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">“5.1 4.4 3.6 3.3 4.1 2025f” → <span style="color:var(--coral-ink);font-weight:700">removed</span></p>') +
+      card("", '<span class="em">🚪</span><div class="lbl">Rule 3</div><div class="t">The page was one the model was shown</div><p class="dim">So it cannot cite a report the user may not see.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">doc 6, p. 1, no grant → <span style="color:var(--coral-ink);font-weight:700">never retrieved</span></p>') + '</div>' +
+      '<div class="cols side" style="margin-top:8px;grid-template-columns:1fr 360px;align-items:center"><div class="flow">' + card("c1", '<span class="em">🔁</span><div class="t">Fail</div><p class="dim">Retry once, with the reasons.</p>') + arr() + card("c1", '<span class="em">✂️</span><div class="t">Fail again</div><p class="dim">Remove the claim.</p>') + arr() +
+      card("", '<div style="text-align:center;padding-top:6px"><span class="stamp refused" style="font-size:30px;border-width:5px">Refused</span><p class="dim" style="margin-top:10px">Nothing survives: “not found”.</p></div>') + '</div>' +
+      '<div class="memerow" style="gap:12px">' + cat("judge", "sm") + card("warn", '<p style="font-size:15px"><b>What it cannot do.</b> Prove the claim answers the question. That is why it is measured.</p>') + '</div></div>',
       build: true,
       note: "Say the limit before the client finds it. Each rule has a test that fails when the rule is removed. The chart-axis example is a real catch from the Gemini runs." },
 
     { sec: "SOLUTION", html:
-      title("Access control: enforced inside the search, not after it") +
+      title("Access control: inside the search, not after it") +
       '<div class="cols side" style="grid-template-columns:5fr 7fr;gap:28px"><div class="steps5" style="align-self:center">' +
-      '<div><i>1</i><div><b>Entitlements come from your subscriber export</b><br><span>We never read MARC Online.</span></div></div>' +
-      '<div><i>2</i><div><b>The grant is a join in the search query</b><br><span>A passage you may not see is never returned, never reaches the model, is never cited.</span></div></div>' +
-      '<div><i>3</i><div><b>The page and the PDF repeat the check</b><br><span>A guessed id returns nothing without the grant.</span></div></div>' +
-      '<div><i>4</i><div><b>The trace names only your libraries</b><br><span>Every question, outcome and source is logged.</span></div></div>' +
-      '<div><i>5</i><div><b>Documents are data, not instructions</b><br><span>Text in a PDF cannot change the assistant.</span></div></div>' +
-      '<div><i>!</i><div><b class="warn">Not yet: real login</b><br><span>The demo has a user picker. The pilot gets your identity provider or invited users.</span></div></div>' +
+      '<div><i>📋</i><div><b>Entitlements come from your subscriber export</b><br><span>We never read MARC Online.</span></div></div>' +
+      '<div><i>🔗</i><div><b>The grant is a join in the search query</b><br><span>A passage you may not see is never returned, never reaches the model, is never cited.</span></div></div>' +
+      '<div><i>🔁</i><div><b>The page and the PDF repeat the check</b><br><span>A guessed id returns nothing without the grant.</span></div></div>' +
+      '<div><i>📜</i><div><b>The trace names only your libraries</b><br><span>Every question, outcome and source is logged.</span></div></div>' +
+      '<div><i>🧱</i><div><b>Documents are data, not instructions</b><br><span>Text in a PDF cannot change the assistant.</span></div></div>' +
+      '<div><i>🚧</i><div><b>Not yet: real login</b><br><span>The demo has a user picker. The pilot gets your identity provider or invited users.</span></div></div>' +
       '</div>' + shot("chat-steps.png", "Investigation steps: the search names only the libraries this user holds; each step marked plain code or model call, with its duration.", true) + '</div>',
       note: "Access was a hard requirement in the brief. Design done and tested: a test fails if the join is removed. Login depends on their identity provider." },
 
@@ -248,13 +312,13 @@
       title("What runs today") +
       kv([["87", "automated tests"], ["5", "public reports, 490 pages"], ["3", "models, 19 measured runs"], ["0", "false figures in 285 attempts"]]) +
       '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("user-board.png", "A subscriber’s board: library with PDF and ask links, an analysis across five editions, answers, ratings, review requests.", 2) +
-      '<div class="stack" style="gap:10px;align-self:center">' + chips(["{ok}Chat, sources, checks, cited answer", "{ok}Quote on the page, PDF at that page", "{ok}History replays without a model call", "{ok}Library, analyses, user board", "{ok}Admin board, add user, API keys", "{ok}Evaluation harness, three models", "{warn}Comparisons: split", "{danger}PostgreSQL, React, OCR, your login: weeks 2 to 6"]) + '</div></div>',
+      '<div class="stack" style="gap:10px;align-self:center">' + chips(["{ok}💬 Chat, sources, checks, cited answer", "{ok}📄 Quote on the page, PDF at that page", "{ok}⚡ History replays without a model call", "{ok}📚 Library, analyses, user board", "{ok}🎛️ Admin board, add user, API keys", "{ok}📊 Evaluation harness, three models", "{warn}🤔 Comparisons: split", "{danger}🚧 PostgreSQL, React, OCR, your login: weeks 2 to 6"]) + '</div></div>',
       note: "Do not oversell: real reports, never a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
 
     { sec: "WHAT EXISTS", theme: "panel", html:
       title("What the admin sees") +
       '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("admin-board.png", "One screen: a brief since the last look, key figures, what to do and why, reports by edition, coverage, recent questions, saved runs.", true) +
-      '<div class="stack" style="gap:10px;align-self:center">' + chips(["Counts and names, never answer text", "To do, each with its reason", "Reports on a timeline, sized by citations", "Pages flagged for OCR", "Every saved evaluation run", "Add a user, create and revoke API keys", "Try a question as any user", "Layout is a JSON document per owner"]) + '</div></div>',
+      '<div class="stack" style="gap:10px;align-self:center">' + chips(["🙈 Counts and names, never answer text", "📝 To do, each with its reason", "🗓️ Reports on a timeline, sized by citations", "🔍 Pages flagged for OCR", "🧪 Every saved evaluation run", "➕ Add a user, create and revoke API keys", "🕵️ Try a question as any user", "🧩 Layout is a JSON document per owner"]) + '</div></div>',
       note: "The admin never sees answer text; that stays with the user who asked. Expand a panel to show the layout document at work." },
 
     { sec: "WHAT EXISTS", html:
@@ -411,11 +475,11 @@
       note: "The two risks the client controls are the last two rows. Ours is engineering, theirs is decisions and participation; the plan fails without both." },
 
     { sec: "CLOSE", theme: "dark", cls: "between", html:
-      '<div class="stack" style="gap:14px"><div class="kicker">To close</div><h1 style="font-size:60px;max-width:1100px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' +
+      '<div class="stack" style="gap:14px;max-width:800px;margin-top:40px"><div class="kicker">🎉 To close</div><h1 style="font-size:46px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' + cat("happy", "hero") +
       '<div class="cols c3">' +
-      card("ink2", '<div class="lbl">We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
-      card("ink2", '<div class="lbl">You get at the end of week 1</div><p>Your own reports in the demo, three models measured on them, and your first analysis across editions.</p>') +
-      card("accent", '<div class="lbl">At week 10</div><p>A go or no-go decision on your numbers, not ours.</p>') + '</div>' +
+      card("ink2", '<div class="lbl">🙋 We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
+      card("ink2", '<div class="lbl">🎁 You get at the end of week 1</div><p>Your own reports in the demo, three models measured on them, and your first analysis across editions.</p>') +
+      card("accent", '<div class="lbl">🏁 At week 10</div><p>A go or no-go decision on your numbers, not ours.</p>') + '</div>' +
       '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali</p>',
       note: "End on the three boxes and stop talking. Then ask for the sponsor’s name and the date for the five sample reports before the meeting ends." }
   ];
@@ -428,11 +492,14 @@
     stage.className = (s.theme || "") + (state.notes ? " notes" : "");
     view.innerHTML = '<div class="slide ' + (s.cls || "") + '">' + s.html + '</div>';
     document.getElementById("note").textContent = s.note || "";
-    document.getElementById("meta").innerHTML = s.sec + ' &nbsp; <b>' + pad(state.i + 1) + ' / ' + S.length + '</b>';
+    document.getElementById("meta").textContent = (SEC[s.sec] || "") + " " + s.sec;
+    document.getElementById("pg").textContent = (state.i + 1) + " / " + S.length;
+    // pastel cycle for plain cards: the colour follows the card's place among its siblings
+    view.querySelectorAll(".card").forEach(function (c) { if (c.className.trim() === "card") { var k = Array.prototype.indexOf.call(c.parentNode.children, c); c.classList.add("c" + (k % 5)); } });
     document.getElementById("hint").textContent = (s.build ? "→ reveals, then " : "") + "← → slides | N notes | F fullscreen | Home / End";
     document.getElementById("prog").style.width = ((state.i + 1) / S.length * 100) + "%";
     try { location.hash = String(state.i + 1); } catch (e) {}
-    if (s.build) { view.querySelectorAll("table tr:not(:first-child), .cols > .card").forEach(function (el) { el.classList.add("b"); }); }
+    if (s.build && !/reveal=all/.test(location.search)) { view.querySelectorAll("table tr:not(:first-child), .cols > .card").forEach(function (el) { el.classList.add("b"); }); }
   }
   // Don't show everything at once: on a build slide, the right arrow reveals the next row before it moves on.
   function reveal() { var next = view.querySelector(".b"); if (!next) return false; next.classList.remove("b"); return true; }
