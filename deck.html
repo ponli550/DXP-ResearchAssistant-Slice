@@ -6,14 +6,14 @@
 <title>Research Assistant Client Proposal</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
+  /* The rules this follows are in docs/DESIGN.md, "The deck". Short version: three colours carry the page (cream, teal, coral),
+     status is a word as well as a colour, cards are flat with a one-pixel outline, spacing comes from one scale, corners are small. */
   :root {
-    --bg: #FFF9F0; --cream: #FFF9F0; --card: #FFFFFF; --fg: #1F1B16; --dim: #6F675D; --line: #EADFCF;
+    --bg: #FFF9F0; --card: #FFFFFF; --fg: #1F1B16; --dim: #6A6257; --line: #E3D8C6;
     --teal: #0F3B3A; --teal2: #174A48; --teal3: #245C59;
-    --coral: #FF7A5C; --coral-ink: #D9482B; --coral-soft: #FFE1D8;
-    --yellow: #FFE18A; --yellow-soft: #FFF2C4; --yellow-ink: #7A5A00;
-    --mint: #9EE6C0; --mint-soft: #DDF5E7; --green: #1F7A4A;
-    --sky: #D4EAFF; --sky-ink: #1F4F8A; --lilac: #E6DCFF; --lilac-ink: #4B3A8F; --orange: #F4B45F;
-    --accent: var(--coral-ink); --ok: #1F7A4A; --warn: #A8741A; --danger: #D9482B;
+    --coral: #FF7A5C; --coral-ink: #D9482B; --yellow: #FFE18A; --mint: #9EE6C0;
+    --green: #1F7A4A; --warn: #8F6212; --orange: #F4B45F;
+    --s1: 8px; --s2: 12px; --s3: 16px; --s4: 24px; --s5: 32px; --r: 4px;
     --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
     --sans: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -23,76 +23,68 @@
   body { font-family: var(--sans); display: grid; place-items: center; }
 
   #stage { width: 1280px; height: 720px; position: relative; flex: none; transform-origin: center center; background: var(--bg); color: var(--fg); }
-  #stage.dark { background: var(--teal); color: var(--cream); }
-  #stage.accent { background: var(--sky); color: var(--fg); }
-  #stage.panel { background: #FFF3DD; }
+  #stage.dark { background: var(--teal); color: var(--bg); }
+  #stage.accent { background: var(--coral); color: var(--fg); }
+  #stage.panel { background: #FFF4E2; }
 
-  .hdr { position: absolute; top: 20px; left: 56px; right: 56px; display: flex; justify-content: space-between; font: 600 12px var(--sans); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
-  #meta { background: var(--yellow); color: var(--fg); padding: 3px 12px; border-radius: 999px; }
-  #stage.dark #meta { background: var(--teal3); color: var(--mint); }
-
-  .slide { position: absolute; inset: 58px 56px 52px 56px; display: grid; gap: 20px; align-content: start; }
+  .hdr { display: none; }
+  .slide { position: absolute; inset: 48px 56px 52px 56px; display: grid; gap: var(--s4); align-content: start; }
   .slide.center { align-content: center; }
   .slide.between { align-content: space-between; }
 
-  h1 { font: 900 66px/1.02 var(--display); font-stretch: 112%; letter-spacing: -.01em; }
-  h2 { font: 800 40px/1.1 var(--display); font-stretch: 108%; letter-spacing: -.005em; padding-bottom: 12px; border-bottom: 3px solid var(--coral); }
-  h2 .em { font-size: .9em; margin-right: .3em; }
-  h3 { font: 700 15px var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--coral-ink); }
-  h3.ok { color: var(--green); } h3.warn { color: var(--yellow-ink); } h3.danger { color: var(--coral-ink); }
-  .kicker { font: 700 14px var(--sans); letter-spacing: .18em; text-transform: uppercase; color: var(--coral-ink); }
-  #stage.dark .kicker { color: var(--yellow); }
+  h1 { font: 900 66px/1.02 var(--display); font-stretch: 112%; letter-spacing: -.01em; text-wrap: balance; }
+  h2 { font: 800 40px/1.1 var(--display); font-stretch: 108%; letter-spacing: -.005em; padding-bottom: var(--s2); border-bottom: 2px solid var(--coral); text-wrap: balance; }
+  h3 { font: 700 14px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--coral-ink); }
+  h3.ok { color: var(--green); } h3.warn { color: var(--warn); } h3.danger { color: var(--coral-ink); }
+  .kicker { font: 600 13px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--coral-ink); }
+  #stage.dark .kicker { color: var(--yellow); } #stage.accent .kicker { color: var(--teal); }
   p, li { font-size: 18px; line-height: 1.4; }
-  p.big { font-size: 24px; line-height: 1.35; }
+  p.big { font-size: 24px; line-height: 1.35; text-wrap: pretty; }
   p.dim { color: var(--dim); }
   #stage.dark p.dim { color: var(--mint); }
-  ul, ol { padding-left: 22px; display: grid; gap: 8px; }
-  ol li::marker { color: var(--coral-ink); font-weight: 700; }
+  ul, ol { padding-left: 22px; display: grid; gap: var(--s1); }
 
-  .cols { display: grid; gap: 18px; align-items: start; }
+  .cols { display: grid; gap: var(--s4); align-items: start; }
   .cols.c2 { grid-template-columns: 1fr 1fr; }
   .cols.c3 { grid-template-columns: 1fr 1fr 1fr; }
   .cols.c4 { grid-template-columns: repeat(4, 1fr); }
+  .cols.c3, .cols.c4 { align-items: stretch; }
+  .cols.c4 .card .lbl { font: 800 22px/1.1 var(--display); font-stretch: 108%; color: var(--teal); margin-bottom: var(--s1); }
   .cols.side { grid-template-columns: 1fr 400px; }
-  .stack { display: grid; gap: 10px; align-content: start; }
+  .stack { display: grid; gap: var(--s2); align-content: start; }
 
-  .card { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3) var(--s4); }
   .card p { font-size: 17px; }
-  .card.c0 { background: var(--mint-soft); border-color: #BFE8D0; }
-  .card.c1 { background: var(--yellow-soft); border-color: #F6DE95; }
-  .card.c2 { background: var(--sky); border-color: #B5D6F5; }
-  .card.c3 { background: var(--lilac); border-color: #CBBDF2; }
-  .card.c4 { background: var(--coral-soft); border-color: #FFC4B4; }
-  .card.soft { background: var(--coral-soft); border-color: #FFC4B4; color: #7A2A1A; }
-  .card.ok { background: var(--mint-soft); border-color: #BFE8D0; color: #14573A; }
-  .card.warn { background: var(--yellow-soft); border-color: #F6DE95; color: #6B4E00; }
-  .card.panel { background: #fff; border-color: var(--line); }
-  .card.ink { background: var(--teal); border-color: var(--teal); color: var(--cream); }
+  .card.soft { border-left: 4px solid var(--coral); background: #FFF3EE; }
+  .card.ok { border-left: 4px solid var(--green); background: #F0F8F3; }
+  .card.warn { border-left: 4px solid var(--warn); background: #FFF8E1; }
+  .card.panel { background: var(--card); }
+  .card.ink { background: var(--teal); border-color: var(--teal); color: var(--bg); }
   .card.ink .lbl, .card.ink h3 { color: var(--yellow); }
-  .card.ink2 { background: var(--teal2); border-color: var(--teal3); color: var(--cream); }
+  .card.ink2 { background: var(--teal2); border-color: var(--teal3); color: var(--bg); }
   .card.ink2 .lbl { color: var(--yellow); }
-  .card.ink .lbl.u, .card.ink2 .lbl.u { color: var(--mint); }
   .card.accent { background: var(--coral); border-color: var(--coral); color: var(--fg); }
   .card.accent .lbl { color: var(--fg); }
   .card .lbl { font: 700 14px var(--sans); color: var(--coral-ink); margin-bottom: 6px; }
-  .card .lbl.u { letter-spacing: .12em; text-transform: uppercase; font-size: 13px; color: var(--dim); }
+  .card .lbl.u { letter-spacing: .12em; text-transform: uppercase; font-size: 12px; color: var(--dim); }
+  .card.ink .lbl.u, .card.ink2 .lbl.u { color: var(--mint); }
   .card .t { font-size: 19px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
-  .cols.tight .card { padding: 9px 13px; }
-  .cols.tight .card p { font-size: 15px; line-height: 1.3; }
-  .cols.tight .stack { gap: 7px; }
-  .cols.qa .card { padding: 10px 14px; }
-  .cols.qa ul { margin-top: 6px; gap: 5px; padding-left: 18px; }
+  .cols.qa .card { padding: var(--s2) var(--s3); }
+  .cols.qa ul { margin-top: 6px; gap: 6px; padding-left: 18px; }
   .cols.qa li { font-size: 15px; line-height: 1.3; }
   .card .num { font: 800 56px/1 var(--display); margin: 6px 0 10px; }
-  .card .em { font-size: 26px; display: block; margin-bottom: 4px; }
+  .idx { display: block; font: 500 12px var(--mono); letter-spacing: .1em; color: var(--coral-ink); margin-bottom: 6px; }
+  .card.ink .idx { color: var(--mint); }
 
-  .flow { display: flex; align-items: stretch; gap: 8px; }
+  .rows { display: grid; align-content: start; border-top: 1px solid var(--line); }
+  .rows p { font-size: 17px; line-height: 1.35; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
+  .flow { display: flex; align-items: stretch; gap: var(--s1); }
   .flow .card { flex: 1; }
-  .flow .arr { align-self: center; width: 0; height: 0; border-top: 9px solid transparent; border-bottom: 9px solid transparent; border-left: 16px solid var(--coral); flex: none; }
+  .flow .arr { align-self: center; width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid var(--coral); flex: none; }
 
-  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border: 2px solid var(--line); border-radius: 14px; overflow: hidden; font-size: 16px; }
-  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.3; }
-  th { background: var(--teal); color: var(--cream); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; font-size: 16px; }
+  th, td { text-align: left; padding: var(--s1) var(--s2); border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.3; }
+  th { background: var(--teal); color: var(--bg); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
   tr:nth-child(odd) td { background: #FFFBF3; }
   tr:last-child td { border-bottom: 0; }
   td:last-child { white-space: nowrap; }
@@ -100,51 +92,49 @@
   td.ok { color: var(--green); font-weight: 700; } td.warn { color: var(--warn); font-weight: 700; } td.danger { color: var(--coral-ink); font-weight: 700; }
   table.sm { font-size: 15px; } table.sm th, table.sm td { padding: 7px 10px; }
 
-  .names { font-size: 17px; color: var(--mint); }
-  .ftr { position: absolute; left: 56px; right: 56px; bottom: 16px; display: flex; justify-content: space-between; font: 500 12px var(--sans); color: var(--dim); letter-spacing: .06em; }
-  #stage.dark .ftr { color: var(--mint); }
-  .prog { position: absolute; left: 0; bottom: 0; height: 5px; background: linear-gradient(90deg, var(--coral), var(--yellow), var(--mint)); transition: width .2s; }
-  .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--teal); color: var(--cream); padding: 12px 16px; border-radius: 12px; font-size: 15px; line-height: 1.4; }
+  .names { font-size: 16px; color: var(--mint); }
+  .ftr { position: absolute; left: 56px; right: 56px; bottom: 16px; display: flex; justify-content: space-between; font: 500 12px var(--mono); color: var(--dim); letter-spacing: .04em; }
+  #stage.dark .ftr { color: var(--mint); } #stage.accent .ftr { color: var(--teal); }
+  .prog { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--coral); transition: width .2s; }
+  #stage.accent .prog { background: var(--teal); }
+  .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--teal); color: var(--bg); padding: var(--s2) var(--s3); border-radius: var(--r); font-size: 15px; line-height: 1.4; }
   #stage.notes .note { display: block; }
   .b { opacity: 0; transform: translateY(6px); }
   table tr, .card { transition: opacity .25s ease-out, transform .25s ease-out; }
   @media (prefers-reduced-motion: reduce) { table tr, .card { transition: none; } }
 
-  .shot { margin: 0; border: 3px solid var(--teal); border-radius: 14px; overflow: hidden; background: #fff; box-shadow: 8px 8px 0 var(--coral); }
+  .shot { margin: 0; border: 1px solid var(--teal); border-radius: var(--r); overflow: hidden; background: #fff; }
   .shot img { display: block; width: 100%; height: auto; }
   .shot.h img { height: 430px; object-fit: cover; object-position: top; }
   .shot.h2 img { height: 350px; object-fit: cover; object-position: top; }
-  .shot figcaption { font-size: 13px; color: var(--dim); padding: 8px 12px; border-top: 2px solid var(--teal); background: #fff; }
-  .kv { display: flex; gap: 40px; margin: 6px 0 12px; }
+  .shot figcaption { font-size: 13px; color: var(--dim); padding: var(--s1) var(--s2); border-top: 1px solid var(--teal); background: #fff; }
+  .kv { display: flex; gap: var(--s5); margin: 6px 0 var(--s2); }
   .kv div { display: flex; flex-direction: column; }
-  .kv b { font: 900 54px/1 var(--display); font-stretch: 112%; }
-  .kv div:nth-child(1) b { color: var(--coral-ink); } .kv div:nth-child(2) b { color: var(--teal3); } .kv div:nth-child(3) b { color: #D98A1E; } .kv div:nth-child(4) b { color: var(--green); }
-  .kv span { font-size: 13px; color: var(--dim); margin-top: 6px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip { font-size: 14px; font-weight: 600; padding: 5px 12px; border: 2px solid var(--line); border-radius: 999px; color: var(--fg); background: #fff; }
-  .chips .chip:nth-child(5n+1) { background: var(--sky); border-color: #B5D6F5; } .chips .chip:nth-child(5n+2) { background: var(--lilac); border-color: #CBBDF2; }
-  .chips .chip:nth-child(5n+3) { background: var(--yellow-soft); border-color: #F6DE95; } .chips .chip:nth-child(5n+4) { background: var(--coral-soft); border-color: #FFC4B4; } .chips .chip:nth-child(5n) { background: var(--mint-soft); border-color: #BFE8D0; }
-  .chip.ok { background: var(--mint-soft) !important; border-color: var(--green) !important; color: #14573A; }
-  .chip.warn { background: var(--yellow-soft) !important; border-color: var(--warn) !important; color: #6B4E00; }
-  .chip.danger { background: var(--coral-soft) !important; border-color: var(--coral-ink) !important; color: #8A2412; }
-  .steps5 { display: grid; gap: 12px; }
-  .steps5 > div { display: flex; gap: 12px; align-items: center; }
+  .kv b { font: 900 54px/1 var(--display); font-stretch: 112%; color: var(--fg); }
+  .kv div:last-child b { color: var(--green); }
+  .kv span { font: 500 12px var(--mono); color: var(--dim); margin-top: 6px; letter-spacing: .06em; text-transform: uppercase; }
+  .sl { list-style: none; padding: 0; gap: 0; border-top: 1px solid var(--line); }
+  .sl li { display: grid; grid-template-columns: 78px 1fr; gap: var(--s2); padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; line-height: 1.3; }
+  .sl.plain li { grid-template-columns: 1fr; }
+  .sl .k { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding-top: 3px; color: var(--dim); }
+  .sl li.ok .k { color: var(--green); } .sl li.warn .k { color: var(--warn); } .sl li.danger .k { color: var(--coral-ink); }
+  .steps5 { display: grid; gap: var(--s3); }
+  .steps5 > div { display: grid; grid-template-columns: 34px 1fr; gap: var(--s2); align-items: baseline; }
   .steps5 > div > div { display: block; }
-  .steps5 i { font-style: normal; font-size: 20px; width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; border: 2px solid var(--teal); }
-  .steps5 > div:nth-child(5n+1) i { background: var(--mint); } .steps5 > div:nth-child(5n+2) i { background: var(--yellow); } .steps5 > div:nth-child(5n+3) i { background: var(--sky); }
-  .steps5 > div:nth-child(5n+4) i { background: var(--lilac); } .steps5 > div:nth-child(5n) i { background: var(--coral-soft); }
+  .steps5 i { font: 500 13px var(--mono); font-style: normal; letter-spacing: .06em; color: var(--coral-ink); }
   .steps5 b { font-weight: 700; } .steps5 span { color: var(--dim); font-size: 14px; }
 
-  /* the FatherPeng pieces: caption, stamp, cat */
-  .capwrap { display: grid; justify-items: center; gap: 8px; text-align: center; }
-  .cap { display: inline-block; background: var(--yellow); color: #1F1B16; font: 800 24px/1.3 var(--display); text-transform: uppercase; padding: 2px 12px; }
-  .memerow { display: flex; align-items: center; justify-content: center; gap: 32px; margin-top: 4px; }
+  /* from FatherPeng: the caption, the stamp, the cat. They are the personality; everything else stays quiet. */
+  .capwrap { display: grid; justify-items: center; gap: var(--s1); text-align: center; }
+  .cap { display: inline-block; background: var(--yellow); color: #1F1B16; font: 800 24px/1.3 var(--display); text-transform: uppercase; padding: 2px var(--s2); text-wrap: balance; }
+  .cap.big { font-size: 34px; padding: 4px var(--s3); }
+  .memerow { display: flex; align-items: center; justify-content: center; gap: var(--s5); margin-top: 4px; }
   .stamp { display: inline-block; font: 900 44px/1 var(--display); font-stretch: 118%; letter-spacing: .02em; text-transform: uppercase; padding: 6px 22px; border: 6px solid; border-radius: 10px; transform: rotate(-6deg); }
   .stamp.pass { color: var(--green); border-color: var(--green); } .stamp.fail { color: var(--coral); border-color: var(--coral); } .stamp.refused { color: #B8860B; border-color: #B8860B; }
+  .stamp.light { color: var(--bg); border-color: var(--bg); }
   .cat { display: block; }
   .cat.hero { position: absolute; right: 10px; top: 70px; width: 330px; }
-  .cat.sm { width: 150px; } .cat.md { width: 230px; }
-  .cap.big { font-size: 34px; padding: 4px 16px; }
+  .cat.sm { width: 150px; } .cat.md { width: 230px; } .cat.hero.up { top: 16px; width: 290px; }
 </style>
 </head>
 <body>
@@ -160,6 +150,15 @@
 (function () {
   var state = { i: 0, notes: false };
 
+  // The saved design notes call emoji headings and emoji icons the clearest sign of generated slides, so they are off. EMOJI = true brings them back.
+  var EMOJI = false;
+  function flatten() {
+    view.querySelectorAll(".em").forEach(function (e) { e.remove(); });
+    var w = document.createTreeWalker(view, NodeFilter.SHOW_TEXT), n;
+    while ((n = w.nextNode())) n.nodeValue = n.nodeValue.replace(/[\p{Extended_Pictographic}\u200D\uFE0F]+\s?/gu, "");
+    view.querySelectorAll(".steps5").forEach(function (g) { g.querySelectorAll("i").forEach(function (i, k) { i.textContent = pad(k + 1); }); });
+    view.querySelectorAll(".flow").forEach(function (f) { f.querySelectorAll(".card").forEach(function (c, k) { var x = document.createElement("span"); x.className = "idx"; x.textContent = pad(k + 1); c.insertBefore(x, c.firstChild); }); });
+  }
   var SEC = { PROBLEM: "🧐", SOLUTION: "💡", "WHAT EXISTS": "✅", TECHNOLOGY: "🧰", PLAN: "🗓️", CLOSE: "🎉" };
   var EM = {
     "What we will cover, and what we are asking for": "🗺️", "How a cross-report question is answered today": "🐌", "Pain points, and what a good outcome looks like": "😿",
@@ -202,6 +201,7 @@
       '<path d="M84 154 Q110 172 136 154" fill="none" stroke="#EAF3F0" stroke-width="9" stroke-linecap="round"/>' + face + prop + extra + '</svg>';
   }
   function card(cls, inner) { return '<div class="card ' + (cls || '') + '">' + inner + '</div>'; }
+  function rows(items) { return '<div class="rows">' + items.map(function (x) { return '<p>' + x + '</p>'; }).join('') + '</div>'; }
   function cards(cls, items) { return items.map(function (x) { return card(cls, '<p>' + x + '</p>'); }).join(''); }
   function table(cls, head, rows) {
     return '<table class="' + (cls || '') + '"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' +
@@ -213,7 +213,13 @@
   function arr() { return '<div class="arr"></div>'; }
   function shot(file, cap, h) { return '<figure class="shot' + (h === 2 ? ' h2' : h ? ' h' : '') + '"><img src="deck-assets/' + file + '" alt="' + cap + '">' + (cap ? '<figcaption>' + cap + '</figcaption>' : '') + '</figure>'; }
   function kv(items) { return '<div class="kv">' + items.map(function (x) { return '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; }
-  function chips(items) { return '<div class="chips">' + items.map(function (x) { var m = /^\{(ok|warn|danger)\}(.*)$/.exec(x); return '<span class="chip ' + (m ? m[1] : '') + '">' + (m ? m[2] : x) + '</span>'; }).join('') + '</div>'; }
+  function chips(items) {
+    var marked = items.some(function (x) { return /^\{(ok|warn|danger)\}/.test(x); }), L = { ok: "Built", warn: "Partly", danger: "Not yet" };
+    return '<ul class="sl' + (marked ? '' : ' plain') + '">' + items.map(function (x) {
+      var m = /^\{(ok|warn|danger)\}(.*)$/.exec(x);
+      return '<li class="' + (m ? m[1] : '') + '">' + (marked ? '<span class="k">' + (m ? L[m[1]] : "By design") + '</span>' : '') + '<span>' + (m ? m[2] : x) + '</span></li>';
+    }).join('') + '</ul>';
+  }
 
   var S = [
     // ---------- 1 PROBLEM ----------
@@ -239,13 +245,13 @@
 
     { sec: "PROBLEM", html:
       title("Pain points, and what a good outcome looks like") +
-      '<div class="cols c2"><div class="stack"><h3>What hurts today</h3>' + cards("", [
+      '<div class="cols c2"><div class="stack"><h3>What hurts today</h3>' + rows([
         "🐌 <b>Slow.</b> Every cross-report question is a manual search across several PDFs.",
         "🔁 <b>Repeated.</b> The same question is answered again by the next person, from scratch.",
         "🤷 <b>Unverifiable.</b> A figure copied by hand has no link back to its page. Errors travel.",
         "🔒 <b>Locked value.</b> Customers cannot query the research they pay for, so its value is capped.",
         "💸 <b>Investment risk.</b> An enterprise system is expensive before anyone has proved customers want it."]) + '</div>' +
-      '<div class="stack"><h3 class="ok">Expected outcome at week 10</h3>' + cards("ok", [
+      '<div class="stack"><h3 class="ok">Expected outcome at week 10</h3>' + rows([
         "⏱️ <b>Minutes, not hours.</b> One question searches the whole permitted library and returns a cited answer.",
         "📄 <b>Every claim has a page.</b> Click a citation and see the quote highlighted on the real page.",
         "✅ <b>No false figures.</b> Measured on an agreed question set: zero figures stated that the page does not say. An answer beside the point goes to review, and is counted.",
@@ -255,8 +261,8 @@
 
     // ---------- 2 SOLUTION ----------
     { sec: "SOLUTION", theme: "accent", cls: "between", html:
-      '<div class="stack" style="gap:16px;max-width:800px;margin-top:40px"><div class="kicker">💡 Our answer in one line</div><h1 style="font-size:60px">The assistant never shows an answer it cannot back up.</h1><p class="big">A page for every claim. Plain code checks the quote is on it, and the numbers are in the quote.</p></div>' + cat("party", "hero") +
-      '<div style="margin-bottom:36px"><span class="stamp pass">Checked</span></div>',
+      '<div class="stack" style="gap:var(--s4);max-width:980px;margin-top:64px"><div class="kicker">Our answer in one line</div><h1 style="font-size:72px">The assistant never shows an answer it cannot back up.</h1><p class="big" style="max-width:760px">A page for every claim. Plain code checks the quote is on that page and the numbers are in the quote.</p></div>' +
+      '<div style="margin-bottom:40px"><span class="stamp light">Checked</span></div>',
       note: "Pause here. The differentiator is not AI over PDFs. It is the check that runs after the model and before the user, and that it is deterministic code anyone can audit." },
 
     { sec: "SOLUTION", html:
@@ -291,7 +297,7 @@
       card("", '<span class="em">🚪</span><div class="lbl">Rule 3</div><div class="t">The page was one the model was shown</div><p class="dim">So it cannot cite a report the user may not see.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">doc 6, p. 1, no grant → <span style="color:var(--coral-ink);font-weight:700">never retrieved</span></p>') + '</div>' +
       '<div class="cols side" style="margin-top:8px;grid-template-columns:1fr 360px;align-items:center"><div class="flow">' + card("c1", '<span class="em">🔁</span><div class="t">Fail</div><p class="dim">Retry once, with the reasons.</p>') + arr() + card("c1", '<span class="em">✂️</span><div class="t">Fail again</div><p class="dim">Remove the claim.</p>') + arr() +
       card("", '<div style="text-align:center;padding-top:6px"><span class="stamp refused" style="font-size:30px;border-width:5px">Refused</span><p class="dim" style="margin-top:10px">Nothing survives: “not found”.</p></div>') + '</div>' +
-      '<div class="memerow" style="gap:12px">' + cat("judge", "sm") + card("warn", '<p style="font-size:15px"><b>What it cannot do.</b> Prove the claim answers the question. That is why it is measured.</p>') + '</div></div>',
+      card("warn", '<p style="font-size:15px"><b>What it cannot do.</b> Prove the claim answers the question. That is why it is measured.</p>') + '</div>',
       build: true,
       note: "Say the limit before the client finds it. Each rule has a test that fails when the rule is removed. The chart-axis example is a real catch from the Gemini runs." },
 
@@ -372,13 +378,13 @@
 
     { sec: "TECHNOLOGY", html:
       title("Limitations and what it takes to maintain") +
-      '<div class="cols c2"><div class="stack"><h3 class="danger">Limits, stated plainly</h3>' + cards("", [
+      '<div class="cols c2"><div class="stack"><h3 class="danger">Limits, stated plainly</h3>' + rows([
         "<b>Charts are not read.</b> The assistant cites a chart’s page and caption and quotes figures stated in the text. It does not read values off a picture.",
         "<b>Numbers written as words are not checked.</b> “four percent” passes the number check; “4 percent” is verified.",
         "<b>Meaning is not checked.</b> A quote can be on the page and still not support the claim. A reviewer can disagree with a passing claim.",
         "<b>Scanned and table-heavy reports are the risk.</b> We have only run on clean, born-digital reports so far. Your layouts may differ.",
         "<b>A small question set is a signal, not proof.</b> The pilot gate needs 60 to 100 questions graded by your staff."]) + '</div>' +
-      '<div class="stack"><h3 class="ok">Maintenance after week 10</h3>' + cards("ok", [
+      '<div class="stack"><h3 class="ok">Maintenance after week 10</h3>' + rows([
         "<b>Adding a report</b> is an admin upload. The ingestion quality report flags pages that need attention. No developer needed.",
         "<b>Changing the model</b> is one adapter file. The evaluation runs on every change, so a regression is visible before users see it.",
         "<b>Growing the question set</b> happens from user feedback: a thumbs-down with a reason becomes a new test question.",
@@ -440,19 +446,19 @@
 
     { sec: "PLAN", html:
       title("Assumptions: known, assumed, to confirm") +
-      '<div class="cols c3"><div class="stack">' + card("ok", '<h3 class="ok">Known from the brief</h3>') + cards("", [
+      '<div class="cols c3"><div class="stack">' + card("ok", '<h3 class="ok">Known from the brief</h3>') + rows([
         "Questions span reports; answers cite document and page.",
         "Reports are PDFs. Ingest and retrieval must be efficient.",
         "Access is restricted to authorised users and libraries.",
         "Quality and value are evaluated before an enterprise build.",
         "Ten weeks. Nice-to-haves: history, filters, admin, feedback, tables, roles."]) + '</div>' +
-      '<div class="stack">' + card("warn", '<h3 class="warn">We are assuming</h3>') + cards("", [
+      '<div class="stack">' + card("warn", '<h3 class="warn">We are assuming</h3>') + rows([
         "Born-digital English PDFs; scans a minority.",
         "MARC Online stays the system of record; we never read it. Data arrives by API licence and samples.",
         "An API model provider is acceptable with no-training and regional terms.",
         "Research staff give half a day a week to the question set, weeks 1 to 7.",
         "A standalone system is what you want."]) + '</div>' +
-      '<div class="stack">' + card("soft", '<h3>Must confirm with you</h3>') + cards("", [
+      '<div class="stack">' + card("soft", '<h3>Must confirm with you</h3>') + rows([
         "Pilot series, report count, pilot users.",
         "Provider, region, retention, no-training terms.",
         "What the API licence exposes; the sample data.",
@@ -475,7 +481,7 @@
       note: "The two risks the client controls are the last two rows. Ours is engineering, theirs is decisions and participation; the plan fails without both." },
 
     { sec: "CLOSE", theme: "dark", cls: "between", html:
-      '<div class="stack" style="gap:14px;max-width:800px;margin-top:40px"><div class="kicker">🎉 To close</div><h1 style="font-size:46px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' + cat("happy", "hero") +
+      '<div class="stack" style="gap:14px;max-width:800px;margin-top:40px"><div class="kicker">🎉 To close</div><h1 style="font-size:46px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' + cat("happy", "hero up") +
       '<div class="cols c3">' +
       card("ink2", '<div class="lbl">🙋 We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
       card("ink2", '<div class="lbl">🎁 You get at the end of week 1</div><p>Your own reports in the demo, three models measured on them, and your first analysis across editions.</p>') +
@@ -492,11 +498,10 @@
     stage.className = (s.theme || "") + (state.notes ? " notes" : "");
     view.innerHTML = '<div class="slide ' + (s.cls || "") + '">' + s.html + '</div>';
     document.getElementById("note").textContent = s.note || "";
-    document.getElementById("meta").textContent = (SEC[s.sec] || "") + " " + s.sec;
-    document.getElementById("pg").textContent = (state.i + 1) + " / " + S.length;
-    // pastel cycle for plain cards: the colour follows the card's place among its siblings
-    view.querySelectorAll(".card").forEach(function (c) { if (c.className.trim() === "card") { var k = Array.prototype.indexOf.call(c.parentNode.children, c); c.classList.add("c" + (k % 5)); } });
-    document.getElementById("hint").textContent = (s.build ? "→ reveals, then " : "") + "← → slides | N notes | F fullscreen | Home / End";
+    document.getElementById("pg").textContent = pad(state.i + 1) + " / " + S.length;
+    if (!EMOJI) flatten();
+    // the shortcut line is for the presenter: it shows on the first slide and on reveal slides, and nowhere else
+    document.getElementById("hint").textContent = (state.i === 0 || s.build) ? (s.build ? "→ reveals, then " : "") + "← → slides | N notes | F fullscreen | Home / End" : "";
     document.getElementById("prog").style.width = ((state.i + 1) / S.length * 100) + "%";
     try { location.hash = String(state.i + 1); } catch (e) {}
     if (s.build && !/reveal=all/.test(location.search)) { view.querySelectorAll("table tr:not(:first-child), .cols > .card").forEach(function (el) { el.classList.add("b"); }); }
