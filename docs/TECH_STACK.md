@@ -83,7 +83,7 @@ _SQL = """
 
 ### 3. The answer loop: draft, check, retry once, otherwise refuse
 
-If nothing survives the gate, the second attempt gets the reasons the first failed. One check looks at the set rather than each claim: when the question asks for a figure (growth, share, how many, a rate) and no surviving claim states one, the whole set is removed with that reason, so a true sentence that avoids the number cannot stand in for it. If that also fails, the answer is "not found". Every step is appended to the trace that the Investigation steps view shows.
+If nothing survives the gate, the second attempt gets the reasons the first failed. One check looks at the set rather than each claim: when the question asks for a figure (growth, share, how many, a rate) and no surviving claim states one, the whole set is removed with that reason, so a true sentence that avoids the number cannot stand in for it. If that also fails, the answer is "not found". Every step is appended to the trace, which is stored with the answer on the audit row.
 
 <!-- source: ra/answer.py -->
 ```python
@@ -223,21 +223,6 @@ def make_pdf(path, pages):
         cid = add(f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream")
         pid = add(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents {cid} 0 R /Resources << /Font << /F1 {font} 0 R >> >> >>")
         kids.append(f"{pid} 0 R")
-```
-
-### 9. The camera on the canvas
-
-One transform on one element. This function works out where to put the canvas so a node is centred at a readable scale, and the CSS line is what makes the move ease.
-
-<!-- source: ra/web.py -->
-```javascript
-function focusNode(n){current=n;const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
-```
-
-
-<!-- source: ra/web.py -->
-```css
-#canvas.moving{transition:transform .75s cubic-bezier(.22,1,.36,1)}
 ```
 
 ## Running it

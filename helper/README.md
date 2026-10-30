@@ -31,7 +31,7 @@ It reads the page, never the app's code. Each of these is optional; a missing on
 
 | Page | Elements it looks for |
 |---|---|
-| Chat (`/`) | `#q`, `#go`, `#findBtn`, `#tabs`, `#tab-find`, `#tab-canvas`, `#user`, `#melink`, `.nav` |
+| Chat (`/`) | `#q`, `#go`, `#findBtn`, `#tabs`, `#tab-find`, `#tab-answer`, `#user`, `#melink`, `.nav` |
 | User board (`/dashboard?user=`) | `#keyrow`, `[data-type=library]`, `[data-type=analyses]`, `[data-type=answers]`, `[data-type=usage]` |
 | Admin board (`/dashboard`) | `#brief`, `#keyrow`, `[data-type=todo]`, `[data-type=timeline]`, `.tabs`, `#newuser`, `#newkey`, `#try` |
 

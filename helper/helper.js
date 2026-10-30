@@ -38,7 +38,7 @@
   function focusQ() { var q = $("#q"); if (q) { q.focus(); var n = q.value.length; try { q.setSelectionRange(n, n); } catch (e) { /* not a text field */ } } }
   function setQ(text) {
     var q = $("#q"); if (!q) return;
-    click("#tab-canvas");
+    click("#tab-answer");
     q.value = text; q.dispatchEvent(new Event("input", { bubbles: true })); focusQ();
   }
   function reveal(sel) {
@@ -55,7 +55,7 @@
       out.push({ label: "Find words you know are in a report", text: "Plain full-text search over the same pages. No model, no tokens, answers in milliseconds. A phrase in quotes is exact, OR widens, a minus excludes.",
         act: $("#tab-find") && { label: "Open Find", run: function () { click("#tab-find"); focusQ(); } } });
       out.push({ label: "Ask a question and get a cited answer", text: "A model drafts claims with exact quotes. Plain code checks each quote against its page before you see it. Takes about ten seconds.",
-        act: $("#q") && { label: "Go to the question box", run: function () { click("#tab-canvas"); focusQ(); } } });
+        act: $("#q") && { label: "Go to the question box", run: function () { click("#tab-answer"); focusQ(); } } });
       out.push({ label: "Check where a claim comes from", text: "Under each claim, click the page chip to read that page with the quote marked, then Open the PDF at this page." });
       var me = $("#melink");
       out.push({ label: "Browse the reports you may search", text: "Your board lists every report, newest first, with a PDF link and an ask link that names the edition.",
@@ -92,7 +92,7 @@
       ["#q", "Ask or find", "Type a question, or words from a report."],
       ["#go", "Ask", "A model drafts a cited answer; plain code checks every quote. About ten seconds."],
       ["#findBtn", "Find", "Plain search over the same pages. No model and no cost."],
-      ["#tabs", "Three views", "Canvas builds the answer. Investigation steps show how it was made. Find lists matching pages."],
+      ["#tabs", "Two views", "Answer shows the checked answer. Find lists matching pages."],
       [".nav", "Pages", "Chat, your board with your library and analyses, and the admin board."],
       ["#user", "Demo user", "The demo has no login. The real build uses your identity provider."]
     ],

@@ -174,8 +174,8 @@ def test_ask_returns_the_trace_with_the_model_name(web):
     assert j["trace"][0]["libraries"] == ["public"]
 
 
-def test_steps_view_is_present_and_still_builds_no_html_from_data():
-    assert "Investigation steps" in INDEX_HTML and "Show how it was found" in INDEX_HTML and "innerHTML" not in INDEX_HTML
+def test_answer_comes_first_with_the_checks_one_click_away():
+    assert "How this was checked" in INDEX_HTML and "Investigation steps" not in INDEX_HTML and "innerHTML" not in INDEX_HTML
 
 
 
