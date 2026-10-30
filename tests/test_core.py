@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from ra.answer import ask
 from ra.db import connect
 from ra.ingest import ingest_pdf, split_passages
@@ -368,8 +370,10 @@ def test_a_model_failure_is_a_refusal_with_the_reason_in_the_trace(db):
     assert not [s for s in res.trace if s["kind"] == "retry"]
 
 
-def test_openai_compat_adapter_retries_once_on_a_dropped_connection():
+def test_openai_compat_adapter_retries_once_on_a_dropped_connection(monkeypatch):
     from ra.llm import OpenAICompatLLM
+
+    monkeypatch.setattr("time.sleep", lambda s: None)
 
     calls = []
 
@@ -381,6 +385,43 @@ def test_openai_compat_adapter_retries_once_on_a_dropped_connection():
 
     llm = OpenAICompatLLM(model="m", api_key="k", post=post)
     assert llm.draft("q", []) == [] and len(calls) == 2 and llm.last_error.startswith("TimeoutError")
+
+
+def test_with_retry_waits_longer_each_time_and_raises_the_last_error():
+    from ra.llm import with_retry
+
+    waits, seen = [], []
+
+    def call():
+        raise TimeoutError("slow")
+
+    with pytest.raises(TimeoutError):
+        with_retry(call, attempts=3, delay=0.5, on_error=seen.append, sleep=waits.append)
+    assert waits == [0.5, 1.0] and len(seen) == 3
+
+
+def test_with_retry_does_not_repeat_a_client_error_but_does_repeat_a_busy_server():
+    import urllib.error
+
+    from ra.llm import with_retry
+
+    def failing(code):
+        n = []
+
+        def call():
+            n.append(1)
+            if len(n) == 1:
+                raise urllib.error.HTTPError("u", code, "x", {}, None)
+            return "ok"
+
+        return call, n
+
+    call, n = failing(401)
+    with pytest.raises(urllib.error.HTTPError):
+        with_retry(call, sleep=lambda s: None)
+    assert len(n) == 1
+    call, n = failing(503)
+    assert with_retry(call, sleep=lambda s: None) == "ok" and len(n) == 2
 
 
 def test_a_document_filter_narrows_retrieval_and_never_widens_access(db):

@@ -2,6 +2,8 @@
 import json
 import os
 import re
+import time
+import urllib.error
 
 from .ground import Claim
 from .retrieve import Passage
@@ -13,6 +15,27 @@ SYSTEM = (
     "Any number in a claim must appear in its quote. If the passages do not answer the question, return {\"claims\":[]}. "
     "Never use outside knowledge."
 )
+
+
+def transient(e):
+    """A dropped or timed-out connection, or a server that is busy or down. A 4xx such as a bad key is not worth repeating."""
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code == 429 or e.code >= 500
+    return isinstance(e, (OSError, TimeoutError))
+
+
+def with_retry(call, attempts=2, delay=1.0, on_error=None, sleep=time.sleep):
+    """Run call(); on a transient error wait delay seconds (doubling each time) and try again, up to attempts calls in all.
+    The last error is raised so the caller can record it. on_error(e) sees every failure."""
+    for n in range(attempts):
+        try:
+            return call()
+        except Exception as e:
+            if on_error:
+                on_error(e)
+            if not transient(e) or n == attempts - 1:
+                raise
+            sleep(delay * 2**n)
 
 
 def build_prompt(question, passages, feedback=None):
@@ -87,6 +110,9 @@ class OpenAICompatLLM:
         with urllib.request.urlopen(req, timeout=120) as r:
             return json.load(r)
 
+    def _note(self, e):
+        self.last_error = f"{type(e).__name__}: {e}"
+
     def draft(self, question, passages, feedback=None):
         body = {
             "model": self.model,
@@ -97,11 +123,7 @@ class OpenAICompatLLM:
                 {"role": "user", "content": build_prompt(question, passages, feedback)},
             ],
         }
-        try:
-            data = self.post(body)
-        except (OSError, TimeoutError) as e:  # a dropped or timed-out connection: try once more, then let the loop record it
-            self.last_error = f"{type(e).__name__}: {e}"
-            data = self.post(body)
+        data = with_retry(lambda: self.post(body), on_error=self._note)
         text = data["choices"][0]["message"].get("content") or ""
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
         return parse_claims(text)
