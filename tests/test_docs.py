@@ -7,7 +7,7 @@ BLOCK = re.compile(r"<!-- source: (?P<path>[^ ]+) -->\n```\w*\n(?P<code>.*?)\n``
 
 
 def blocks():
-    return [(m["path"], m["code"]) for m in BLOCK.finditer((ROOT / "docs" / "TECH_STACK.md").read_text())]
+    return [(m["path"], m["code"]) for m in BLOCK.finditer((ROOT / "docs" / "TECH_STACK.md").read_text(encoding="utf-8"))]
 
 
 def test_the_doc_has_code_examples():
@@ -16,5 +16,5 @@ def test_the_doc_has_code_examples():
 
 def test_every_example_is_verbatim_from_its_file():
     for path, code in blocks():
-        source = (ROOT / path).read_text()
+        source = (ROOT / path).read_text(encoding="utf-8")
         assert code in source, f"example from {path} no longer matches the file: {code[:60]!r}"

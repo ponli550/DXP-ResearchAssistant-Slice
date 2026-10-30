@@ -1110,13 +1110,13 @@ pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5
 <div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
 <div style="display:flex;gap:1rem;align-items:center"><nav class="nav" aria-label="Pages"><a href="/" aria-current="page">Chat</a><a id="melink" href="/dashboard?user=alice">Your board</a><a id="dashlink" href="/dashboard">Admin</a></nav><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
 <div id="banner" class="banner" hidden></div>
-<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><button id="findBtn" type="button" title="Find pages by their words. No model call: quotes for a phrase, OR, NOT, -word">Find</button><span id="status" class="muted" role="status"></span></div>
+<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><button id="findBtn" type="button" title="Search pages by their words">Find</button><span id="status" class="muted" role="status"></span></div>
 <div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button><button id="tab-find" role="tab" aria-selected="false">Find</button></div>
 <div id="stage" aria-label="Answer canvas">
 <nav id="spy" aria-label="Sections"></nav>
 <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
 <div id="canvas"></div></div>
-<div id="find" hidden aria-label="Find results"><div class="findwrap"><p class="muted" id="findHead">Type words from a report and press Find. Pages that contain them, with the words marked, in under a second and without a model call. Put a phrase in quotes; OR widens; -word excludes.</p><ol id="findList"></ol></div></div>
+<div id="find" hidden aria-label="Find results"><div class="findwrap"><p class="muted" id="findHead">Type words from a report and press Find. Quotes for a phrase, OR for either word, -word to exclude.</p><ol id="findList"></ol></div></div>
 <div id="steps" hidden aria-label="Investigation steps"><div class="grid"><nav id="rail" aria-label="Steps"></nav><div id="steplist"><p class="muted">Ask a question to see how the answer was found.</p></div></div></div>
 <aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><span><a id="ppdf" class="pdf" target="_blank" rel="noopener" hidden>Open the PDF at this page</a> <button id="pclose" aria-label="Close">Close</button></span></header><pre id="ptext"></pre><p class="muted" id="pnote">Extracted text of the page, with the quote marked. The PDF link opens the original file at the same page.</p></aside>
 <script>
@@ -1161,25 +1161,24 @@ function checkRow(c,reason){const ok=!reason;return el("div",{class:"row"},el("s
   el("div",{},el("div",{textContent:c.text}),el("div",{class:"muted",textContent:ok?c.title:reason+" ("+c.title+", p. "+c.page+")"}),quoteDetails(c)))}
 function feedbackBlock(j){const box=el("div",{class:"fb"});const msg=el("span",{class:"muted"});
   const send=async(rating,reason)=>{try{await post("/api/feedback",{user:$("user").value,audit_id:j.audit_id,rating,reason});box.replaceChildren(el("span",{class:"muted",textContent:"Thanks, your feedback was recorded."}))}catch(e){msg.textContent=e.message}};
-  const up=el("button",{type:"button","aria-label":"Helpful",textContent:"👍 Helpful",onclick:()=>send("up","")});
-  const down=el("button",{type:"button","aria-label":"Not helpful",textContent:"👎 Not helpful",onclick:()=>{const inp=el("input",{placeholder:"What was wrong? (optional)",maxLength:300});const s=el("button",{type:"button",textContent:"Send",onclick:()=>send("down",inp.value)});box.replaceChildren(inp,s,msg);inp.focus()}});
+  const up=el("button",{type:"button","aria-label":"Helpful",textContent:"Helpful",onclick:()=>send("up","")});
+  const down=el("button",{type:"button","aria-label":"Not helpful",textContent:"Not helpful",onclick:()=>{const inp=el("input",{placeholder:"What was wrong? (optional)",maxLength:300});const s=el("button",{type:"button",textContent:"Send",onclick:()=>send("down",inp.value)});box.replaceChildren(inp,s,msg);inp.focus()}});
   box.append(up,down,msg);return box}
 function reviewBlock(j){const note=el("input",{placeholder:"Why should someone look at this? (optional)",maxLength:500});const out=el("div",{class:"muted"});
   const btn=el("button",{type:"button",class:"primary",textContent:"Create review request",onclick:async()=>{btn.disabled=true;try{const r=await post("/api/review",{user:$("user").value,audit_id:j.audit_id,note:note.value});out.textContent="Review request #"+r.id+" recorded. Nobody has been notified automatically; this is a log entry for a person to pick up."}catch(e){out.textContent=e.message;btn.disabled=false}}});
   return [el("p",{class:"muted",textContent:"The assistant never acts on its own. This only happens if you press the button."}),el("div",{class:"fb"},note,btn),out]}
 function build(j,q){const out=[];
-  out.push(node("n-q","Question","Your question","",el("p",{textContent:q}),el("p",{class:"muted",textContent:"Searched as "+$("user").value+", only in libraries this user may see."})));
+  out.push(node("n-q","Question","Your question","",el("p",{textContent:q})));
   out.push(node("n-src","Sources","Sources found ("+j.retrieved.length+")","",
-    el("p",{class:"muted",textContent:j.retrieved.length?"Hover or tap a source to read the passage. These are candidates, not yet answers.":"Nothing in the libraries this user can search matched the question."}),...j.retrieved.slice(0,6).map(srcCard),
+    j.retrieved.length?"":el("p",{class:"muted",textContent:"Nothing in the libraries this user can search matched the question."}),...j.retrieved.slice(0,6).map(srcCard),
     j.retrieved.length>6?el("details",{},el("summary",{textContent:"Show "+(j.retrieved.length-6)+" more sources"}),...j.retrieved.slice(6).map(srcCard)):""));
   const kept=j.claims.length,removed=j.rejected_claims.length;
   out.push(node("n-chk","Checks","Quote check: "+kept+" kept, "+removed+" removed","",
-    el("p",{class:"muted",textContent:"A plain string check, no model. It confirms the quote is on the cited page and that every number in the claim is in the quote."+(j.attempts>1?" A second attempt was made after the first was rejected.":"")}),
     ...j.rejected_claims.map(c=>checkRow(c,c.reason)),...j.claims.map(c=>checkRow(c,"")),
     kept+removed===0?el("p",{textContent:j.retrieved.length?"The model returned no claims.":"No sources, so nothing was drafted."}):""));
   const ans=j.status==="answered"
     ?[el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c,c.title+", p. "+c.page),quoteDetails(c,true)))),
-      el("p",{class:"muted",textContent:"Each quote was found on the page it cites. That confirms the source, not that the claim answers your question."})]
+      el("p",{class:"muted",textContent:"Each quote is on the page it cites. That confirms the source, not that it answers your question."})]
     :[el("p",{style:"font-weight:600",textContent:"I could not find this in the selected library."}),...(j.closest.length?[el("p",{class:"muted",textContent:"Closest sources:"}),el("div",{},...j.closest.map(c=>chip(c)))]:[])];
   out.push(node("n-ans","Answer",j.status==="answered"?"Answer":"No answer","answer",...ans,feedbackBlock(j)));
   out.push(node("n-next","Next step","Flag this answer for review","",...reviewBlock(j)));
@@ -1241,7 +1240,7 @@ async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$(
 $("go").onclick=ask;$("findBtn").onclick=findPages;$("tab-find").onclick=()=>switchTab("find");
 async function findPages(){const q=$("q").value.trim();if(!q)return;const list=$("findList"),head=$("findHead");switchTab("find");list.replaceChildren();head.textContent="Finding…";
   try{const j=await api("/api/find?"+new URLSearchParams({user:$("user").value,q}));
-    head.textContent=(j.hits.length?j.hits.length+" page"+(j.hits.length===1?"":"s")+" for ":"No page for ")+(j.query||"nothing searchable")+(j.editions.length?" in "+j.editions.join(", "):"")+" · "+j.ms+" ms · no model call";
+    head.textContent=(j.hits.length?j.hits.length+" page"+(j.hits.length===1?"":"s")+" for ":"No page for ")+(j.query||"nothing searchable")+(j.editions.length?" in "+j.editions.join(", "):"");
     if(!j.hits.length){list.appendChild(el("li",{class:"muted",textContent:"No page contains all of those words. Try fewer words, OR between alternatives, or a phrase in quotes."}));return;}
     j.hits.forEach(h=>{const li=el("li",{class:"hit"});const top=el("div",{class:"hittop"});const t=el("button",{type:"button",class:"chip",textContent:h.title+", p. "+h.page,onclick:()=>showPage({doc_id:h.doc_id,page:h.page,quote:""})});top.appendChild(t);
       const pdf=el("a",{class:"pdf",href:"/files/"+h.doc_id+"?user="+encodeURIComponent($("user").value)+"#page="+h.page,target:"_blank",rel:"noopener",textContent:"PDF"});top.appendChild(pdf);li.appendChild(top);

@@ -63,7 +63,7 @@ def get(url):
 
 def test_the_app_never_mentions_the_helper():
     for name in ("ra/web.py", "ra/answer.py", "ra/ground.py", "ra/retrieve.py", "ra/llm.py"):
-        text = open(os.path.join(ROOT, name)).read()
+        text = open(os.path.join(ROOT, name), encoding="utf-8").read()
         assert "__helper" not in text and "helper.js" not in text, f"{name} must not know about the helper"
 
 
@@ -111,7 +111,7 @@ def test_a_dead_app_is_a_clear_502():
 
 
 def test_the_overlay_builds_no_html_from_strings_and_degrades_when_ids_are_missing():
-    js = open(os.path.join(ROOT, "helper", "helper.js")).read()
+    js = open(os.path.join(ROOT, "helper", "helper.js"), encoding="utf-8").read()
     import re
 
     assert "innerHTML" not in js and "document.write" not in js and not re.search(r"\beval\(", js)
