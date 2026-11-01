@@ -79,6 +79,15 @@ CREATE TABLE IF NOT EXISTS analysis_cells (
     status TEXT NOT NULL DEFAULT 'pending',
     PRIMARY KEY (analysis_id, qi, doc_id)
 );
+CREATE TABLE IF NOT EXISTS boards (
+    id INTEGER PRIMARY KEY,
+    user TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('dashboard','report')),
+    title TEXT NOT NULL,
+    doc TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER PRIMARY KEY,
     at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
