@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Workspace · Research assistant</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<script>document.documentElement.dataset.theme = localStorage.getItem("ra-theme") || "light";</script>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/activity.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" id="brand" href="/"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
+  <nav class="nav" aria-label="Pages" id="nav"></nav>
+  <button type="button" class="bar-btn" id="assistantBtn" aria-expanded="false" aria-controls="assistant"></button>
+  <label class="who"><span>Demo user</span><select id="user"></select></label>
+</header>
+
+<div class="app" id="app">
+  <main class="view" id="view" aria-busy="true">
+    <div class="loading"><span class="skeleton skeleton-long"></span><span class="skeleton"></span><span class="skeleton skeleton-long"></span></div>
+  </main>
+  <aside class="assistant" id="assistant" aria-label="Assistant" hidden>
+    <header class="assistant-head">
+      <div>
+        <h2>Assistant</h2>
+        <p id="assistantMode"></p>
+      </div>
+      <button type="button" class="icon-btn" id="assistantClose" aria-label="Close the assistant"></button>
+    </header>
+    <div class="assistant-log" id="assistantLog" role="log" aria-live="polite"></div>
+    <div class="assistant-suggest" id="assistantSuggest"></div>
+    <form class="assistant-form" id="assistantForm">
+      <label class="sr-only" for="assistantInput">Ask the assistant</label>
+      <input id="assistantInput" maxlength="500" placeholder="Ask me to filter or build" autocomplete="off">
+      <button type="submit" class="primary" id="assistantGo">Send</button>
+    </form>
+  </aside>
+</div>
+<div class="tip" id="tip" role="status" hidden></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog class="confirm" id="confirm" aria-labelledby="confirmTitle">
+  <h2 id="confirmTitle"></h2>
+  <p id="confirmBody"></p>
+  <form method="dialog" class="confirm-acts">
+    <button class="ghost" value="cancel" autofocus>Cancel</button>
+    <button class="danger" value="ok">Delete</button>
+  </form>
+</dialog>
+<dialog class="confirm add-dialog" id="addDialog" aria-labelledby="addTitle">
+  <h2 id="addTitle">Add a report</h2>
+  <p id="addNote"></p>
+  <label class="dropzone" id="dropzone">
+    <input class="sr-only" type="file" id="addInput" accept=".pdf,application/pdf" multiple>
+    <span class="dropzone-icon" id="dropIcon"></span>
+    <b>Drop PDFs here</b>
+    <span>or select to choose them from your computer</span>
+  </label>
+  <ul class="add-list" id="addList" aria-live="polite"></ul>
+  <div class="confirm-acts"><button type="button" class="primary" id="addDone">Done</button></div>
+</dialog>
+<script src="/static/activity.js"></script>
+<script src="/static/activity-flow.js"></script>
+<script src="/static/activity-boards.js"></script>
+<script src="/static/activity-assistant.js"></script>
+</body>
+</html>
