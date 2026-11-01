@@ -13,3 +13,6 @@ deploy/deck/public/
 node_modules/
 .wrangler/
 .dev.vars
+
+# per-person MCP config, holds a bearer token
+.mcp.json
