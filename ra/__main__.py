@@ -1,9 +1,22 @@
 import argparse
+import os
 import sys
 
 from .answer import ask
 from .db import connect
 from .ingest import ingest_pdf
+
+
+def load_env(path=".env"):
+    """Read KEY=VALUE lines from .env so adding a model key is all it takes. Anything already set in the environment wins."""
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip().removeprefix("export ")
+            if line and not line.startswith("#") and "=" in line:
+                key, value = line.split("=", 1)
+                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
 
 
 def main(argv=None):
@@ -29,6 +42,7 @@ def main(argv=None):
     e.add_argument("--user", default="alice")
     e.add_argument("--out")
     args = ap.parse_args(argv)
+    load_env()
     con = connect(args.db)
     if args.cmd == "ingest":
         rep = ingest_pdf(con, args.library, args.title, args.pdf)
