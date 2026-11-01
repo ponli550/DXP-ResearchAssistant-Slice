@@ -1,534 +1,672 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Research Assistant Client Proposal</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<style>
-  /* The rules this follows are in docs/DESIGN.md, "The deck". Short version: three colours carry the page (cream, teal, coral),
-     status is a word as well as a colour, cards are flat with a one-pixel outline, spacing comes from one scale, corners are small. */
-  :root {
-    --bg: #FFF9F0; --card: #FFFFFF; --fg: #1F1B16; --dim: #6A6257; --line: #E3D8C6;
-    --teal: #0F3B3A; --teal2: #174A48; --teal3: #245C59;
-    --coral: #FF7A5C; --coral-ink: #D9482B; --yellow: #FFE18A; --mint: #9EE6C0;
-    --green: #1F7A4A; --warn: #8F6212; --orange: #F4B45F;
-    --s1: 8px; --s2: 12px; --s3: 16px; --s4: 24px; --s5: 32px; --r: 4px;
-    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
-    --sans: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
-    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: #0B2928; color: var(--fg); overflow: hidden; }
-  body { font-family: var(--sans); display: grid; place-items: center; }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MARC Pilot Proposal</title>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Instrument+Sans:wght@400..700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    /* The business version of deck.html: same look (cream, teal, coral; flat outlined cards; one spacing scale), nine slides, no technical terms. */
+    :root {
+      --bg: #FFF9F0;
+      --card: #FFFFFF;
+      --fg: #1F1B16;
+      --dim: #6A6257;
+      --line: #E3D8C6;
+      --teal: #0F3B3A;
+      --teal2: #174A48;
+      --teal3: #245C59;
+      --coral: #FF7A5C;
+      --coral-ink: #D9482B;
+      --yellow: #FFE18A;
+      --mint: #9EE6C0;
+      --green: #1F7A4A;
+      --warn: #8F6212;
+      --s1: 8px;
+      --s2: 12px;
+      --s3: 16px;
+      --s4: 24px;
+      --s5: 32px;
+      --r: 4px;
+      --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+      --sans: "Instrument Sans", "Helvetica Neue", Arial, system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
 
-  #stage { width: 1280px; height: 720px; position: relative; flex: none; transform-origin: center center; background: var(--bg); color: var(--fg); }
-  #stage.dark { background: var(--teal); color: var(--bg); }
-  #stage.accent { background: var(--coral); color: var(--fg); }
-  #stage.panel { background: #FFF4E2; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
-  .hdr { display: none; }
-  .slide { position: absolute; inset: 48px 56px 52px 56px; display: grid; gap: var(--s4); align-content: start; }
-  .slide.center { align-content: center; }
-  .slide.between { align-content: space-between; }
+    html,
+    body {
+      height: 100%;
+      background: #0B2928;
+      color: var(--fg);
+      overflow: hidden;
+    }
 
-  h1 { font: 900 66px/1.02 var(--display); font-stretch: 112%; letter-spacing: -.01em; text-wrap: balance; }
-  h2 { font: 800 40px/1.1 var(--display); font-stretch: 108%; letter-spacing: -.005em; padding-bottom: var(--s2); border-bottom: 2px solid var(--coral); text-wrap: balance; }
-  h3 { font: 700 14px var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--coral-ink); }
-  h3.ok { color: var(--green); } h3.warn { color: var(--warn); } h3.danger { color: var(--coral-ink); }
-  .kicker { font: 600 13px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--coral-ink); }
-  #stage.dark .kicker { color: var(--yellow); } #stage.accent .kicker { color: var(--teal); }
-  p, li { font-size: 18px; line-height: 1.4; }
-  p.big { font-size: 24px; line-height: 1.35; text-wrap: pretty; }
-  p.dim { color: var(--dim); }
-  #stage.dark p.dim { color: var(--mint); }
-  ul, ol { padding-left: 22px; display: grid; gap: var(--s1); }
+    body {
+      font-family: var(--sans);
+      display: grid;
+      place-items: center;
+    }
 
-  .cols { display: grid; gap: var(--s4); align-items: start; }
-  .cols.c2 { grid-template-columns: 1fr 1fr; }
-  .cols.c3 { grid-template-columns: 1fr 1fr 1fr; }
-  .cols.c4 { grid-template-columns: repeat(4, 1fr); }
-  .cols.c3, .cols.c4 { align-items: stretch; }
-  .cols.c4 .card .lbl { font: 800 22px/1.1 var(--display); font-stretch: 108%; color: var(--teal); margin-bottom: var(--s1); }
-  .cols.side { grid-template-columns: 1fr 400px; }
-  .stack { display: grid; gap: var(--s2); align-content: start; }
+    #stage {
+      width: 1280px;
+      height: 720px;
+      position: relative;
+      flex: none;
+      transform-origin: center center;
+      background: var(--bg);
+      color: var(--fg);
+    }
 
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: var(--s3) var(--s4); }
-  .card p { font-size: 17px; }
-  .card.soft { border-left: 4px solid var(--coral); background: #FFF3EE; }
-  .card.ok { border-left: 4px solid var(--green); background: #F0F8F3; }
-  .card.warn { border-left: 4px solid var(--warn); background: #FFF8E1; }
-  .card.panel { background: var(--card); }
-  .card.ink { background: var(--teal); border-color: var(--teal); color: var(--bg); }
-  .card.ink .lbl, .card.ink h3 { color: var(--yellow); }
-  .card.ink2 { background: var(--teal2); border-color: var(--teal3); color: var(--bg); }
-  .card.ink2 .lbl { color: var(--yellow); }
-  .card.accent { background: var(--coral); border-color: var(--coral); color: var(--fg); }
-  .card.accent .lbl { color: var(--fg); }
-  .card .lbl { font: 700 14px var(--sans); color: var(--coral-ink); margin-bottom: 6px; }
-  .card .lbl.u { letter-spacing: .12em; text-transform: uppercase; font-size: 12px; color: var(--dim); }
-  .card.ink .lbl.u, .card.ink2 .lbl.u { color: var(--mint); }
-  .card .t { font-size: 19px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
-  .cols.qa .card { padding: var(--s2) var(--s3); }
-  .cols.qa ul { margin-top: 6px; gap: 6px; padding-left: 18px; }
-  .cols.qa li { font-size: 15px; line-height: 1.3; }
-  .card .num { font: 800 56px/1 var(--display); margin: 6px 0 10px; }
-  .idx { display: block; font: 500 12px var(--mono); letter-spacing: .1em; color: var(--coral-ink); margin-bottom: 6px; }
-  .card.ink .idx { color: var(--mint); }
+    #stage.dark {
+      background: var(--teal);
+      color: var(--bg);
+    }
 
-  .rows { display: grid; align-content: start; border-top: 1px solid var(--line); }
-  .rows p { font-size: 17px; line-height: 1.35; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
-  .flow { display: flex; align-items: stretch; gap: var(--s1); }
-  .flow .card { flex: 1; }
-  .flow .arr { align-self: center; width: 0; height: 0; border-top: 8px solid transparent; border-bottom: 8px solid transparent; border-left: 12px solid var(--coral); flex: none; }
+    #stage.accent {
+      background: var(--coral);
+      color: var(--fg);
+    }
 
-  table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; font-size: 16px; }
-  th, td { text-align: left; padding: var(--s1) var(--s2); border-bottom: 1px solid var(--line); vertical-align: top; line-height: 1.3; }
-  th { background: var(--teal); color: var(--bg); font-weight: 700; font-size: 14px; letter-spacing: .04em; }
-  tr:nth-child(odd) td { background: #FFFBF3; }
-  tr:last-child td { border-bottom: 0; }
-  td:last-child { white-space: nowrap; }
-  table.wrap td:last-child { white-space: normal; }
-  td.ok { color: var(--green); font-weight: 700; } td.warn { color: var(--warn); font-weight: 700; } td.danger { color: var(--coral-ink); font-weight: 700; }
-  table.sm { font-size: 15px; } table.sm th, table.sm td { padding: 7px 10px; }
+    #stage.panel {
+      background: #FFF4E2;
+    }
 
-  .names { font-size: 16px; color: var(--mint); }
-  .ftr { position: absolute; left: 56px; right: 56px; bottom: 16px; display: flex; justify-content: space-between; font: 500 12px var(--mono); color: var(--dim); letter-spacing: .04em; }
-  #stage.dark .ftr { color: var(--mint); } #stage.accent .ftr { color: var(--teal); }
-  .prog { position: absolute; left: 0; bottom: 0; height: 4px; background: var(--coral); transition: width .2s; }
-  #stage.accent .prog { background: var(--teal); }
-  .note { position: absolute; left: 56px; right: 56px; bottom: 44px; display: none; background: var(--teal); color: var(--bg); padding: var(--s2) var(--s3); border-radius: var(--r); font-size: 15px; line-height: 1.4; }
-  #stage.notes .note { display: block; }
-  .b { opacity: 0; transform: translateY(6px); }
-  table tr, .card { transition: opacity .25s ease-out, transform .25s ease-out; }
-  @media (prefers-reduced-motion: reduce) { table tr, .card { transition: none; } }
+    .slide {
+      position: absolute;
+      inset: 48px 56px 52px 56px;
+      display: grid;
+      gap: var(--s4);
+      align-content: start;
+    }
 
-  .shot { margin: 0; border: 1px solid var(--teal); border-radius: var(--r); overflow: hidden; background: #fff; }
-  .shot img { display: block; width: 100%; height: auto; }
-  .shot.h img { height: 430px; object-fit: cover; object-position: top; }
-  .shot.h2 img { height: 350px; object-fit: cover; object-position: top; }
-  .shot figcaption { font-size: 13px; color: var(--dim); padding: var(--s1) var(--s2); border-top: 1px solid var(--teal); background: #fff; }
-  .kv { display: flex; gap: var(--s5); margin: 6px 0 var(--s2); }
-  .kv div { display: flex; flex-direction: column; }
-  .kv b { font: 900 54px/1 var(--display); font-stretch: 112%; color: var(--fg); }
-  .kv div:last-child b { color: var(--green); }
-  .kv span { font: 500 12px var(--mono); color: var(--dim); margin-top: 6px; letter-spacing: .06em; text-transform: uppercase; }
-  .sl { list-style: none; padding: 0; gap: 0; border-top: 1px solid var(--line); }
-  .sl li { display: grid; grid-template-columns: 78px 1fr; gap: var(--s2); padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; line-height: 1.3; }
-  .sl.plain li { grid-template-columns: 1fr; }
-  .sl .k { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding-top: 3px; color: var(--dim); }
-  .sl li.ok .k { color: var(--green); } .sl li.warn .k { color: var(--warn); } .sl li.danger .k { color: var(--coral-ink); }
-  .steps5 { display: grid; gap: var(--s3); }
-  .steps5 > div { display: grid; grid-template-columns: 34px 1fr; gap: var(--s2); align-items: baseline; }
-  .steps5 > div > div { display: block; }
-  .steps5 i { font: 500 13px var(--mono); font-style: normal; letter-spacing: .06em; color: var(--coral-ink); }
-  .steps5 b { font-weight: 700; } .steps5 span { color: var(--dim); font-size: 14px; }
+    .slide.between {
+      align-content: space-between;
+    }
 
-  /* from FatherPeng: the caption, the stamp, the cat. They are the personality; everything else stays quiet. */
-  .capwrap { display: grid; justify-items: center; gap: var(--s1); text-align: center; }
-  .cap { display: inline-block; background: var(--yellow); color: #1F1B16; font: 800 24px/1.3 var(--display); text-transform: uppercase; padding: 2px var(--s2); text-wrap: balance; }
-  .cap.big { font-size: 34px; padding: 4px var(--s3); }
-  .memerow { display: flex; align-items: center; justify-content: center; gap: var(--s5); margin-top: 4px; }
-  .stamp { display: inline-block; font: 900 44px/1 var(--display); font-stretch: 118%; letter-spacing: .02em; text-transform: uppercase; padding: 6px 22px; border: 6px solid; border-radius: 10px; transform: rotate(-6deg); }
-  .stamp.pass { color: var(--green); border-color: var(--green); } .stamp.fail { color: var(--coral); border-color: var(--coral); } .stamp.refused { color: #B8860B; border-color: #B8860B; }
-  .stamp.light { color: var(--bg); border-color: var(--bg); }
-  .cat { display: block; }
-  .cat.hero { position: absolute; right: 10px; top: 70px; width: 330px; }
-  .cat.sm { width: 150px; } .cat.md { width: 230px; } .cat.hero.up { top: 16px; width: 290px; }
-</style>
+    h1 {
+      font: 900 66px/1.02 var(--display);
+      font-stretch: 112%;
+      letter-spacing: -.01em;
+      text-wrap: balance;
+    }
+
+    h2 {
+      font: 800 40px/1.1 var(--display);
+      font-stretch: 108%;
+      letter-spacing: -.005em;
+      padding-bottom: var(--s2);
+      border-bottom: 2px solid var(--coral);
+      text-wrap: balance;
+    }
+
+    h3 {
+      font: 700 14px var(--sans);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--coral-ink);
+      margin-bottom: var(--s1);
+    }
+
+    .kicker {
+      font: 600 13px var(--mono);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--coral-ink);
+    }
+
+    #stage.dark .kicker {
+      color: var(--yellow);
+    }
+
+    #stage.accent .kicker {
+      color: var(--teal);
+    }
+
+    p,
+    li {
+      font-size: 18px;
+      line-height: 1.4;
+    }
+
+    p.big {
+      font-size: 24px;
+      line-height: 1.35;
+      text-wrap: pretty;
+    }
+
+    p.dim {
+      color: var(--dim);
+    }
+
+    p.fine {
+      font-size: 13px;
+      color: var(--dim);
+    }
+
+    #stage.dark p.dim {
+      color: var(--mint);
+    }
+
+    .cols {
+      display: grid;
+      gap: var(--s4);
+      align-items: start;
+    }
+
+    .cols.c2 {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .cols.c3 {
+      grid-template-columns: 1fr 1fr 1fr;
+      align-items: stretch;
+    }
+
+    .cols.c4 {
+      grid-template-columns: repeat(4, 1fr);
+      align-items: stretch;
+    }
+
+    .cols.side {
+      grid-template-columns: 1fr 440px;
+    }
+
+    .stack {
+      display: grid;
+      gap: var(--s3);
+      align-content: start;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: var(--s3) var(--s4);
+    }
+
+    .card p {
+      font-size: 17px;
+    }
+
+    .card.soft {
+      border-left: 4px solid var(--coral);
+      background: #FFF3EE;
+    }
+
+    .card.ok {
+      border-left: 4px solid var(--green);
+      background: #F0F8F3;
+    }
+
+    .card.warn {
+      border-left: 4px solid var(--warn);
+      background: #FFF8E1;
+    }
+
+    .card.ink {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: var(--bg);
+    }
+
+    .card.ink .lbl {
+      color: var(--yellow);
+    }
+
+    .card.ink2 {
+      background: var(--teal2);
+      border-color: var(--teal3);
+      color: var(--bg);
+    }
+
+    .card.ink2 .lbl {
+      color: var(--yellow);
+    }
+
+    .card.accent {
+      background: var(--coral);
+      border-color: var(--coral);
+      color: var(--fg);
+    }
+
+    .card.accent .lbl {
+      color: var(--fg);
+    }
+
+    .card .lbl {
+      font: 700 14px var(--sans);
+      color: var(--coral-ink);
+      margin-bottom: 6px;
+    }
+
+    .card .t {
+      font-size: 19px;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 4px;
+    }
+
+    .card .num {
+      font: 900 64px/1 var(--display);
+      font-stretch: 112%;
+      margin: 4px 0 var(--s1);
+    }
+
+    .idx {
+      display: block;
+      font: 500 12px var(--mono);
+      letter-spacing: .1em;
+      color: var(--coral-ink);
+      margin-bottom: 6px;
+    }
+
+    .card.ink .idx {
+      color: var(--mint);
+    }
+
+    .rows {
+      display: grid;
+      align-content: start;
+      border-top: 1px solid var(--line);
+    }
+
+    .rows p {
+      font-size: 17px;
+      line-height: 1.35;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .rows b {
+      color: var(--coral-ink);
+    }
+
+    .flow {
+      display: flex;
+      align-items: stretch;
+      gap: var(--s1);
+    }
+
+    .flow .card {
+      flex: 1;
+    }
+
+    .flow .arr {
+      align-self: center;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-left: 12px solid var(--coral);
+      flex: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      overflow: hidden;
+      font-size: 16px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 10px var(--s2);
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      line-height: 1.35;
+    }
+
+    th {
+      background: var(--teal);
+      color: var(--bg);
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: .04em;
+    }
+
+    tr:nth-child(odd) td {
+      background: #FFFBF3;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    td:last-child {
+      white-space: nowrap;
+    }
+
+    .names {
+      font-size: 16px;
+      color: var(--mint);
+    }
+
+    .ftr {
+      position: absolute;
+      left: 56px;
+      right: 56px;
+      bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      font: 500 12px var(--mono);
+      color: var(--dim);
+      letter-spacing: .04em;
+    }
+
+    #stage.dark .ftr {
+      color: var(--mint);
+    }
+
+    #stage.accent .ftr {
+      color: var(--teal);
+    }
+
+    .prog {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      height: 4px;
+      background: var(--coral);
+      transition: width .2s;
+    }
+
+    #stage.accent .prog {
+      background: var(--teal);
+    }
+
+    .note {
+      position: absolute;
+      left: 56px;
+      right: 56px;
+      bottom: 44px;
+      display: none;
+      background: var(--teal);
+      color: var(--bg);
+      padding: var(--s2) var(--s3);
+      border-radius: var(--r);
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    #stage.notes .note {
+      display: block;
+    }
+
+    .shot {
+      margin: 0;
+      border: 1px solid var(--teal);
+      border-radius: var(--r);
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .shot img {
+      display: block;
+      width: 100%;
+      height: 470px;
+      object-fit: cover;
+      object-position: left top;
+    }
+
+    .shot figcaption {
+      font-size: 13px;
+      color: var(--dim);
+      padding: var(--s1) var(--s2);
+      border-top: 1px solid var(--teal);
+    }
+
+    .kv {
+      display: flex;
+      gap: var(--s5);
+    }
+
+    .kv div {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .kv b {
+      font: 900 54px/1 var(--display);
+      font-stretch: 112%;
+    }
+
+    .kv span {
+      font: 500 12px var(--mono);
+      color: var(--dim);
+      margin-top: 6px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .cat {
+      display: block;
+    }
+
+    .cat.hero {
+      position: absolute;
+      right: 10px;
+      top: 90px;
+      width: 300px;
+    }
+
+    .cat.hero.up {
+      top: 20px;
+      width: 220px;
+    }
+
+    .cat.md {
+      width: 200px;
+    }
+  </style>
 </head>
+
 <body>
-<div id="stage">
-  <div class="hdr"><span></span><span id="meta"></span></div>
-  <div id="view"></div>
-  <div class="note" id="note"></div>
-  <div class="ftr"><span id="hint"></span><span id="pg"></span></div>
-  <div class="prog" id="prog"></div>
-</div>
+  <div id="stage">
+    <div id="view"></div>
+    <div class="note" id="note"></div>
+    <div class="ftr"><span id="hint"></span><span id="pg"></span></div>
+    <div class="prog" id="prog"></div>
+  </div>
 
-<script>
-(function () {
-  var state = { i: 0, notes: false };
+  <script>
+    (function () {
+      var state = { i: 0, notes: false };
 
-  // The saved design notes call emoji headings and emoji icons the clearest sign of generated slides, so they are off. EMOJI = true brings them back.
-  var EMOJI = false;
-  function flatten() {
-    view.querySelectorAll(".em").forEach(function (e) { e.remove(); });
-    var w = document.createTreeWalker(view, NodeFilter.SHOW_TEXT), n;
-    while ((n = w.nextNode())) n.nodeValue = n.nodeValue.replace(/[\p{Extended_Pictographic}\u200D\uFE0F]+\s?/gu, "");
-    view.querySelectorAll(".steps5").forEach(function (g) { g.querySelectorAll("i").forEach(function (i, k) { i.textContent = pad(k + 1); }); });
-    view.querySelectorAll(".flow").forEach(function (f) { f.querySelectorAll(".card").forEach(function (c, k) { var x = document.createElement("span"); x.className = "idx"; x.textContent = pad(k + 1); c.insertBefore(x, c.firstChild); }); });
-  }
-  var SEC = { PROBLEM: "🧐", SOLUTION: "💡", "WHAT EXISTS": "✅", TECHNOLOGY: "🧰", PLAN: "🗓️", CLOSE: "🎉" };
-  var EM = {
-    "What we will cover, and what we are asking for": "🗺️", "How a cross-report question is answered today": "🐌", "Pain points, and what a good outcome looks like": "😿",
-    "What the user sees": "👀", "Architecture: how an answer is made": "🧩", "The grounding gate: three rules, no model": "🛡️",
-    "Access control: inside the search, not after it": "🔐", "What runs today": "✅", "What the admin sees": "🎛️",
-    "Results so far: what is measured, what is not": "📊", "Technology: what we propose and why": "🧰", "Alternatives considered": "⚖️",
-    "Expected running cost of the pilot": "💸", "Limitations and what it takes to maintain": "🔧", "The 10-week plan": "🗓️",
-    "What you will see at each checkpoint": "🏁", "Roles and responsibilities": "🧑‍🤝‍🧑", "What we need to ask you before week 1": "🙋",
-    "Assumptions: known, assumed, to confirm": "🧭", "Risks, and how each is handled": "⚠️"
-  };
-  function title(t) { return '<h2>' + (EM[t] ? '<span class="em">' + EM[t] + '</span>' : '') + t + '</h2>'; }
-  // The mascot, drawn as SVG so it stays sharp at any size. One orange cat, a coral roller, a different face per slide.
-  function cat(pose, cls) {
-    var K = "#1B1B1B", F = "#F4B45F", st = 'stroke="' + K + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"';
-    var roller = '<g transform="rotate(-38 196 124)"><rect x="176" y="100" width="44" height="24" rx="7" fill="#FF7A5C" ' + st + '/></g><path d="M196 122 L152 174" fill="none" ' + st + '/>';
-    var gavel = '<g transform="rotate(-38 176 120)"><rect x="152" y="98" width="46" height="24" rx="5" fill="#8B5A1B" ' + st + '/></g><path d="M176 122 L146 164" fill="none" ' + st + '/>';
-    var glass = '<circle cx="172" cy="100" r="22" fill="#DDF3EE" ' + st + '/><path d="M156 118 L134 156" fill="none" stroke="' + K + '" stroke-width="7" stroke-linecap="round"/>';
-    var nose = '<ellipse cx="110" cy="112" rx="4.5" ry="3.5" fill="' + K + '"/>';
-    var smile = '<path d="M100 120 Q110 130 120 120" fill="none" ' + st + '/>';
-    var happyEyes = '<path d="M82 102 Q91 90 100 102 M120 102 Q129 90 138 102" fill="none" ' + st + '/>';
-    var dots = '<circle cx="92" cy="102" r="4.5" fill="' + K + '"/><circle cx="128" cy="102" r="4.5" fill="' + K + '"/>';
-    var face = "", prop = roller, extra = "";
-    if (pose === "happy") face = happyEyes + nose + smile;
-    else if (pose === "party") {
-      face = happyEyes + nose + smile;
-      extra = '<polygon points="90,56 110,12 130,56" fill="#2F4E9E" ' + st + '/><circle cx="110" cy="12" r="7" fill="#FF7A5C" stroke="' + K + '" stroke-width="4"/>' +
-        '<rect x="30" y="40" width="9" height="9" fill="#FF7A5C" transform="rotate(25 34 44)"/><rect x="188" y="52" width="9" height="9" fill="#1F7A4A" transform="rotate(-20 192 56)"/>' +
-        '<circle cx="46" cy="78" r="5" fill="#2F4E9E"/><circle cx="196" cy="24" r="5" fill="#FF7A5C"/><rect x="24" y="110" width="9" height="9" fill="#1F7A4A"/><circle cx="204" cy="86" r="5" fill="#F4B45F"/>';
-    }
-    else if (pose === "worried") {
-      face = '<circle cx="92" cy="102" r="10" fill="#fff" ' + st + '/><path d="M82 100 H102" ' + st + '/><circle cx="128" cy="103" r="4.5" fill="' + K + '"/>' + nose + '<path d="M101 126 Q110 118 119 126" fill="none" ' + st + '/>';
-      prop = ""; extra = '<path d="M162 62 Q170 76 162 82 Q154 76 162 62 Z" fill="#7CC4F5" stroke="' + K + '" stroke-width="3"/>';
-    }
-    else if (pose === "stern") face = '<path d="M76 90 L100 100 M144 90 L120 100" fill="none" ' + st + '/>' + dots + nose + '<path d="M101 124 Q110 118 119 124" fill="none" ' + st + '/>';
-    else if (pose === "detective") { face = dots + nose + '<path d="M102 124 H118" fill="none" ' + st + '/>'; prop = glass; }
-    else if (pose === "judge") { face = '<path d="M80 102 H102 M118 102 H140" fill="none" ' + st + '/>' + nose + '<path d="M102 124 H118" fill="none" ' + st + '/>'; prop = gavel; }
-    return '<svg class="cat ' + (cls || '') + '" viewBox="0 0 220 210" aria-hidden="true"><path d="M8 94 H44 M10 110 H44 M176 94 H212 M176 110 H210" fill="none" stroke="' + K + '" stroke-width="3" stroke-linecap="round"/>' +
-      '<polygon points="52,88 60,28 106,60" fill="' + F + '" ' + st + '/><polygon points="168,88 160,28 114,60" fill="' + F + '" ' + st + '/>' +
-      '<rect x="86" y="150" width="48" height="54" fill="' + F + '" ' + st + '/><ellipse cx="110" cy="106" rx="64" ry="54" fill="' + F + '" ' + st + '/>' +
-      '<path d="M84 154 Q110 172 136 154" fill="none" stroke="#EAF3F0" stroke-width="9" stroke-linecap="round"/>' + face + prop + extra + '</svg>';
-  }
-  function card(cls, inner) { return '<div class="card ' + (cls || '') + '">' + inner + '</div>'; }
-  function rows(items) { return '<div class="rows">' + items.map(function (x) { return '<p>' + x + '</p>'; }).join('') + '</div>'; }
-  function cards(cls, items) { return items.map(function (x) { return card(cls, '<p>' + x + '</p>'); }).join(''); }
-  function table(cls, head, rows) {
-    return '<table class="' + (cls || '') + '"><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' +
-      rows.map(function (r) { return '<tr>' + r.map(function (c) {
-        var m = /^\{(ok|warn|danger)\}(.*)$/.exec(c);
-        return m ? '<td class="' + m[1] + '">' + m[2] + '</td>' : '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
-  }
-  function step(n, t, s, cls) { return card(cls, '<span class="em">' + n + '</span><div class="t">' + t + '</div><p class="dim">' + s + '</p>'); }
-  function arr() { return '<div class="arr"></div>'; }
-  function shot(file, cap, h) { return '<figure class="shot' + (h === 2 ? ' h2' : h ? ' h' : '') + '"><img src="deck-assets/' + file + '" alt="' + cap + '">' + (cap ? '<figcaption>' + cap + '</figcaption>' : '') + '</figure>'; }
-  function kv(items) { return '<div class="kv">' + items.map(function (x) { return '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; }
-  function chips(items) {
-    var marked = items.some(function (x) { return /^\{(ok|warn|danger)\}/.test(x); }), L = { ok: "Built", warn: "Partly", danger: "Not yet" };
-    return '<ul class="sl' + (marked ? '' : ' plain') + '">' + items.map(function (x) {
-      var m = /^\{(ok|warn|danger)\}(.*)$/.exec(x);
-      return '<li class="' + (m ? m[1] : '') + '">' + (marked ? '<span class="k">' + (m ? L[m[1]] : "By design") + '</span>' : '') + '<span>' + (m ? m[2] : x) + '</span></li>';
-    }).join('') + '</ul>';
-  }
+      function title(t) { return '<h2>' + t + '</h2>'; }
+      // The mascot from deck.html, three poses only.
+      function cat(pose, cls) {
+        var K = "#1B1B1B", F = "#F4B45F", st = 'stroke="' + K + '" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"';
+        var roller = '<g transform="rotate(-38 196 124)"><rect x="176" y="100" width="44" height="24" rx="7" fill="#FF7A5C" ' + st + '/></g><path d="M196 122 L152 174" fill="none" ' + st + '/>';
+        var nose = '<ellipse cx="110" cy="112" rx="4.5" ry="3.5" fill="' + K + '"/>';
+        var smile = '<path d="M100 120 Q110 130 120 120" fill="none" ' + st + '/>';
+        var happyEyes = '<path d="M82 102 Q91 90 100 102 M120 102 Q129 90 138 102" fill="none" ' + st + '/>';
+        var face = happyEyes + nose + smile, prop = roller, extra = "";
+        if (pose === "worried") {
+          face = '<circle cx="92" cy="102" r="10" fill="#fff" ' + st + '/><path d="M82 100 H102" ' + st + '/><circle cx="128" cy="103" r="4.5" fill="' + K + '"/>' + nose + '<path d="M101 126 Q110 118 119 126" fill="none" ' + st + '/>';
+          prop = ""; extra = '<path d="M162 62 Q170 76 162 82 Q154 76 162 62 Z" fill="#7CC4F5" stroke="' + K + '" stroke-width="3"/>';
+        }
+        return '<svg class="cat ' + (cls || '') + '" viewBox="0 0 220 210" aria-hidden="true"><path d="M8 94 H44 M10 110 H44 M176 94 H212 M176 110 H210" fill="none" stroke="' + K + '" stroke-width="3" stroke-linecap="round"/>' +
+          '<polygon points="52,88 60,28 106,60" fill="' + F + '" ' + st + '/><polygon points="168,88 160,28 114,60" fill="' + F + '" ' + st + '/>' +
+          '<rect x="86" y="150" width="48" height="54" fill="' + F + '" ' + st + '/><ellipse cx="110" cy="106" rx="64" ry="54" fill="' + F + '" ' + st + '/>' +
+          '<path d="M84 154 Q110 172 136 154" fill="none" stroke="#EAF3F0" stroke-width="9" stroke-linecap="round"/>' + face + prop + extra + '</svg>';
+      }
+      function card(cls, inner) { return '<div class="card ' + (cls || '') + '">' + inner + '</div>'; }
+      function rows(items) { return '<div class="rows">' + items.map(function (x) { return '<p>' + x + '</p>'; }).join('') + '</div>'; }
+      function table(head, rows) {
+        return '<table><tr>' + head.map(function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr>' +
+          rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+      }
+      function step(t, s, cls) { return card(cls, '<div class="t">' + t + '</div><p class="dim">' + s + '</p>'); }
+      function arr() { return '<div class="arr"></div>'; }
+      function kv(items) { return '<div class="kv">' + items.map(function (x) { return '<div><b>' + x[0] + '</b><span>' + x[1] + '</span></div>'; }).join('') + '</div>'; }
 
-  var S = [
-    // ---------- 1 PROBLEM ----------
-    { sec: "PROBLEM", theme: "dark", cls: "between", html:
-      '<div class="stack" style="gap:16px;max-width:760px;margin-top:54px"><div class="kicker">🧐 MARC · client rehearsal · 10-week pilot</div><h1>Answers that carry their proof</h1><p class="big" style="color:var(--mint)">Ask across the reports a subscriber has bought. Every claim gets a page. Every quote is checked.</p></div>' + cat("happy", "hero") +
-      '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali (team lead) · October 2026</p>',
-      note: "Open with the problem, in full, before anything else. Say who we are in one sentence, then go straight to how the client works today. Do not describe the solution on this slide." },
+      var NAMES = 'Irfan Ali (team lead) · Adam · Fahim · Shananth';
+      var S = [
+        {
+          theme: "dark", cls: "between", html:
+            '<div class="stack" style="max-width:820px"><p class="kicker">MARC · 10-week pilot proposal</p>' +
+            '<h1>Find any figure across your reports in minutes, with the page that proves it.</h1>' +
+            '<p class="big dim">An assistant for the research your customers already pay for.</p></div>' + cat("happy", "hero") +
+            '<p class="names">' + NAMES + ' · October 2026</p>',
+          note: "One sentence on who we are, then straight to the next slide. Do not explain the product here."
+        },
 
-    { sec: "PROBLEM", html:
-      title("What we will cover, and what we are asking for") +
-      '<div class="cols side"><div class="steps5" style="gap:16px;align-self:center"><div><i>🧐</i><div><b style="font-size:20px">The problem as we understand it, and how your staff work today</b></div></div><div><i>💡</i><div><b style="font-size:20px">What we propose to build and how an answer is made, end to end</b></div></div><div><i>✅</i><div><b style="font-size:20px">What already runs, with its measured and unmeasured results</b></div></div><div><i>🧰</i><div><b style="font-size:20px">Stack, alternatives considered, cost, limits and maintenance</b></div></div><div><i>🗓️</i><div><b style="font-size:20px">The 10-week plan and who owns each part</b></div></div><div><i>🙋</i><div><b style="font-size:20px">What we need from you before week 1 can start</b></div></div></div>' +
-      card("panel", '<h3>Three decisions we need today</h3><div class="stack" style="margin-top:10px"><p>Which library is the pilot, and who are the pilot users.</p><p>Which model provider and hosting region are acceptable for your research.</p><p>What result at week 10 would justify an enterprise build.</p></div>') + '</div>',
-      note: "Name the three decisions up front. If they cannot decide today, ask who can and by when." },
+        {
+          theme: "panel", html:
+            title("Today, one question across several reports is slow manual work, and nobody can check the answer") +
+            '<div class="flow">' + step("Open a report", "Guess which one has it") + arr() + step("Search inside it", "Scroll and read around") + arr() +
+            step("Copy the figure", "By hand, with its page") + arr() + step("Repeat", "For every report in scope") + arr() +
+            step("Combine it", "Nobody re-checks the figures", "soft") + '</div>' +
+            '<div class="cols side"><div><h3>What this costs you</h3>' + rows([
+              "<b>Slow.</b> Every question that spans reports means searching several PDFs by hand.",
+              "<b>Repeated.</b> The next person asks the same question and starts again from zero.",
+              "<b>Unreliable.</b> A figure copied by hand has no link back to its page, so mistakes spread.",
+              "<b>Untapped.</b> Customers cannot ask questions of the research they pay for, so its value is capped.",
+              "<b>Risky.</b> A full system is a large investment before anyone knows customers want it."]) + '</div>' +
+            '<div class="stack" style="justify-items:center">' + cat("worried", "md") +
+            '<p class="fine" style="text-align:center">Our reading of the brief and of MARC Online. How often this happens, and how long one question takes, is yours to tell us.</p></div></div>',
+          note: "This is the whole problem; say it once and say it fully. Then ask: is this how it really happens, who does it, how often, and how long does one question take? Their answer becomes the pilot's starting point."
+        },
 
-    { sec: "PROBLEM", theme: "panel", html:
-      title("How a cross-report question is answered today") +
-      '<div class="flow">' + step("📄", "Open one PDF", "Guess which report") + arr() + step("🔎", "Search inside it", "Find, scroll, read around") + arr() +
-      step("✍️", "Note the figure", "Copy it, with its page, by hand") + arr() + step("📑", "Open the next PDF", "For every report in scope") + arr() +
-      step("🧵", "Stitch it together", "Nobody re-checks the figures", "soft") + '</div>' +
-      '<div class="memerow" style="margin-top:34px;gap:44px">' + cat("worried", "md") + '<div class="capwrap"><span class="cap big">Nobody:</span><span class="cap big">A subscriber: opens five PDFs, one by one</span></div></div>' +
-      '<p class="dim" style="font-size:14px;margin-top:18px">From the brief and a signed-in walkthrough of MARC Online. How often, and how long one question takes, is yours to tell us.</p>',
-      note: "This is our reading, not an observation. Ask: is this how it actually happens, who does it, how often, and how long does one question take? Their answer is the pilot baseline." },
+        {
+          theme: "accent", cls: "between", html:
+            '<p class="kicker">Our answer in one line</p>' +
+            '<h1 style="font-size:64px">An assistant that answers only from your reports, and shows the page for every figure.</h1>' +
+            '<p class="big" style="max-width:900px">If it cannot back an answer up, it says so instead of guessing. That is the difference from a general AI chat tool.</p>',
+          note: "Pause here. The point is not AI over PDFs. It is that every answer is checked against the page before anyone sees it, and the check is automatic and auditable."
+        },
 
-    { sec: "PROBLEM", html:
-      title("Pain points, and what a good outcome looks like") +
-      '<div class="cols c2"><div class="stack"><h3>What hurts today</h3>' + rows([
-        "🐌 <b>Slow.</b> Every cross-report question is a manual search across several PDFs.",
-        "🔁 <b>Repeated.</b> The same question is answered again by the next person, from scratch.",
-        "🤷 <b>Unverifiable.</b> A figure copied by hand has no link back to its page. Errors travel.",
-        "🔒 <b>Locked value.</b> Customers cannot query the research they pay for, so its value is capped.",
-        "💸 <b>Investment risk.</b> An enterprise system is expensive before anyone has proved customers want it."]) + '</div>' +
-      '<div class="stack"><h3 class="ok">Expected outcome at week 10</h3>' + rows([
-        "⏱️ <b>Minutes, not hours.</b> One question searches the whole permitted library and returns a cited answer.",
-        "📄 <b>Every claim has a page.</b> Click a citation and see the quote highlighted on the real page.",
-        "✅ <b>No false figures.</b> Measured on an agreed question set: zero figures stated that the page does not say. An answer beside the point goes to review, and is counted.",
-        "🔐 <b>Access that cannot leak.</b> A user only ever sees passages from libraries they are granted.",
-        "🚦 <b>A go or no-go number.</b> Pilot data that sizes the enterprise build, or shows cheaply why not."]) + '</div></div>',
-      note: "Left is from the brief. Right is our proposal of what success means; the client has to agree it, especially the last row. Ask which of the five matters most." },
+        {
+          html:
+            title("What your customer sees") +
+            '<div class="cols side"><figure class="shot"><img src="deck-assets/desk-flow.gif" alt="A short recording of the research desk: a past question is opened, its answer comes back with a page tag, the cited sentence is highlighted on the report page, and the check steps are shown."><figcaption>The working demo today, on five public World Bank reports and one sample internal memo.</figcaption></figure>' +
+            '<div class="flow" style="flex-direction:column">' +
+            step("Ask in plain English", "“What did the April 2024 report forecast for growth?”") +
+            step("Get an answer with a page for every figure", "Only from reports this customer has bought.") +
+            step("Click to see the proof", "The exact sentence, highlighted on the real page.") +
+            step("Or an honest “not found”", "When the library does not say, it does not guess.", "soft") + '</div></div>',
+          note: "Live demo here if possible: one question it answers, one it should refuse. The demo has a user picker instead of a login; the pilot uses your own login."
+        },
 
-    // ---------- 2 SOLUTION ----------
-    { sec: "SOLUTION", theme: "accent", cls: "between", html:
-      '<div class="stack" style="gap:var(--s4);max-width:980px;margin-top:64px"><div class="kicker">Our answer in one line</div><h1 style="font-size:72px">The assistant never shows an answer it cannot back up.</h1><p class="big" style="max-width:760px">A page for every claim. Plain code checks the quote is on that page and the numbers are in the quote.</p></div>' +
-      '<div style="margin-bottom:40px"><span class="stamp light">Checked</span></div>',
-      note: "Pause here. The differentiator is not AI over PDFs. It is the check that runs after the model and before the user, and that it is deterministic code anyone can audit." },
+        {
+          html:
+            title("Why you can trust the answers") +
+            '<div class="cols c3">' +
+            card("", '<p class="lbl">Checked before it is shown</p><p>Every figure must appear, word for word, on the page it cites. If it does not, the AI gets one more try, then the figure is removed.</p>') +
+            card("", '<p class="lbl">Customers only see what they bought</p><p>A report a customer has not paid for is never searched, never shown, never cited.</p>') +
+            card("", '<p class="lbl">“Not found” beats a guess</p><p>If nothing can be backed up, it says so and shows the closest pages instead.</p>') + '</div>' +
+            '<div class="cols c2">' +
+            card("ink", '<p class="lbl">Tested so far</p><p class="num">0 wrong figures</p><p>stated as fact in 285 test answers, across three different AI models.</p>') +
+            '<div class="stack">' + card("warn", '<p class="lbl">Where it still falls short</p><p>Questions that compare two reports sometimes get half an answer. These are flagged and measured, and fixing them is a pilot priority.</p>') +
+            card("soft", '<p class="lbl">Why not Copilot or NotebookLM?</p><p>For staff chatting with PDFs, they are cheaper, and we would say so. They do not check figures against the page, keep each customer to their own reports, or measure how often they are wrong.</p>') + '</div></div>',
+          note: "Lead with the zero, then say the limit before they find it. The check cannot judge whether a true figure answers the question, which is why we measure that separately. Charts are not read; scanned and table-heavy reports are untested, so ask for the ugliest ones. Measured on Qwen 3.8 27B, Gemini 4 Argon and Claude Sonnet 5.5."
+        },
 
-    { sec: "SOLUTION", html:
-      title("What the user sees") +
-      '<div class="cols side" style="grid-template-columns:7fr 5fr;gap:28px">' + shot("chat-answer.png", "The demo, as it runs today: a stored answer, its citation chip, and the quote one click away.", true) +
-      '<div class="steps5" style="align-self:center">' +
-      '<div><i>💬</i><div><b>Ask in plain language</b><br><span>“The April 2024 monitor” becomes a filter.</span></div></div>' +
-      '<div><i>🔎</i><div><b>Watch the sources arrive</b><br><span>Only from reports this user may search.</span></div></div>' +
-      '<div><i>✅</i><div><b>See every claim checked</b><br><span>Quote on page N, or removed with the reason.</span></div></div>' +
-      '<div><i>📄</i><div><b>Read the cited answer</b><br><span>Click the chip: the quote, then the PDF at that page.</span></div></div>' +
-      '<div><i>👍</i><div><b>Rate it, or hand it to a person</b><br><span>Nothing happens unless pressed.</span></div></div>' +
-      '<div><i>🙅</i><div><b>Or an honest refusal</b><br><span>“Not found in your library”. It does not guess.</span></div></div>' +
-      '</div></div>',
-      note: "If a live demo is possible, run it here: one safe question from the script, one that should refuse. The user picker is not a login; the real build gets your identity provider." },
+        {
+          theme: "panel", html:
+            title("What it costs to run the pilot") +
+            kv([["1.6–2.4 sen", "per question"], ["< RM 700", "a month, at 2,000 questions"], ["0", "changes to MARC Online"]]) +
+            '<div class="cols c2">' +
+            card("", '<p class="lbl">Running cost is small</p><p>On Qwen, the Chinese model we already tested, the AI and hosting together come to less than RM 700 a month at pilot volume. It runs separately from MARC Online and never changes it.</p>') +
+            card("warn", '<p class="lbl">The real cost is people</p><p>Our team of five for ten weeks, and about half a day a week from your research staff to write and grade 60 to 100 test questions. That staff time is the one thing we cannot provide.</p>') + '</div>' +
+            '<p class="fine">Indicative, based on public list prices in October 2026 (Qwen 3.8 27B on Alibaba Cloud International, Google Cloud), at RM 4.08 to the US dollar. On Claude Sonnet 5.5 it would be 6–12 sen a question, under RM 1,050 a month. We confirm prices against the provider and region you choose, and measure them during the pilot.</p>',
+          note: "Say the per-question figure, then stop. At pilot scale the AI cost is a rounding error: on Qwen it is about RM 40 a month at 2,000 questions, so nearly all of the monthly figure is the platform. Do not quote a people cost here; that is a commercial conversation. If they ask where their data goes, several providers offer the same Qwen model, so ask which region they need. Detail: about 5,000 words in and 400 out per question; the platform is RM 250 to 650 a month."
+        },
 
-    { sec: "SOLUTION", html:
-      title("Architecture: how an answer is made") +
-      '<div class="flow">' +
-      card("", '<span class="em">📥</span><div class="lbl u">Ingest</div><div class="t">PDF, page by page</div><p class="dim">Page numbers kept. Scans flagged for OCR.</p>') + arr() +
-      card("", '<span class="em">🔎</span><div class="lbl u">Retrieve</div><div class="t">Granted reports only</div><p class="dim">Keyword plus meaning search. The grant is a join in the query.</p>') + arr() +
-      card("c1", '<span class="em">🤖</span><div class="lbl u">Draft · model</div><div class="t">Claims with exact quotes</div><p>Sees only the retrieved passages.</p>') + arr() +
-      card("ink", '<span class="em">🛡️</span><div class="lbl u">Gate · plain code</div><div class="t">Quote on page? Numbers match?</div><p style="color:var(--mint)">Fail: retry once. Fail again: remove, or refuse.</p>') + arr() +
-      card("", '<span class="em">📄</span><div class="lbl u">Show · audit</div><div class="t">Cited answer, page, PDF</div><p class="dim">Every question and outcome logged.</p>') + '</div>' +
-      chips(["{ok}✅ Runs today: ingest, retrieve, draft, gate, show, audit", "🏠 Our own store and front end; nothing touches MARC Online", "🔑 Reports and entitlements arrive by your API licence", "🔌 Model behind one interface: provider decided with you", "{warn}🚧 Meaning search and OCR: weeks 2 to 5"]),
-      note: "Walk left to right. The model only ever sees passages the user may see. The gate is deterministic string checks, so it is auditable and costs no model call. It cannot judge relevance, which is why wrong-and-confident is measured." },
+        {
+          html:
+            title("A 10-week pilot that ends in a clear decision") +
+            '<div class="flow">' +
+            card("", '<div class="t">Set up on your reports</div><p class="lbl">Weeks 1 to 3</p><p class="dim">Your sample reports loaded and a first accuracy score. Pilot users, AI provider and success targets agreed.</p>') + arr() +
+            card("", '<div class="t">Build it properly</div><p class="lbl">Weeks 4 to 7</p><p class="dim">Answers that compare reports, your login, admin screens, and a scorecard that runs on every change.</p>') + arr() +
+            card("", '<div class="t">Real users try it</div><p class="lbl">Weeks 8 to 9</p><p class="dim">Your pilot users ask real questions. We track time saved, ratings and cost per question.</p>') + arr() +
+            card("ink", '<div class="t">Decide</div><p class="lbl">Week 10</p><p>Results against the targets you set in week 1.</p>') + '</div>' +
+            '<div class="cols c2">' +
+            card("ok", '<p class="lbl">Targets met</p><p>The same measurements size the full system, from real usage and real cost.</p>') +
+            card("soft", '<p class="lbl">Targets not met</p><p>The results show exactly where it fell short, and you stop having spent little.</p>') + '</div>' +
+            '<p class="dim">You see working results at weeks 1, 3, 5, 7 and 10, not status reports. If time runs short we cut features, never the accuracy check or access control.</p>',
+          note: "Week 1 depends on their decisions; if those slip, everything slips. Weeks 8 to 9 depend on pilot users actually using it, so ask them to name those users now. Offer a 30-minute review at each checkpoint."
+        },
 
-    { sec: "SOLUTION", html:
-      title("The grounding gate: three rules, no model") +
-      '<div class="cols c3">' +
-      card("", '<span class="em">📍</span><div class="lbl">Rule 1</div><div class="t">The quote is on the cited page</div><p class="dim">Exact match. A paraphrase fails.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">“expanded by 4.4 percent in H1 2025” → <span class="ok" style="color:var(--green);font-weight:700">on p. 23</span></p>') +
-      card("", '<span class="em">🔢</span><div class="lbl">Rule 2</div><div class="t">Every number is in the quote, in a sentence</div><p class="dim">A number read off a chart axis does not count.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">“5.1 4.4 3.6 3.3 4.1 2025f” → <span style="color:var(--coral-ink);font-weight:700">removed</span></p>') +
-      card("", '<span class="em">🚪</span><div class="lbl">Rule 3</div><div class="t">The page was one the model was shown</div><p class="dim">So it cannot cite a report the user may not see.</p><p style="font-family:var(--mono);font-size:13px;margin-top:10px">doc 6, p. 1, no grant → <span style="color:var(--coral-ink);font-weight:700">never retrieved</span></p>') + '</div>' +
-      '<div class="cols side" style="margin-top:8px;grid-template-columns:1fr 360px;align-items:center"><div class="flow">' + card("c1", '<span class="em">🔁</span><div class="t">Fail</div><p class="dim">Retry once, with the reasons.</p>') + arr() + card("c1", '<span class="em">✂️</span><div class="t">Fail again</div><p class="dim">Remove the claim.</p>') + arr() +
-      card("", '<div style="text-align:center;padding-top:6px"><span class="stamp refused" style="font-size:30px;border-width:5px">Refused</span><p class="dim" style="margin-top:10px">Nothing survives: “not found”.</p></div>') + '</div>' +
-      card("warn", '<p style="font-size:15px"><b>What it cannot do.</b> Prove the claim answers the question. That is why it is measured.</p>') + '</div>',
-      build: true,
-      note: "Say the limit before the client finds it. Each rule has a test that fails when the rule is removed. The chart-axis example is a real catch from the Gemini runs." },
+        {
+          html:
+            title("The team, and who you talk to about what") +
+            table(["Who", "Responsible for", "Busiest in"], [
+              ["<b>Irfan Ali</b> · team lead", "<b>Accuracy and results.</b> Your single point of contact. Owns the accuracy check, the test questions with your staff, and the week-10 review.", "Weeks 1, 7, 10"],
+              ["<b>Adam</b>", "<b>Getting your reports in.</b> Loading your PDFs, including scanned pages and tables, and flagging pages that need a person to look.", "Weeks 1 to 3"],
+              ["<b>Fahim</b>", "<b>Finding the right pages.</b> Search across your library, including questions that compare reports.", "Weeks 2 to 5"],
+              ["<b>Shananth</b>", "<b>Access and security.</b> Login, which customer sees which reports, admin screens, and hosting.", "Weeks 2, 6, 8"],
+              ["<b>Adam</b>", "<b>Evaluating the AI.</b> Score its answers on your test questions as it changes.", "Weeks 7 to 10"],
+              ["<b>Irfan</b>", "<b>What users see.</b> The app itself: asking questions, viewing the cited page, giving feedback.", "Weeks 4 to 9"]]) +
+            '<div class="cols c2">' +
+            card("", '<p>Everyone can run the demo and explain how an answer is made. Each area has an owner and a named back-up.</p>') +
+            card("", '<p>In the pilot weeks, everyone supports users and fixes what they find, so no single area holds up the decision.</p>') + '</div>',
+          note: "Each person introduces their own row in one sentence. Each should be ready to answer one question outside their own area."
+        },
 
-    { sec: "SOLUTION", html:
-      title("Access control: inside the search, not after it") +
-      '<div class="cols side" style="grid-template-columns:5fr 7fr;gap:28px"><div class="steps5" style="align-self:center">' +
-      '<div><i>📋</i><div><b>Entitlements come from your subscriber export</b><br><span>We never read MARC Online.</span></div></div>' +
-      '<div><i>🔗</i><div><b>The grant is a join in the search query</b><br><span>A passage you may not see is never returned, never reaches the model, is never cited.</span></div></div>' +
-      '<div><i>🔁</i><div><b>The page and the PDF repeat the check</b><br><span>A guessed id returns nothing without the grant.</span></div></div>' +
-      '<div><i>📜</i><div><b>The trace names only your libraries</b><br><span>Every question, outcome and source is logged.</span></div></div>' +
-      '<div><i>🧱</i><div><b>Documents are data, not instructions</b><br><span>Text in a PDF cannot change the assistant.</span></div></div>' +
-      '<div><i>🚧</i><div><b>Not yet: real login</b><br><span>The demo has a user picker. The pilot gets your identity provider or invited users.</span></div></div>' +
-      '</div>' + shot("chat-steps.png", "Investigation steps: the search names only the libraries this user holds; each step marked plain code or model call, with its duration.", true) + '</div>',
-      note: "Access was a hard requirement in the brief. Design done and tested: a test fails if the join is removed. Login depends on their identity provider." },
+        {
+          theme: "dark", cls: "between", html:
+            '<div class="stack" style="max-width:820px"><p class="kicker">To start next week</p><h1 style="font-size:56px">Four things we need from you</h1></div>' + cat("happy", "hero up") +
+            '<div class="cols c4">' +
+            card("ink2", '<p class="lbl">Five sample reports</p><p>Including your hardest one: scanned, or heavy on tables.</p>') +
+            card("ink2", '<p class="lbl">A research contact</p><p>To help write and grade the test questions.</p>') +
+            card("ink2", '<p class="lbl">A sponsor</p><p>Who agrees the week-10 targets and signs off the decision.</p>') +
+            card("ink2", '<p class="lbl">A yes on data</p><p>Which AI provider may read your research, and in which country it is stored.</p>') + '</div>' +
+            card("accent", '<p class="lbl">At week 10</p><p class="big">A go or no-go decision, on your numbers, not ours.</p>') +
+            '<p class="names">' + NAMES + '</p>',
+          note: "End on the four boxes and stop talking. Before the meeting ends, ask for the sponsor's name and a date for the five sample reports."
+        }
+      ];
 
-    // ---------- 3 WHAT EXISTS ----------
-    { sec: "WHAT EXISTS", theme: "panel", html:
-      title("What runs today") +
-      kv([["87", "automated tests"], ["5", "public reports, 490 pages"], ["3", "models, 19 measured runs"], ["0", "false figures in 285 attempts"]]) +
-      '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("user-board.png", "A subscriber’s board: library with PDF and ask links, an analysis across five editions, answers, ratings, review requests.", 2) +
-      '<div class="stack" style="gap:10px;align-self:center">' + chips(["{ok}💬 Chat, sources, checks, cited answer", "{ok}📄 Quote on the page, PDF at that page", "{ok}⚡ History replays without a model call", "{ok}📚 Library, analyses, user board", "{ok}🎛️ Admin board, add user, API keys", "{ok}📊 Evaluation harness, three models", "{warn}🤔 Comparisons: split", "{danger}🚧 PostgreSQL, React, OCR, your login: weeks 2 to 6"]) + '</div></div>',
-      note: "Do not oversell: real reports, never a client document. Give us five reports and it runs the same day; the quality number takes the question set." },
+      var view = document.getElementById("view"), stage = document.getElementById("stage");
+      function pad(n) { return n < 10 ? "0" + n : "" + n; }
 
-    { sec: "WHAT EXISTS", theme: "panel", html:
-      title("What the admin sees") +
-      '<div class="cols side" style="grid-template-columns:8fr 4fr;gap:28px">' + shot("admin-board.png", "One screen: a brief since the last look, key figures, what to do and why, reports by edition, coverage, recent questions, saved runs.", true) +
-      '<div class="stack" style="gap:10px;align-self:center">' + chips(["🙈 Counts and names, never answer text", "📝 To do, each with its reason", "🗓️ Reports on a timeline, sized by citations", "🔍 Pages flagged for OCR", "🧪 Every saved evaluation run", "➕ Add a user, create and revoke API keys", "🕵️ Try a question as any user", "🧩 Layout is a JSON document per owner"]) + '</div></div>',
-      note: "The admin never sees answer text; that stays with the user who asked. Expand a panel to show the layout document at work." },
+      function render() {
+        var s = S[state.i];
+        stage.className = (s.theme || "") + (state.notes ? " notes" : "");
+        view.innerHTML = '<div class="slide ' + (s.cls || "") + '">' + s.html + '</div>';
+        view.querySelectorAll(".flow").forEach(function (f) { f.querySelectorAll(".card").forEach(function (c, k) { var x = document.createElement("span"); x.className = "idx"; x.textContent = pad(k + 1); c.insertBefore(x, c.firstChild); }); });
+        document.getElementById("note").textContent = s.note || "";
+        document.getElementById("pg").textContent = pad(state.i + 1) + " / " + S.length;
+        document.getElementById("hint").textContent = state.i === 0 ? "← → slides | N notes | F fullscreen | Home / End" : "";
+        document.getElementById("prog").style.width = ((state.i + 1) / S.length * 100) + "%";
+        try { location.hash = String(state.i + 1); } catch (e) { }
+      }
+      function go(d) { var n = Math.max(0, Math.min(S.length - 1, state.i + d)); if (n !== state.i) { state.i = n; render(); } }
 
-    { sec: "WHAT EXISTS", html:
-      title("Results so far: what is measured, what is not") +
-      '<div class="cols side"><div class="stack" style="gap:14px">' +
-      '<h3>Retrieval: is the right page in the top 12?</h3>' + table("sm wrap", ["Question type", "Right page found"], [["Single report, 12 questions", "{ok}12 of 12"], ["Two reports, 3 questions", "{ok}3 of 3 get both pages"]]) + '<p class="dim" style="font-size:15px">Right page in the top 12 across the set: 1.0, up from 0.867 after the edition words left the query and every report kept two slots.</p>' +
-      '<p class="dim" style="font-size:15px">Nothing was tuned on these questions; 19 anchors were added after checking pages by hand, because the reports repeat forecasts in the summary.</p>' +
-      '<h3>Model-free baselines, as a floor</h3>' + table("sm wrap", ["Baseline", "Correct", "Timid", "Wrong and confident"], [["Quote the best sentence", "1 of 15", "0", "{danger}21 of 22"], ["Refuse on weak match", "0 of 15", "9", "{danger}9 of 22"]]) +
-      card("warn", '<p><b>Opposite failures.</b> Small model refuses half of what it could answer. Large ones answer beside the point 1 to 2 times a run, only on comparisons: a true figure, half an answer. Zero-false comes first.</p>') + '</div>' +
-      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">False figures stated as fact, 3 models, 19 runs</div><div class="num">0 of 285</div><p>No model stated a false figure. The gate removed up to 6 in 10 of the large models’ drafts, one read off a chart.</p>') +
-      table("sm", ["Model", "Correct", "Timid", "Refused right", "Wrong, confident"], [["Qwen · 10 runs", "5 to 9", "6 to 10", "7 of 7", "{ok}0"], ["Gemini · 3", "11 to 12", "0 to 2", "6 to 7", "{danger}2 to 4"], ["Gemini · 3, figure rule", "10 to 12", "2 to 3", "7 of 7", "{warn}1 to 2"], ["Claude Sonnet 5.5 · 3", "10 to 12", "2 to 3", "7 of 7", "{warn}1 to 2"]]) + '</div></div>',
-      note: "Lead with the zero, then say what it does not mean: the model refuses a lot, and cross-report questions always. The model measured is Qwen 3.8 27B through Nous Research, and Gemini and Claude Sonnet through the same endpoint; the demo runs on Qwen. The baselines prove a model-free approach cannot work." },
+      document.addEventListener("keydown", function (e) {
+        var k = e.key;
+        if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") go(1);
+        else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") go(-1);
+        else if (k === "Home") { state.i = 0; render(); }
+        else if (k === "End") { state.i = S.length - 1; render(); }
+        else if (k === "n" || k === "N") { state.notes = !state.notes; render(); }
+        else if (k === "f" || k === "F") { if (!document.fullscreenElement) { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } else { document.exitFullscreen(); } }
+      });
+      stage.addEventListener("click", function (e) { go(e.clientX < window.innerWidth / 3 ? -1 : 1); });
 
-    // ---------- 4 TECHNOLOGY ----------
-    { sec: "TECHNOLOGY", html:
-      title("Technology: what we propose and why") +
-      table("sm wrap", ["Layer", "Pilot choice", "Why", "In the slice today"], [
-        ["Back end", "Python, FastAPI", "Strong PDF and evaluation libraries, typed API, easy to test", "{ok}Same"],
-        ["Store and search", "PostgreSQL with pgvector, our own, encrypted at rest", "Passages, vectors and audit in one store. Nothing read from or written to MARC Online; metadata and entitlements come from the API you license to us", "{warn}SQLite FTS5, keyword only"],
-        ["PDF reading", "poppler page extraction, OCR fallback, table extraction", "Keeps page numbers, which citations need; reading-order mode handles two-column pages", "{warn}poppler only, OCR flagged not run"],
-        ["Model", "Any Anthropic or OpenAI-compatible model, behind a thin interface", "Provider, region and retention decided with you in week 1. One adapter file to swap", "{ok}Measured on Qwen 3.8 27B, Gemini 4 Argon and Claude Sonnet 5.5, one adapter"],
-        ["Front end", "React web app", "Chat, page viewer and admin screens need component state and accessibility work", "{warn}One plain HTML page"],
-        ["Files", "Private object storage", "Original PDFs, page images, retention rules", "{warn}Local files"],
-        ["Login", "Our app’s login: your identity provider if you allow it, else invited users", "A standalone system; nothing changes in MARC Online", "{danger}Demo user picker"],
-        ["Hosting", "Our own, in a Malaysian region unless you say otherwise", "Licensed research text: encrypted, access-logged, retained on your terms, never sent to a model provider without your consent", "{danger}Laptop"]]) +
-      '<p class="dim" style="font-size:14px">The gate, loop, trace, access rule and question set carry over unchanged when store and front end are swapped: they depend on a retrieval function and a model interface, not on SQLite or the page.</p>',
-      note: "The right column is deliberate: the slice used the lightest thing that proves each idea. Migration is weeks 2 to 3 and does not touch the parts that matter. A mandated cloud or provider changes two rows and nothing else." },
+      function fit() { stage.style.transform = "scale(" + Math.min(window.innerWidth / 1280, window.innerHeight / 720) + ")"; }
+      window.addEventListener("resize", fit);
+      fit();
 
-    { sec: "TECHNOLOGY", html:
-      title("Alternatives considered") +
-      table("sm wrap", ["Option", "Strength", "Why not here", "When it wins"], [
-        ["<b>This build</b>", "Quote and number checked before display; access in the query; measured", "More engineering; quality needs the question set", "{ok}A wrong figure costs more than the build"],
-        ["Managed RAG (Vertex, Azure, Bedrock)", "First answer in days", "Cites a chunk, not a checked quote; no number check", "Chunk citations are enough"],
-        ["Copilot, NotebookLM", "Zero build", "No per-customer library, no eval, no audit", "Internal staff only"],
-        ["Separate vector database", "Scale, richer ranking", "Access rule in two places", "Enterprise volume"],
-        ["Self-hosted open model", "Data never leaves", "GPU cost; more refusals", "No provider terms acceptable"]]) +
-      card("soft", '<p><b>Candid view.</b> “Chat with our PDFs” for staff is cheaper on a managed service, and we would say so. The build buys two things they do not: claims checked against the page, and a wrong-and-confident rate you can show customers.</p>'),
-      build: true,
-      note: "Expect “why not just use Copilot or Vertex”. Answer it before it is asked. The model is swappable; nothing stops us running on their preferred provider." },
-
-    { sec: "TECHNOLOGY", html:
-      title("Expected running cost of the pilot") +
-      '<div class="cols side"><div class="stack" style="gap:12px">' +
-      '<h3>Model cost per question, indicative</h3>' + table("sm wrap", ["Model", "List price per 1M tokens in / out", "One question, with retry"], [["Claude Sonnet 5.5 (proposed)", "USD 2 / 10", "About 1.5 to 3 US cents"], ["Claude Opus 5.5", "USD 4 / 20", "About 3 to 6 US cents"], ["Claude Haiku 5.5", "USD 0.10 / 0.50", "Under 0.2 US cents"]]) +
-      '<p class="dim" style="font-size:14px">Assumes 12 passages of about 350 tokens each plus a short answer, roughly 5,000 input and 400 output tokens per call. Prompt caching cuts the input side further. Measured per question during the pilot, not assumed.</p>' +
-      '<h3>Platform, per month</h3>' + table("sm wrap", ["Item", "Indicative"], [["Cloud Run service, scales to zero", "USD 20 to 60"], ["Cloud SQL for PostgreSQL, small instance", "USD 40 to 90"], ["Object storage, logging", "Under USD 10 at pilot volume"], ["OCR for scanned pages, one-off", "About USD 1.50 per 1,000 pages"]]) + '</div>' +
-      '<div class="stack">' + card("ink", '<div class="lbl u" style="color:var(--almond)">Pilot at 2,000 questions a month</div><div class="num">Under USD 250</div><p>per month for model and platform together, on list prices as of October 2026.</p>') +
-      card("warn", '<p><b>The real cost is people.</b> Five developers for ten weeks, plus your research staff’s time to write and grade 60 to 100 questions. That staff time is the one input we cannot substitute.</p>') + '</div></div>' +
-      '<p class="dim" style="font-size:14px">Indicative figures on public list prices; to be confirmed against the chosen provider and region.</p>',
-      note: "Give the per-question figure, then stop. The model is a rounding error at pilot scale. What costs money is engineering time and their researchers’ time. Do not quote a people cost here; that is a commercial conversation." },
-
-    { sec: "TECHNOLOGY", html:
-      title("Limitations and what it takes to maintain") +
-      '<div class="cols c2"><div class="stack"><h3 class="danger">Limits, stated plainly</h3>' + rows([
-        "<b>Charts are not read.</b> The assistant cites a chart’s page and caption and quotes figures stated in the text. It does not read values off a picture.",
-        "<b>Numbers written as words are not checked.</b> “four percent” passes the number check; “4 percent” is verified.",
-        "<b>Meaning is not checked.</b> A quote can be on the page and still not support the claim. A reviewer can disagree with a passing claim.",
-        "<b>Scanned and table-heavy reports are the risk.</b> We have only run on clean, born-digital reports so far. Your layouts may differ.",
-        "<b>A small question set is a signal, not proof.</b> The pilot gate needs 60 to 100 questions graded by your staff."]) + '</div>' +
-      '<div class="stack"><h3 class="ok">Maintenance after week 10</h3>' + rows([
-        "<b>Adding a report</b> is an admin upload. The ingestion quality report flags pages that need attention. No developer needed.",
-        "<b>Changing the model</b> is one adapter file. The evaluation runs on every change, so a regression is visible before users see it.",
-        "<b>Growing the question set</b> happens from user feedback: a thumbs-down with a reason becomes a new test question.",
-        "<b>Ongoing effort</b> at pilot scale: a part-time owner for uploads and grants, and a developer on call for model or provider changes."]) +
-      '<div class="rows" style="border-top:0"><p><b>Handover</b> includes the runbook, the test suite and the question set, so your team or ours can carry it on.</p></div>' + '</div></div>',
-      note: "The weakest point is the fourth limit: we have never ingested a client document. Ask for five reports today, including the ugliest scanned one and the most table-heavy one." },
-
-    // ---------- 5 PLAN ----------
-    { sec: "PLAN", theme: "panel", html:
-      title("The 10-week plan") +
-      table("sm wrap", ["Weeks", "Milestone", "Work", "Done when"], [
-        ["1", "<b>Discovery and first measurement</b>", "Five sample reports ingested and the 22-question harness run on them, three times. Pilot series, users and gate thresholds agreed. Provider, region, retention decided. Question set drafting starts with your staff.", "Wrong-and-confident measured on your reports. Client signs off series, gates and provider."],
-        ["2 to 3", "<b>Your reports answered while the store is built</b>", "The demo keeps answering your sample reports from week 1; PostgreSQL, encrypted storage and access logging are built beside it. Comparisons asked one side at a time, joined in plain code. Analyses across your editions. OCR path, ingestion report, filters.", "Right page in the top results on your reports. Both sides of every comparison cited. One analysis across your editions."],
-        ["4 to 5", "<b>Answer and verify, on the production front end</b>", "Follow-up rewriting. Table extraction and citation. React front end over the same API, page viewer and PDF link carried across. The store switch, question set run before and after.", "No unverified claim reaches a user. The question set scores the same on the new store."],
-        ["6", "<b>Access and admin</b>", "Login to our app. Roles and library grants from your subscriber export. Admin upload, replace, retire. Audit log export. Buffer week: the admin and user boards are already built.", "Every access question in the set is refused correctly."],
-        ["7", "<b>Evaluate</b>", "Evaluation dashboard on the full question set. Feedback loop into the set. Baseline timing of five questions done by hand.", "Dashboard runs on every change. Baseline recorded."],
-        ["8 to 9", "<b>Pilot</b>", "Real users on the pilot library. Track questions, share with verified citations, ratings, time versus baseline, cost per question. Fix what the pilot finds.", "Two weeks of pilot data collected."],
-        ["10", "<b>Gate and handover</b>", "Results against the agreed thresholds. Enterprise sizing from measured volume and cost. Runbook, tests and question set handed over.", "Go or no-go decision made on measured results."]]) +
-      '<p class="dim" style="font-size:14px">Cut from the bottom if short, never the gate or access control. The model is the measured quality lever: see slide 12 before choosing a provider.</p>',
-      build: true,
-      note: "Week 1 is front-loaded with client decisions. If they slip, everything slips. Weeks 8 to 9 depend on pilot users actually using it; ask the client to name them now." },
-
-    { sec: "PLAN", html:
-      title("What you will see at each checkpoint") +
-      '<div class="cols c4">' +
-      card("", '<div class="lbl">End of week 1</div><p>The real model’s score on the 22-question set, and your five sample reports ingested with their quality reports.</p>') +
-      card("", '<div class="lbl">End of week 3</div><p>Your pilot library searchable. Retrieval hit rate on your own questions, keyword and meaning search side by side.</p>') +
-      card("", '<div class="lbl">End of week 5</div><p>Cited answers on your reports, including cross-report comparisons, in the real front end with the page viewer.</p>') +
-      card("", '<div class="lbl">End of week 7</div><p>Login with your identity provider, admin upload, and the evaluation dashboard on the full question set.</p>') + '</div>' +
-      '<div class="cols side">' +
-      card("ink", '<div class="lbl">End of week 10: the gate review</div><p>Pilot numbers against the thresholds you set in week 1: share of questions answered with verified citations, ratings, time to answer against the hand baseline, cost per question, and wrong-and-confident on the full set.</p>') +
-      card("soft", '<div class="lbl">Then one of two outcomes</div><p>Thresholds met: the same measurements size the enterprise build. Not met: the evaluation shows exactly where, and you stop having spent little.</p>') + '</div>',
-      note: "Each checkpoint is a thing the client can see, not a status report. Offer a 30-minute review at each one. The week 10 thresholds must be the client’s numbers, agreed in week 1." },
-
-    { sec: "PLAN", html:
-      title("Roles and responsibilities") +
-      table("sm", ["Who", "Owns", "Covers", "Busiest in"], [
-        ["<b>Irfan Ali</b><br>Team lead", "Verification and evaluation", "Grounding gate, question set with your staff, evaluation dashboard, gate review. Single point of contact for the client. Built the demo slice.", "Weeks 1, 7, 10"],
-        ["<b>Adam</b>", "Ingestion", "Upload, page-aware reading, OCR fallback, table extraction, ingestion quality report, superseded flags.", "Weeks 1 to 3"],
-        ["<b>Fahim</b>", "Retrieval", "PostgreSQL with vectors and full-text, hybrid ranking, filters, comparison and follow-up query rewriting.", "Weeks 2 to 5"],
-        ["<b>Shananth</b>", "Access and admin", "Login with your identity provider, roles, library grants, admin screens, audit log, hosting and deployment.", "Weeks 2, 6, 8"],
-        ["<b>Irfan</b>", "Interface", "React front end, chat and canvas, citation page viewer, investigation steps, feedback, review requests.", "Weeks 4 to 9"]]) +
-      '<div class="cols c3">' +
-      card("panel", '<p><b>Everyone knows the whole pipeline.</b> Each owner can explain how an answer is made end to end and run the demo. Ownership is who answers first, not who works alone.</p>') +
-      card("panel", '<p><b>Pilot weeks are shared.</b> In weeks 8 to 9 everyone rotates on pilot support and fixes, so no single area blocks the gate.</p>') +
-      card("ok", '<p><b>One point of contact.</b> Irfan Ali answers for the team; each area has one owner and a named second. Areas and the lead do not change during the pilot.</p>') + '</div>',
-      note: "Each person should be ready to answer one question outside their own area." },
-
-    { sec: "PLAN", html:
-      title("What we need to ask you before week 1") +
-      '<div class="cols c3 qa">' +
-      card("", '<h3>Workflow</h3><ul><li>Who answers cross-report questions today, and how long does one take?</li><li>The five questions customers ask most?</li><li>Who reviews an answer before a customer sees it?</li></ul>') +
-      card("", '<h3>The library</h3><ul><li>Which series is the pilot, how many reports?</li><li>What does the API licence expose, and its limits?</li><li>Sample PDFs with metadata: the oldest sold, the most table-heavy?</li></ul>') +
-      card("", '<h3>People and grading</h3><ul><li>Who writes and grades 60 to 100 questions with us?</li><li>Who are the pilot users?</li><li>What rating, time saving and cost justify an enterprise build?</li></ul>') +
-      card("", '<h3>Data and providers</h3><ul><li>May research text go to a model API, and in which region?</li><li>Retention, no-training, encryption terms? Who audits us?</li><li>Are entitlements contractual, so access is compliance?</li></ul>') +
-      card("", '<h3>Access</h3><ul><li>Our app beside MARC Online: acceptable for the pilot?</li><li>Your identity provider, or users we invite?</li><li>Who else queries this: analysts, MARC Data?</li></ul>') +
-      card("soft", '<h3>Blocks week 1</h3><ul><li>Five sample reports, this week</li><li>A research contact for the question set</li><li>Provider and region</li><li>A sponsor who signs off the gates</li></ul>') + '</div>',
-      note: "Assign each box to one team member to ask. Write the answers down in the meeting; they feed the assumptions slide. The pink box is the ask to close on." },
-
-    { sec: "PLAN", html:
-      title("Assumptions: known, assumed, to confirm") +
-      '<div class="cols c3"><div class="stack">' + card("ok", '<h3 class="ok">Known from the brief</h3>') + rows([
-        "Questions span reports; answers cite document and page.",
-        "Reports are PDFs. Ingest and retrieval must be efficient.",
-        "Access is restricted to authorised users and libraries.",
-        "Quality and value are evaluated before an enterprise build.",
-        "Ten weeks. Nice-to-haves: history, filters, admin, feedback, tables, roles."]) + '</div>' +
-      '<div class="stack">' + card("warn", '<h3 class="warn">We are assuming</h3>') + rows([
-        "Born-digital English PDFs; scans a minority.",
-        "MARC Online stays the system of record; we never read it. Data arrives by API licence and samples.",
-        "An API model provider is acceptable with no-training and regional terms.",
-        "Research staff give half a day a week to the question set, weeks 1 to 7.",
-        "A standalone system is what you want."]) + '</div>' +
-      '<div class="stack">' + card("soft", '<h3>Must confirm with you</h3>') + rows([
-        "Pilot series, report count, pilot users.",
-        "Provider, region, retention, no-training terms.",
-        "What the API licence exposes; the sample data.",
-        "Week 10 thresholds: time saving, rating, cost per question.",
-        "Whether library boundaries are contractual."]) + '</div></div>' +
-      '<p class="dim" style="font-size:14px">The brief gave no volumes, library size or thresholds; nothing on this slide is a measured client fact.</p>',
-      note: "Read the right column aloud and ask for answers on the spot. Anything unanswered becomes a week 1 blocker." },
-
-    { sec: "PLAN", html:
-      title("Risks, and how each is handled") +
-      table("sm wrap", ["Risk", "Handled by", "Owner"], [
-        ["<b>A figure the sources do not say</b>", "Quote and number check, one retry, then refusal. Measured on every change.", "Irfan Ali"],
-        ["<b>Messy PDFs</b>", "Ingestion report per document; weak pages flagged, never trusted.", "Adam"],
-        ["<b>A comparison misses one side</b>", "One query per report, joined in plain code; re-measured.", "Fahim"],
-        ["<b>A customer sees research they did not buy</b>", "Grant in the query and on the page route; tests and access questions.", "Shananth"],
-        ["<b>Research text leaves the company</b>", "Provider chosen with you: no training, agreed region and retention.", "Shananth"],
-        ["<b>Week 1 decisions slip</b>", "Named sponsor and five sample reports asked for today.", "Irfan Ali"],
-        ["<b>Pilot users do not use it</b>", "Named users and seeded questions in week 1; usage tracked weekly from week 8.", "Irfan"]]),
-      build: true,
-      note: "The two risks the client controls are the last two rows. Ours is engineering, theirs is decisions and participation; the plan fails without both." },
-
-    { sec: "CLOSE", theme: "dark", cls: "between", html:
-      '<div class="stack" style="gap:14px;max-width:800px;margin-top:40px"><div class="kicker">🎉 To close</div><h1 style="font-size:46px">Answers that carry their proof. Access that cannot leak. A pilot that tells you whether to invest.</h1></div>' + cat("happy", "hero up") +
-      '<div class="cols c3">' +
-      card("ink2", '<div class="lbl">🙋 We need from you this week</div><p>Five sample reports, a research contact, a sponsor, and a provider decision.</p>') +
-      card("ink2", '<div class="lbl">🎁 You get at the end of week 1</div><p>Your own reports in the demo, three models measured on them, and your first analysis across editions.</p>') +
-      card("accent", '<div class="lbl">🏁 At week 10</div><p>A go or no-go decision on your numbers, not ours.</p>') + '</div>' +
-      '<p class="names">Adam · Fahim · Shananth · Irfan · Irfan Ali</p>',
-      note: "End on the three boxes and stop talking. Then ask for the sponsor’s name and the date for the five sample reports before the meeting ends." }
-  ];
-
-  var view = document.getElementById("view"), stage = document.getElementById("stage");
-  function pad(n) { return n < 10 ? "0" + n : "" + n; }
-
-  function render() {
-    var s = S[state.i];
-    stage.className = (s.theme || "") + (state.notes ? " notes" : "");
-    view.innerHTML = '<div class="slide ' + (s.cls || "") + '">' + s.html + '</div>';
-    document.getElementById("note").textContent = s.note || "";
-    document.getElementById("pg").textContent = pad(state.i + 1) + " / " + S.length;
-    if (!EMOJI) flatten();
-    // the shortcut line is for the presenter: it shows on the first slide and on reveal slides, and nowhere else
-    document.getElementById("hint").textContent = (state.i === 0 || s.build) ? (s.build ? "→ reveals, then " : "") + "← → slides | N notes | F fullscreen | Home / End" : "";
-    document.getElementById("prog").style.width = ((state.i + 1) / S.length * 100) + "%";
-    try { location.hash = String(state.i + 1); } catch (e) {}
-    if (s.build && !/reveal=all/.test(location.search)) { view.querySelectorAll("table tr:not(:first-child), .cols > .card").forEach(function (el) { el.classList.add("b"); }); }
-  }
-  // Don't show everything at once: on a build slide, the right arrow reveals the next row before it moves on.
-  function reveal() { var next = view.querySelector(".b"); if (!next) return false; next.classList.remove("b"); return true; }
-  function go(d) { if (d > 0 && reveal()) return; var n = Math.max(0, Math.min(S.length - 1, state.i + d)); if (n !== state.i) { state.i = n; render(); } }
-
-  document.addEventListener("keydown", function (e) {
-    var k = e.key;
-    if (k === "ArrowRight" || k === "PageDown" || k === " " || k === "Enter") go(1);
-    else if (k === "ArrowLeft" || k === "PageUp" || k === "Backspace") go(-1);
-    else if (k === "Home") { state.i = 0; render(); }
-    else if (k === "End") { state.i = S.length - 1; render(); }
-    else if (k === "n" || k === "N") { state.notes = !state.notes; render(); }
-    else if (k === "f" || k === "F") { if (!document.fullscreenElement) { document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); } else { document.exitFullscreen(); } }
-  });
-  stage.addEventListener("click", function (e) { if (e.target.closest("a")) return; go(e.clientX < window.innerWidth / 3 ? -1 : 1); });
-
-  function fit() { stage.style.transform = "scale(" + Math.min(window.innerWidth / 1280, window.innerHeight / 720) + ")"; }
-  window.addEventListener("resize", fit);
-  fit();
-
-  var h = parseInt((location.hash || "").replace("#", ""), 10);
-  if (h >= 1 && h <= S.length) state.i = h - 1;
-  render();
-})();
-</script>
+      var h = parseInt((location.hash || "").replace("#", ""), 10);
+      if (h >= 1 && h <= S.length) state.i = h - 1;
+      render();
+    })();
+  </script>
 </body>
+
 </html>
