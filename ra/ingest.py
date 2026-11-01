@@ -3,31 +3,20 @@ import subprocess
 
 MIN_PAGE_CHARS = 40
 TARGET_PASSAGE_CHARS = 900
-
-
-def page_count(pdf_path):
-    out = subprocess.run(["pdfinfo", str(pdf_path)], capture_output=True, text=True, check=True).stdout
-    m = re.search(r"^Pages:\s+(\d+)", out, re.M)
-    if not m:
-        raise ValueError(f"cannot read page count: {pdf_path}")
-    return int(m.group(1))
+PDF_TIMEOUT_SECONDS = 120
 
 
 def extract_pages(pdf_path):
     """Return a list of page texts, index 0 is page 1. Page numbers stay attached to the text.
 
     Reading-order mode, not layout mode: layout mode interleaves the lines of two-column pages,
-    which would break any quote that runs across a line.
+    which would break any quote that runs across a line. pdftotext ends every page with a form feed.
+    The timeout is there because uploads are read too, and a hostile file must not hold a worker for ever.
     """
-    n = page_count(pdf_path)
-    pages = []
-    for p in range(1, n + 1):
-        out = subprocess.run(
-            ["pdftotext", "-f", str(p), "-l", str(p), str(pdf_path), "-"],
-            capture_output=True, text=True, check=True,
-        ).stdout
-        pages.append(out)
-    return pages
+    out = subprocess.run(
+        ["pdftotext", str(pdf_path), "-"], capture_output=True, encoding="utf-8", errors="replace", check=True, timeout=PDF_TIMEOUT_SECONDS,
+    ).stdout
+    return out.split("\f")[:-1]
 
 
 def split_passages(page_text):
@@ -61,12 +50,13 @@ def split_passages(page_text):
 
 
 def ingest_pdf(con, library_id, title, pdf_path, library_name=None):
-    """Read a PDF page by page, store pages and passages, and return a quality report.
-
-    Pages with almost no text are flagged, not silently trusted: they probably need OCR.
-    """
+    """Read a PDF page by page, store pages and passages, and return a quality report."""
     con.execute("INSERT OR IGNORE INTO libraries(id, name) VALUES (?, ?)", (library_id, library_name or library_id))
-    pages = extract_pages(pdf_path)
+    return store_pages(con, library_id, title, pdf_path, extract_pages(pdf_path))
+
+
+def store_pages(con, library_id, title, pdf_path, pages):
+    """Store a report's pages and passages. Pages with almost no text are flagged, not silently trusted: they probably need OCR."""
     low = [i + 1 for i, t in enumerate(pages) if len(t.strip()) < MIN_PAGE_CHARS]
     cur = con.execute(
         "INSERT INTO documents(library_id, title, source, pages, needs_ocr) VALUES (?,?,?,?,?)",
