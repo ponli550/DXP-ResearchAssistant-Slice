@@ -17,7 +17,7 @@ The deck keeps the FatherPeng identity (teal and cream, coral rule, yellow meme 
 ## Before the meeting
 
 ```
-set -a; . ./.env; set +a                         # HERMES_API_KEY, HERMES_MODEL=qwen/qwen3.8-27b
+# `python -m ra serve` reads .env itself: HERMES_API_KEY, HERMES_MODEL=qwen/qwen3.8-27b. See env.example.
 uv run --python 3.14 python scripts/seed_demo.py data/demo.db     # sixteen model calls, a few minutes; safe to rerun, it resumes
 uv run --python 3.14 python -m ra --db data/demo.db serve --port 8765
 ```
@@ -30,7 +30,7 @@ cloudflared tunnel --url http://127.0.0.1:8765     # the URL is printed in the l
 
 Set `ADMIN_TOKEN` in `.env` to something random before the URL leaves the room: anyone with the URL can use the chat and spend model tokens, and `demo` is not a secret.
 
-Open three tabs: the chat at `/?user=alice`, alice's board at `/dashboard?user=alice`, the admin board at `/dashboard#token=demo`.
+Open three tabs: the research desk at `/?user=alice`, alice's activity at `/dashboard?user=alice`, the admin board at `/dashboard#token=demo`.
 
 Rules for the live part. The model is whatever `.env` names; check it before the call. On 27 October it was Claude Sonnet 5.5, and through the public tunnel all six questions in the safe list answered in 2 to 12 seconds (the October 2023 and social assistance ones needed a retry), and the Singapore wage question was refused. With Qwen 3.8 27B the same set answered about half and every comparison was refused, so a question typed on the spot was a coin flip. Either way, ask live only from the safe list, and keep the stored answers as backup: if a live question is refused, that is the product working, so say so and open the stored answer to the same question from the board. The organisers require the demo to be live, not pre-recorded: stored answers are support, never the show.
 
@@ -54,11 +54,11 @@ Type words you know are in a report and press **Find**: `grew by 6.3 percent yea
 
 Not safe live, although it is in the question set: "What GDP growth is projected for Malaysia in 2025 in the October 2025 monitor?" Qwen refused it when the demo database was seeded and answered it the day before. It is in history as a refusal, with alice's thumbs-down and review request on it, which is the better story anyway.
 
-What to show on one of them: the canvas builds the answer in steps, sources then checks then the answer; "Show the quote" under the claim; click the citation chip to open the page with the quote highlighted; the Investigation steps tab for the same answer, with the retry and its reasons if there was one; thumbs down with a reason; "Create review request".
+What to show on one of them: the live steps as the question runs, the search, the draft and the check, with the retry and its reason if there was one; the answer appears and a line links it to the highlighted quote on its page, then fades (hover either end to bring it back); hover the citation to preview the quote; "Ask across all reports" for the table; thumbs down with a reason; "Ask someone to review".
 
 **From history** (open from alice's board, "open" on the row). Be straight about what is there: of alice's twelve seeded questions, five are answered. Qwen refused every open "what does the monitor say about X" question (what drove growth in 2025, the downside risks, inflation, the ringgit), the comparison, and the two it should refuse.
 
-- Open one refused analysis question and show the Investigation steps: the right pages were found, the model drafted claims, the gate removed them for quotes that were not exact, and the retry gave up. That is the small model's known weakness, not the design's: the larger models answer these. Say that the model is one line in `.env` and the choice is residency and cost, not quality of the gate.
+- Open one refused analysis question and open "Checked in…" above the answer: the right pages were found, the model drafted claims, the gate removed them for quotes that were not exact, and the retry gave up. That is the small model's known weakness, not the design's: the larger models answer these. Say that the model is one line in `.env` and the choice is residency and cost, not quality of the gate.
 - The comparison: how the view of 2025 growth changed between October 2025 and April 2026. Qwen refuses it. The two larger models answer it with one true side; both-sides-or-refuse is the week 4 to 5 item.
 - The internal memo: "What did the board approve, according to the internal memo?" is answered for alice from the memo. Keep it for section 3.
 
@@ -110,21 +110,23 @@ Then the Tools tab:
 
 Expand a panel (Runs or Recent) to show the layout document at work: more columns, saved per owner, reset to default underneath.
 
-## 6. The user's own board (`/dashboard?user=alice`)
+## 6. The user's own workspace (`/dashboard?user=alice`)
 
-The user flow, in the order MARC described it: see the dashboard, find a document, ask, check the source, open the PDF, run an analysis.
+The user flow, in the order MARC described it: see the dashboard, find a document, ask, check the source, open the PDF, run an analysis, write it up.
 
-- **Your library**, top of the board: six reports, newest first. Type "2025" in the filter. Click **PDF** on the October 2025 edition: the original file opens. Click **ask**: the chat opens with "What does the October 2025 edition say about " typed and the cursor waiting; the search stays inside that edition.
-- **Check the source** from any answer: "Show the quote", then the citation chip, then "Open the PDF at this page" in the viewer. Three steps from a claim to the page in the real document.
-- **Your analyses**: open "Growth outlook by edition", seeded before the meeting. Two questions down, five editions across, each cell a checked claim with its page or "not found", and every cell opens as a stored answer. Then show the form: name, one question per line, tick the reports, and the cost line ("2 questions × 5 reports = 10 model calls, about 2 min"). Do not run one live unless there is time to wait; a run polls and fills in cell by cell, which is fine to leave running in a second tab.
-- Then recent answers, usage, ratings, review requests. Say that this is the "history", "dashboard" and "analysis" from the brief, that the layout is a JSON document per user, and that the widget catalogue is code.
+- **Your sources**: say what this is based on, in one breath. Five editions, with the phrase most particular to each: nobody wrote those, they are counted from the pages.
+- **What to do next**: each has its reason and its button. Press **Read the pages** on a subject nobody has asked about: the passages open with the words marked.
+- **What you've found**: checked facts with their pages. Press **How we got this** on one: it plays the steps that really happened, the reports searched, what the check kept and removed. Select a step for its evidence, and on the last one press **Open page** to see the proof beside the flow. The original PDFs must be in `data/pdfs` for the PDF view. Then show a refusal, where it ends on the reason.
+- **Explore**: type **tariff** into "Add a topic": it barely appears until 2025. That is a finding, in about a second, with no model call.
+- **Assistant**: ask "Build a dashboard about tariff", then "Draft a report from what I've found". Then ask it what GDP growth was: it refuses and offers the desk, because nothing unchecked is said here.
+- **Reports**: only checked facts with their pages, plus notes marked as yours. **Print or save as PDF**. Say that this is the "history", "dashboard" and "analysis" from the brief.
 
-What to say about analyses, honestly: it is the same pipeline many times, not a summary. Cells are blank where the model refused, and on the small model that is often. The point is that nothing in the table is unverified.
+What to say about tables, honestly: it is the same pipeline many times, not a summary. Cells are blank where the model refused, and on the small model that is often. The point is that nothing in the table is unverified.
 
 ## Questions MARC may ask, and the honest answer
 
 - **How fast is it?** Eight to eleven seconds on this model for a draft, double when a check fails and the model retries. Retrieval and the gate are milliseconds. A faster model is one line in `.env`.
-- **Why did it refuse that?** Either the libraries do not contain it, or the model could not quote it exactly, or the question asked for a figure and no claim stated one. The Investigation steps tab shows which.
+- **Why did it refuse that?** Either the libraries do not contain it, or the model could not quote it exactly, or the question asked for a figure and no claim stated one. "Checked in…" above the answer opens the steps, which show which.
 - **Can it be wrong?** It can answer beside the point with a true figure; it has not stated a false figure in 285 attempts. Off-target answers are the review request's job. The admin board's key row shows "1 wrong and confident, latest run" because the latest saved run is Claude's, and that one is a comparison answered with one true side. Say so before they ask.
 - **What if the model goes down mid-demo?** The call is retried once; if it still fails, the answer is a refusal and the steps view says the model did not answer. Open the stored answer instead.
 - **Where does our text go?** To the model provider named in `.env`, and nowhere else. Provider, region and retention are decided with you in week 1, and nothing is sent before that.
