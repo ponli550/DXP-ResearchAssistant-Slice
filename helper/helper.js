@@ -38,7 +38,7 @@
   function focusQ() { var q = $("#q"); if (q) { q.focus(); var n = q.value.length; try { q.setSelectionRange(n, n); } catch (e) { /* not a text field */ } } }
   function setQ(text) {
     var q = $("#q"); if (!q) return;
-    click("#tab-canvas");
+    click("#askMode");
     q.value = text; q.dispatchEvent(new Event("input", { bubbles: true })); focusQ();
   }
   function reveal(sel) {
@@ -53,21 +53,20 @@
     var p = page(), u = currentUser(), out = [];
     if (p === "chat") {
       out.push({ label: "Find words you know are in a report", text: "Plain full-text search over the same pages. No model, no tokens, answers in milliseconds. A phrase in quotes is exact, OR widens, a minus excludes.",
-        act: $("#tab-find") && { label: "Open Find", run: function () { click("#tab-find"); focusQ(); } } });
+        act: $("#findBtn") && { label: "Open Find", run: function () { click("#findBtn"); focusQ(); } } });
       out.push({ label: "Ask a question and get a cited answer", text: "A model drafts claims with exact quotes. Plain code checks each quote against its page before you see it. Takes about ten seconds.",
-        act: $("#q") && { label: "Go to the question box", run: function () { click("#tab-canvas"); focusQ(); } } });
-      out.push({ label: "Check where a claim comes from", text: "Under each claim, click the page chip to read that page with the quote marked, then Open the PDF at this page." });
+        act: $("#q") && { label: "Go to the question box", run: function () { click("#askMode"); focusQ(); } } });
+      out.push({ label: "Check where a claim comes from", text: "Select the citation beside a claim. The page opens on the right, with the quote marked and a line from the claim to it." });
       var me = $("#melink");
-      out.push({ label: "Browse the reports you may search", text: "Your board lists every report, newest first, with a PDF link and an ask link that names the edition.",
-        act: me && { label: "Open your board", run: function () { go(me.href); } } });
-      out.push({ label: "Compare across editions", text: "On your board, write your questions once and run them across the editions you choose. Each cell is a checked claim or a refusal.",
+      out.push({ label: "Browse the reports you may search", text: "The side panel lists every edition, newest first. Select a name to read it.",
+        act: $("#plusReports") && { label: "Show the reports", run: function () { click("#plusReports"); } } });
+      out.push({ label: "Compare across editions", text: "In the question box, choose Table across reports to run a question in every edition. Each cell is a checked claim or a refusal.",
         act: me && { label: "Open your board", run: function () { go(me.href); } } });
     } else if (p === "board") {
       var panels = [
-        ["library", "Browse your reports", "Every report you may search, newest first. PDF opens the file; ask opens the chat with that edition named."],
-        ["analyses", "Compare across editions", "Write questions once, tick the reports, run. Each cell is a checked claim with its page, or not found."],
-        ["answers", "Reopen an earlier answer", "Open shows the stored answer instantly, without a model call."],
-        ["usage", "See how you have used it", "Questions asked, answered with checked citations, and the libraries you may search."]
+        ["next", "See what to do next", "Each suggestion says why, and carries the button that does it."],
+        ["topics", "See what each report talks about", "Pages that mention each topic, report by report. Select a number to read them."],
+        ["found", "See what you've found", "Checked facts with their pages. How we got this shows every step behind one."]
       ];
       panels.forEach(function (x) {
         var sel = '[data-type="' + x[0] + '"]';
@@ -91,16 +90,18 @@
     chat: [
       ["#q", "Ask or find", "Type a question, or words from a report."],
       ["#go", "Ask", "A model drafts a cited answer; plain code checks every quote. About ten seconds."],
-      ["#findBtn", "Find", "Plain search over the same pages. No model and no cost."],
-      ["#tabs", "Three views", "Canvas builds the answer. Investigation steps show how it was made. Find lists matching pages."],
-      [".nav", "Pages", "Chat, your board with your library and analyses, and the admin board."],
+      ["#modeBtn", "What you get", "An answer, a table across reports, or exact words with no model and no cost."],
+      ["#scopeBtn", "Which reports", "Everything you may search, or only the ones you tick."],
+      ["#railOpen", "Side panel", "Browse reports, and reopen past questions and tables."],
+      [".nav", "Pages", "Your activity, and the admin board."],
       ["#user", "Demo user", "The demo has no login. The real build uses your identity provider."]
     ],
     board: [
-      ["#keyrow", "Your counts", "Questions asked, how many were answered with checked citations, ratings and open review requests."],
-      ['[data-type="library"]', "Your library", "Every report you may search. PDF opens the file; ask opens the chat with that edition named."],
-      ['[data-type="analyses"]', "Your analyses", "Questions you write once and run across the editions you choose."],
-      ['[data-type="answers"]', "Your answers", "Open shows the stored answer instantly, without a model call."]
+      ["#sources", "Your sources", "The reports all of this comes from. Select one to filter the page to it."],
+      ['[data-type="next"]', "What to do next", "Each suggestion says why, and carries the button that does it."],
+      ['[data-type="topics"]', "Explore", "What each report talks about, where your answers came from, and when you asked."],
+      ['[data-type="found"]', "What you've found", "Checked facts with their pages, your questions and your tables. How we got this shows every step."],
+      ["#assistantBtn", "Assistant", "Explains this page, filters it, and builds dashboards and reports."]
     ],
     admin: [
       ["#brief", "The brief", "What happened since this device last looked. Silent when nothing did."],
@@ -240,7 +241,7 @@
       else if (e.key === "?" && !typing && !e.metaKey && !e.ctrlKey) { e.preventDefault(); panel && panel.classList.contains("open") ? closePanel() : openPanel(launcher); }
     });
     // deep links the board uses to reach the chat's Find tab
-    if (page() === "chat" && params.get("tab") === "find" && !params.get("q")) { click("#tab-find"); focusQ(); }
+    if (page() === "chat" && params.get("tab") === "find" && !params.get("q")) { click("#findBtn"); focusQ(); }
     var mode = (location.hash.match(/helper=(\w+)/) || [])[1];
     if (mode === "open") openPanel(launcher);
     else if (mode === "tour") setTimeout(startTour, 400);
