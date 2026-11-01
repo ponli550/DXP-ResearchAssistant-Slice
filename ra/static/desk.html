@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Research assistant</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<script>document.documentElement.dataset.theme = localStorage.getItem("ra-theme") || "light";</script>
+<link rel="stylesheet" href="/static/tokens.css">
+<link rel="stylesheet" href="/static/desk.css">
+</head>
+<body>
+<div class="desk no-pane rail-closed" id="desk">
+  <aside class="rail" id="rail" aria-label="Reports and saved work">
+    <nav class="strip" aria-label="Open a panel">
+      <button type="button" class="strip-btn" id="railOpen" aria-label="Open the side panel" title="Open the side panel"></button>
+      <button type="button" class="strip-btn" id="stripHistory" aria-label="Past questions" title="Past questions"></button>
+      <button type="button" class="strip-btn" id="stripTables" aria-label="Saved tables" title="Saved tables"></button>
+      <button type="button" class="strip-btn strip-user" id="stripUser" aria-label="Account and settings" title="Account and settings"></button>
+    </nav>
+    <div class="rail-full">
+    <div class="brand-row">
+      <a class="brand" href="/" aria-label="Research assistant, start again"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
+      <button type="button" class="strip-btn" id="railClose" aria-label="Close the side panel" title="Close the side panel"></button>
+    </div>
+
+    <section class="rail-section" aria-labelledby="reportsHead">
+      <header class="rail-head">
+        <h2 id="reportsHead">Reports</h2>
+        <span class="rail-count" id="scopeCount"></span>
+        <button type="button" class="rail-link" id="scopeAll"></button>
+      </header>
+      <ol class="timeline" id="reports" aria-label="Tick the reports to search. Select a name to read it."></ol>
+    </section>
+
+    <section class="rail-section rail-saved" aria-label="Saved work">
+      <div class="rail-tabs" role="tablist" aria-label="Saved work">
+        <button type="button" role="tab" id="tabHistory" aria-selected="true" aria-controls="savedList">History</button>
+        <button type="button" role="tab" id="tabTables" aria-selected="false" aria-controls="savedList">Tables</button>
+      </div>
+      <input class="rail-filter" id="savedFilter" type="search" placeholder="Filter" aria-label="Filter saved work">
+      <div class="saved-list" id="savedList" role="tabpanel"></div>
+    </section>
+
+    <footer class="rail-foot">
+      <div class="rail-user">
+        <label for="user">Demo user, not a real login</label>
+        <select id="user"></select>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="/" aria-current="page" hidden>Research desk</a>
+        <a id="melink" href="/dashboard">Workspace</a>
+        <a id="dashlink" href="/dashboard">Manage</a>
+        <button type="button" id="helpBtn" popovertarget="helpPop">Help</button>
+        <button type="button" id="themeBtn"></button>
+      </nav>
+    </footer>
+    </div>
+  </aside>
+
+  <div class="split split-rail" id="splitRail" role="separator" aria-orientation="vertical" aria-label="Resize the reports panel" tabindex="0"></div>
+
+  <main class="work is-empty" id="work">
+    <header class="bar">
+      <h1 id="workTitle">Research desk</h1>
+      <span class="bar-note" id="barNote"></span>
+      <button type="button" class="ghost" id="newThread" hidden>New question</button>
+      <button type="button" class="ghost" id="showPane" hidden>Show the page</button>
+    </header>
+
+    <div class="intro" id="intro">
+      <h2>What do you want to find out?</h2>
+      <p>Answers come only from your reports, each with the page that proves it.</p>
+    </div>
+
+    <div class="thread" id="thread" role="log" aria-label="Questions and answers"></div>
+
+    <form class="composer" id="composer">
+      <div class="composer-box">
+        <div class="attachments" id="attachments" aria-live="polite"></div>
+        <textarea id="q" rows="2" maxlength="500" aria-label="Your question"></textarea>
+        <div class="composer-row">
+          <button type="button" class="tool icon-tool" id="plusBtn" popovertarget="plusPop" aria-label="More options" title="More options" aria-expanded="false"></button>
+          <button type="button" class="tool" id="scopeBtn" popovertarget="scopePop" aria-expanded="false"><span id="scopeLabel"></span></button>
+          <button type="button" class="tool" id="modeBtn" popovertarget="modePop" aria-expanded="false"><span id="modeLabel"></span></button>
+          <button type="submit" class="primary go" id="go"></button>
+        </div>
+      </div>
+      <p class="composer-note" id="composerNote" hidden></p>
+      <div class="suggest" id="suggestions" aria-label="Suggested questions"></div>
+      <p class="demo-note" id="demoNote" hidden></p>
+    </form>
+  </main>
+
+  <div class="split" id="splitPane" role="separator" aria-orientation="vertical" aria-label="Resize the page panel" tabindex="0"></div>
+
+  <aside class="pane" id="pane" aria-label="Source page">
+    <header class="bar pane-bar">
+      <div class="pane-title"><strong id="phead">Report</strong></div>
+      <div class="pager">
+        <button type="button" class="icon-btn" id="pprev" aria-label="Previous page"></button>
+        <span class="pager-at" id="pat" aria-live="polite"></span>
+        <button type="button" class="icon-btn" id="pnext" aria-label="Next page"></button>
+      </div>
+      <a class="ghost" id="ppdf" target="_blank" rel="noopener" hidden>PDF</a>
+      <button type="button" class="icon-btn" id="pclose" aria-label="Hide the page"></button>
+    </header>
+    <form class="pane-find" id="pfindForm">
+      <input id="pfind" type="search" placeholder="Find words in this report" aria-label="Find words in this report">
+      <div class="mentions" id="mentions" role="group" aria-label="Pages to jump to"></div>
+      <span class="mentions-note" id="mentionsNote"></span>
+    </form>
+    <div class="sheet-wrap" id="sheetWrap">
+      <article class="sheet" id="sheet">
+        <div class="sheet-text" id="ptext"></div>
+        <footer class="sheet-foot" id="pnote"></footer>
+      </article>
+    </div>
+  </aside>
+</div>
+
+<svg class="proof" id="proof" aria-hidden="true"><path id="proofPath" pathLength="1"></path><circle id="proofA" r="3"></circle><circle id="proofB" r="3"></circle></svg>
+<div class="peek" id="peek" role="tooltip" hidden></div>
+<button type="button" class="ask-selection primary" id="askSel" hidden>Ask about this</button>
+<div class="sr-only" id="live" role="status" aria-live="polite"></div>
+
+<dialog id="confirm" class="confirm" aria-labelledby="confirmTitle" aria-describedby="confirmBody">
+  <div class="confirm-inner">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div class="confirm-actions">
+      <button type="button" class="ghost" id="confirmCancel">Cancel</button>
+      <button type="button" class="danger" id="confirmOk">Delete</button>
+    </div>
+  </div>
+</dialog>
+
+<input type="file" id="uploadInput" accept=".pdf,application/pdf" multiple hidden>
+
+<div id="plusPop" class="menu" popover>
+  <button type="button" class="menu-item" id="plusUpload"><span class="menu-title">Upload a report</span><span class="menu-note" id="plusUploadNote"></span></button>
+  <button type="button" class="menu-item" id="plusReports"><span class="menu-title">Browse reports</span><span class="menu-note">See every report, and read one</span></button>
+  <button type="button" class="menu-item" id="plusHistory"><span class="menu-title">Past questions</span><span class="menu-note">Reopen an answer you already have</span></button>
+  <button type="button" class="menu-item" id="plusTables"><span class="menu-title">Saved tables</span><span class="menu-note">Questions you ran across reports</span></button>
+</div>
+
+<div id="scopePop" class="menu scope-menu" popover>
+  <header class="menu-head"><strong>Search these reports</strong><button type="button" class="menu-link" id="scopeAllPop"></button></header>
+  <ul id="scopeList"></ul>
+</div>
+
+<div id="modePop" class="menu" popover>
+  <button type="button" class="menu-item" id="askMode" aria-pressed="true"><span class="menu-title">Answer</span><span class="menu-note">A checked answer with the page that proves it</span></button>
+  <button type="button" class="menu-item" id="tableMode" aria-pressed="false"><span class="menu-title">Table across reports</span><span class="menu-note">The same question in every report, side by side</span></button>
+  <button type="button" class="menu-item" id="findBtn" aria-pressed="false"><span class="menu-title">Exact words</span><span class="menu-note">Pages containing your words. No AI used</span></button>
+</div>
+
+<div id="helpPop" class="help" popover>
+  <h2>Using the desk</h2>
+  <dl>
+    <dt>Reports</dt><dd>Choose what to search from the question box. Open the side panel to browse and read them.</dd>
+    <dt>Ask</dt><dd>Type a question. You see the real work as it happens, then an answer with its page, or a plain "no answer".</dd>
+    <dt>Citations</dt><dd>Hover to preview the quote. Select to open the page with the quote highlighted. A line links them for a moment; hover either end to see it again.</dd>
+    <dt>Uploads</dt><dd>Add a PDF from the + menu, or drop it on the page. It is searchable only by the user who added it, and deleting it removes its text and the answers that used it.</dd>
+    <dt>Tables</dt><dd>Choose "Table across reports" in the question box to run one question in every report and see how a figure moved.</dd>
+  </dl>
+  <h2>Keys</h2>
+  <dl class="keys">
+    <dt><kbd>/</kbd></dt><dd>Go to the question box</dd>
+    <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Previous or next page</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Clear the proof line, or close this</dd>
+  </dl>
+</div>
+
+<script src="/static/desk.js" defer></script>
+</body>
+</html>
