@@ -93,7 +93,7 @@ def make_handler(host, port):
             self.end_headers()
             if self.command != "HEAD":
                 while True:
-                    chunk = resp.read(65536)
+                    chunk = resp.read1(65536)  # whatever has arrived, so live progress is not held back
                     if not chunk:
                         break
                     self.wfile.write(chunk)
