@@ -2,6 +2,8 @@
 
 This records the method, so it can be repeated or checked. It is not a claim that anything was copied. Read the first section before the rest.
 
+**Replaced.** The canvas and the steps tab were replaced by the research desk (`docs/DESIGN.md`, "The research desk"). The live steps and the citation that opens its page carry on from this work; the camera does not. The method below stands as a record.
+
 ## What was and was not taken
 
 Two screen recordings of an AI investigation page in a commercial observability product (Datadog) were used as a reference for interaction patterns. Nothing from the product was reproduced: no code, no assets, no text, no layout measurements. The visual design, the wording, the colours and every number in the CSS are this project's own.
