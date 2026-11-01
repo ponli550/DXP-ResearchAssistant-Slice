@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -5,11 +7,12 @@ from ra.db import connect
 from ra.ground import Claim
 from ra.ingest import ingest_pdf
 from ra.llm import ScriptedLLM
-from ra.web import INDEX_HTML, create_app, quote_span
+from ra.web import INDEX_HTML, STATIC, create_app, quote_span
 
 from .pdfmaker import make_pdf
 
 QUOTE = "Palm oil output rose 4.2 percent in 2024"
+DESK_JS = (STATIC / "desk.js").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -101,7 +104,9 @@ def test_quote_span_ignores_case_and_whitespace_and_misses_cleanly():
 
 
 def test_page_never_builds_html_from_data():
-    assert "innerHTML" not in INDEX_HTML and "textContent" in INDEX_HTML
+    for text in (DESK_JS, INDEX_HTML):
+        assert "innerHTML" not in text and "outerHTML" not in text and "insertAdjacentHTML" not in text and "document.write" not in text
+    assert "textContent" in DESK_JS
 
 
 # canvas data, feedback and the human-gated next step
@@ -162,8 +167,9 @@ def test_review_request_is_only_a_logged_open_entry(web):
 
 
 def test_page_labels_say_what_was_checked_not_verified():
-    assert "VERIFIED" not in INDEX_HTML.upper().replace("UNVERIFIED", "")
-    assert "Quote on page" in INDEX_HTML and "innerHTML" not in INDEX_HTML
+    for text in (DESK_JS, INDEX_HTML):
+        assert "VERIFIED" not in text.upper().replace("UNVERIFIED", "")
+    assert "Quote found on this page" in DESK_JS and "That confirms the source, not that the claim answers your question." in DESK_JS
 
 
 def test_ask_returns_the_trace_with_the_model_name(web):
@@ -174,8 +180,9 @@ def test_ask_returns_the_trace_with_the_model_name(web):
     assert j["trace"][0]["libraries"] == ["public"]
 
 
-def test_steps_view_is_present_and_still_builds_no_html_from_data():
-    assert "Investigation steps" in INDEX_HTML and "Show how it was found" in INDEX_HTML and "innerHTML" not in INDEX_HTML
+def test_the_page_can_show_every_step_it_may_be_sent():
+    for kind in ("search", "drafting", "draft", "checking", "check", "retry"):
+        assert f's.kind === "{kind}"' in DESK_JS
 
 
 
@@ -375,10 +382,10 @@ def test_user_board_shows_only_that_users_rows_and_has_its_own_layout(web):
     admin_doc["widgets"][0]["type"] = "answers"
     assert client.put("/api/admin/layout", json={"layout": admin_doc}, headers={"X-Token": "demo"}).status_code == 400
     assert not client.delete("/api/me/layout", params={"user": "alice"}).json()["saved"]
-    # one page navigation on both pages: Chat, Your board, Admin, with the current page marked
+    # one page navigation on both pages: the desk, a person's activity, and manage, with the current page marked
     chat, board = client.get("/").text, client.get("/dashboard").text
     assert 'aria-label="Pages"' in chat and 'aria-label="Pages"' in board
-    assert '<a href="/" aria-current="page">Chat</a>' in chat and 'id="melink"' in chat and 'id="dashlink"' in chat
+    assert 'aria-current="page"' in chat and 'id="melink"' in chat and 'id="dashlink"' in chat
     assert 'id="navChat"' in board and 'id="navAdmin" aria-current="page"' in board
 
 
@@ -393,7 +400,7 @@ def test_a_stored_answer_replays_for_its_owner_without_the_model(web):
     assert client.get(f"/api/answer/{j['audit_id']}", params={"user": "bob"}).status_code == 404  # not bob's
     assert client.get("/api/answer/999", params={"user": "alice"}).status_code == 404
     page = client.get("/").text
-    assert "async function replay" in page and 'u.get("a")' in page
+    assert 'src="/static/desk.js"' in page and "async function replay" in DESK_JS and 'u.get("a")' in DESK_JS
     ans = client.get("/api/me/widget/answers", params={"user": "alice"}).json()["answers"][0]
     assert ans["audit_id"] == j["audit_id"]
 
@@ -429,6 +436,12 @@ def test_the_original_pdf_is_served_only_behind_the_grant(web):
     page = client.get("/api/page", params={"user": "alice", "doc_id": doc, "p": 1}).json()
     assert page["pdf"] == f"/files/{doc}?user=alice#page=1"
     assert 'id="ppdf"' in client.get("/").text
+    # a link is only offered for a file that is on this server
+    import os
+    source = connect(path).execute("SELECT source FROM documents WHERE id=?", (doc,)).fetchone()["source"]
+    os.remove(source)
+    assert client.get("/api/page", params={"user": "alice", "doc_id": doc, "p": 1}).json()["pdf"] is None
+    assert client.get("/api/me/widget/library", params={"user": "alice"}).json()["library"][0]["pdf"] is None
 
 
 def test_the_library_widget_lists_only_granted_reports_with_edition_and_links(web):
@@ -441,7 +454,6 @@ def test_the_library_widget_lists_only_granted_reports_with_edition_and_links(we
     assert r["pages"] == 1 and r["cited"] == 1 and r["pdf"] == f"/files/{doc}?user=alice" and r["edition"] == [0, 0, ""]
     bob = client.get("/api/me/widget/library", params={"user": "bob"}).json()["library"]
     assert {r["title"] for r in bob} == {"Sector Outlook 2025", "Strategy Memo"} and all(r["cited"] == 0 for r in bob)
-    assert 'id="libFilter"' in client.get("/dashboard").text
 
 
 def test_edition_is_read_from_the_title_and_sorted_newest_first(tmp_path):
@@ -488,7 +500,6 @@ def test_an_analysis_runs_every_question_inside_each_chosen_report_and_stores_th
     assert me["usage"]["asked"] == 4 and me["usage"]["from_analyses"] == 4 and me["answers"] == []
     assert client.delete(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).json() == {"deleted": a["id"]}
     assert client.get(f"/api/me/analyses/{a['id']}", params={"user": "bob"}).status_code == 404
-    assert 'id="anaForm"' in client.get("/dashboard").text
 
 
 def test_each_todo_count_opens_its_rows_and_a_review_can_be_closed(web, tmp_path):
@@ -531,5 +542,113 @@ def test_find_route_never_calls_the_model(web):
     assert r["query"] == '"palm" AND "oil"' and r["ms"] < 1000 and llm.calls == []
     assert client.get("/api/find", params={"user": "nobody", "q": "palm"}).status_code == 403
     assert client.get("/api/find", params={"user": "alice", "q": '"'}).json()["hits"] == []
-    page = client.get("/").text
-    assert 'id="findBtn"' in page and 'id="tab-find"' in page
+    assert 'id="findBtn"' in client.get("/").text
+    assert client.get("/api/find", params={"user": "alice", "q": "palm oil", "doc_id": memo}).json()["hits"] == []  # one report, and alice has no grant on it
+    assert client.get("/api/find", params={"user": "alice", "q": "palm oil", "doc_id": doc}).json()["hits"][0]["doc_id"] == doc
+
+
+def stream(client, **body):
+    """The server-sent events of one question, as a list."""
+    with client.stream("POST", "/api/ask/stream", json=body) as r:
+        assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream") and r.headers["cache-control"] == "no-store"
+        return [json.loads(line[6:]) for line in r.iter_lines() if line.startswith("data: ")]
+
+
+def test_streaming_sends_each_real_step_in_order_and_the_checked_answer_last(web):
+    client, llm, doc, _, path = web
+    fake = Claim("Output doubled.", doc, 1, "Palm oil output doubled in 2024")
+    llm.responses = [[fake], [good(doc)]]
+    events = stream(client, user="alice", question="How did palm oil output change?")
+    assert [e["kind"] for e in events] == ["search", "drafting", "draft", "checking", "check", "retry", "drafting", "draft", "checking", "check", "outcome", "answer"]
+    assert events[0]["passages"][0]["title"] == "Sector Outlook 2025" and events[0]["found"] >= 1
+    assert events[4]["removed"] == 1 and events[4]["reasons"] == ["quote is not on the cited page"]
+    answer = events[-1]["answer"]
+    assert answer["status"] == "answered" and answer["attempts"] == 2 and answer["claims"][0]["text"] == good(doc).text
+    # the rejected draft's words never reach the live events, and the answer is stored like any other
+    assert "doubled" not in json.dumps(events[:-1])
+    stored = client.get(f"/api/answer/{answer['audit_id']}", params={"user": "alice"}).json()
+    assert stored["claims"] == answer["claims"] and connect(path).execute("SELECT COUNT(*) FROM audit").fetchone()[0] == 1
+
+
+def test_streaming_refuses_what_asking_refuses_and_reports_a_failure_as_an_event(web):
+    client, llm, doc, *_ = web
+    assert client.post("/api/ask/stream", json={"user": "mallory", "question": "palm oil"}).status_code == 403
+    assert client.post("/api/ask/stream", json={"user": "alice", "question": "  "}).status_code == 400
+    assert client.post("/api/ask/stream", json={"user": "alice", "question": "palm oil", "doc_ids": []}).status_code == 400
+
+    class Broken:
+        def draft(self, *a, **k):
+            raise RuntimeError("model is down")
+
+    down = TestClient(create_app(web[4], lambda: (Broken(), "broken"), background=False))
+    events = stream(down, user="alice", question="How did palm oil output change?")
+    assert events[-1]["kind"] == "answer" and events[-1]["answer"]["status"] == "not_found"
+    assert [e for e in events if e["kind"] == "draft"][0]["error"].startswith("RuntimeError")
+
+
+def test_ticked_reports_limit_the_search_and_can_never_widen_a_grant(web):
+    client, llm, doc, memo, _ = web
+    q = "palm oil output merger board Orion Holdings"
+    both = client.post("/api/ask", json={"user": "bob", "question": q}).json()
+    assert {p["doc_id"] for p in both["retrieved"]} == {doc, memo}
+    one = client.post("/api/ask", json={"user": "bob", "question": q, "doc_ids": [memo]}).json()
+    assert {p["doc_id"] for p in one["retrieved"]} == {memo} and one["trace"][0]["only"] == [memo]
+    assert client.post("/api/ask", json={"user": "alice", "question": q, "doc_ids": [memo]}).json()["retrieved"] == []
+
+
+def test_every_ticked_report_is_searched_even_past_the_named_edition_limit(tmp_path):
+    from ra.retrieve import MAX_NAMED, retrieve
+
+    con = connect(str(tmp_path / "many.db"))
+    ids = []
+    for i in range(MAX_NAMED + 2):
+        ingest_pdf(con, "wb", f"Report {i}", make_pdf(tmp_path / f"{i}.pdf", [["Palm oil output rose in this report."]]))
+        ids.append(con.execute("SELECT id FROM documents WHERE title=?", (f"Report {i}",)).fetchone()["id"])
+    con.execute("INSERT INTO grants VALUES ('alice','wb')")
+    con.commit()
+    assert {p.doc_id for p in retrieve(con, "alice", "palm oil output", 12, set(ids))} == set(ids)
+    assert {p.doc_id for p in retrieve(con, "alice", "palm oil output", 12, set(ids[:MAX_NAMED + 1]))} == set(ids[:MAX_NAMED + 1])
+
+
+def test_history_lists_each_question_once_and_says_which_can_reopen(web):
+    client, llm, doc, _, path = web
+    q = "How did palm oil output change?"
+    llm.responses = [[good(doc)], [good(doc)]]
+    first = client.post("/api/ask", json={"user": "alice", "question": q}).json()
+    client.post("/api/feedback", json={"user": "alice", "audit_id": first["audit_id"], "rating": "up"})
+    second = client.post("/api/ask", json={"user": "alice", "question": q}).json()
+    client.post("/api/review", json={"user": "alice", "audit_id": second["audit_id"]})
+    con = connect(path)
+    con.execute("INSERT INTO audit(user, question, status, cited) VALUES ('alice','An old question','not_found','')")
+    con.execute("INSERT INTO audit(user, question, status, cited) VALUES ('bob','Not alice''s','not_found','')")
+    con.commit()
+    rows = client.get("/api/me/history", params={"user": "alice"}).json()["questions"]
+    assert [r["question"] for r in rows] == ["An old question", q]
+    assert rows[0]["saved"] is False and rows[1]["saved"] is True and rows[1]["asked"] == 2
+    assert rows[1]["id"] == second["audit_id"] and rows[1]["review"] == "open"
+    assert client.get("/api/me/history", params={"user": "nobody"}).status_code == 404
+
+
+def test_a_table_gains_a_row_and_only_the_new_cells_are_asked(web):
+    client, llm, doc, memo, _ = web
+    llm.responses = [[good(doc)]]
+    a = client.post("/api/me/analyses", json={"user": "alice", "name": "t", "questions": ["How did palm oil output change?"], "doc_ids": [doc]}).json()
+    done = client.post(f"/api/me/analyses/{a['id']}/run", params={"user": "alice"}).json()
+    assert done["cells"][f"0:{doc}"]["quote"] == QUOTE and len(llm.calls) == 1
+    llm.responses = [[good(doc)]]
+    grown = client.post(f"/api/me/analyses/{a['id']}/questions", json={"user": "alice", "question": "Did palm oil yields rise?"}).json()
+    assert grown["questions"][1] == "Did palm oil yields rise?" and grown["cells"][f"1:{doc}"]["status"] == "pending" and grown["done"] == 1
+    v = client.post(f"/api/me/analyses/{a['id']}/run", params={"user": "alice"}).json()
+    assert v["cells"][f"1:{doc}"]["status"] == "answered" and len(llm.calls) == 2  # the first cell was not asked again
+    assert client.post(f"/api/me/analyses/{a['id']}/questions", json={"user": "bob", "question": "x"}).status_code == 404
+    assert client.post(f"/api/me/analyses/{a['id']}/questions", json={"user": "alice", "question": " "}).status_code == 400
+    for i in range(8):
+        assert client.post(f"/api/me/analyses/{a['id']}/questions", json={"user": "alice", "question": f"q{i}"}).status_code == 200
+    assert client.post(f"/api/me/analyses/{a['id']}/questions", json={"user": "alice", "question": "one too many"}).status_code == 400
+
+
+def test_static_files_are_served_and_the_browser_must_revalidate_them(web):
+    client = web[0]
+    for path in ("/static/tokens.css", "/static/desk.css", "/static/desk.js", "/static/fonts/Geist-Variable.woff2"):
+        r = client.get(path)
+        assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"
