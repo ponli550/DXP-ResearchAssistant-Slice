@@ -8,7 +8,7 @@ and a test (`tests/test_helper.py`) fails if it ever does.
 - A **Help** button on every page, and `?` as a shortcut, opens a panel: examples to try, then what you may want to do, each with a button that does it.
 - **Try one** comes from the person's own history and library, so the examples work for them: questions they have already had answered (opens the stored answer, no model call) and "finish the sentence" stubs for the newest editions.
 - **Show me around** is a six-stop tour that dims the page and highlights one element at a time. It is offered once, on first visit, and remembered in the browser.
-- It adapts to the page: the chat, a user's board, the admin board.
+- It adapts to the page: the research desk, a user's activity, the admin board.
 
 ## Run it in front of the app
 
@@ -31,8 +31,8 @@ It reads the page, never the app's code. Each of these is optional; a missing on
 
 | Page | Elements it looks for |
 |---|---|
-| Chat (`/`) | `#q`, `#go`, `#findBtn`, `#tabs`, `#tab-find`, `#tab-canvas`, `#user`, `#melink`, `.nav` |
-| User board (`/dashboard?user=`) | `#keyrow`, `[data-type=library]`, `[data-type=analyses]`, `[data-type=answers]`, `[data-type=usage]` |
+| Research desk (`/`) | `#q`, `#go`, `#findBtn`, `#askMode`, `#modeBtn`, `#scopeBtn`, `#railOpen`, `#plusReports`, `#user`, `#melink`, `.nav` |
+| Workspace (`/dashboard?user=`) | `#sources`, `#assistantBtn`, `[data-type=next]`, `[data-type=topics]`, `[data-type=found]` |
 | Admin board (`/dashboard`) | `#brief`, `#keyrow`, `[data-type=todo]`, `[data-type=timeline]`, `.tabs`, `#newuser`, `#newkey`, `#try` |
 
 Endpoints it calls, all existing and read-only: `/api/me/widget/answers` and `/api/me/widget/library`. It also reads the chat's `?user=` and `?a=` links, and handles `?tab=find` itself.
