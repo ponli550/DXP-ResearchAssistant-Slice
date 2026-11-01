@@ -120,13 +120,16 @@ _FIND_SQL = """
 """
 
 
-def find(con, user, text, k=20):
+def find(con, user, text, k=20, doc_id=None):
     """Pages matching a search box query, inside the user's grant, with a highlighted snippet. No model is involved.
 
-    A named edition in the query narrows the search to it, as it does for a question. Returns (query, hits).
+    A named edition in the query narrows the search to it, as it does for a question. `doc_id` narrows it to one
+    report instead; the grant in the SQL still decides what can be returned. Returns (query, hits).
     """
     docs = named_documents(con, user, text)
     q = find_query(search_terms(text, docs))
+    if doc_id is not None:
+        docs = [doc_id]
     if q is None:
         return None, []
     args = [user, q]
@@ -230,21 +233,22 @@ def retrieve(con, user, question, k=12, only=None):
     never reaches the model, and can never be cited. When the question names editions, each named
     edition gets its own k slots and the edition words leave the text query. When it names none,
     every granted document keeps a floor of slots so a comparison sees both of its sides.
-    `only` is a set of document ids that narrows the search further (an analysis cell asks one report);
-    it is intersected with the grant and can never widen it.
+    `only` is a set of document ids that narrows the search further (an analysis cell asks one report, a
+    person ticks the reports to search); it is intersected with the grant and can never widen it. Every report
+    in `only` is searched: MAX_NAMED limits what one question can pull in by name, not what a person chose.
     """
-    docs = named_documents(con, user, question)
-    if only is not None:
-        allowed = [d for d in _granted_docs(con, user) if d in only]
-        docs = [d for d in docs if d in only] or allowed
-        if not docs:
-            return []
-    q = fts_query(search_terms(question, named_documents(con, user, question)))
+    named = named_documents(con, user, question)
+    q = fts_query(search_terms(question, named))
     if q is None:
         return []
-    if docs:
-        docs = docs[:MAX_NAMED]
-        merged = [p for d in docs for p in _rows(con, user, q, k, d)]
+    scope = _granted_docs(con, user)
+    if only is not None:
+        scope = [d for d in scope if d in only]
+        named = [d for d in named if d in only]
+        if not scope:
+            return []
+    if named:
+        merged = [p for d in named[:MAX_NAMED] for p in _rows(con, user, q, k, d)]
         return sorted(merged, key=lambda p: p.score)
-    per_doc = [_rows(con, user, q, k, d) for d in _granted_docs(con, user)]
+    per_doc = [_rows(con, user, q, k, d) for d in scope]
     return _diversify([r for r in per_doc if r], k)

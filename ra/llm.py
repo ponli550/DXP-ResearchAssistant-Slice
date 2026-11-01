@@ -83,6 +83,11 @@ class ClaudeLLM:
         )
         return parse_claims("".join(b.text for b in msg.content if getattr(b, "type", "") == "text"))
 
+    def complete(self, system, prompt):
+        """Plain text back, for the workspace assistant."""
+        msg = self.client.messages.create(model=self.model, max_tokens=800, system=system, messages=[{"role": "user", "content": prompt}])
+        return "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+
 
 class OpenAICompatLLM:
     """Adapter for any OpenAI-compatible chat endpoint (Nous Research Hermes, OpenRouter, a local server).
@@ -127,6 +132,13 @@ class OpenAICompatLLM:
         text = data["choices"][0]["message"].get("content") or ""
         text = re.sub(r"<think>.*?</think>", "", text, flags=re.S)
         return parse_claims(text)
+
+    def complete(self, system, prompt):
+        """Plain text back, for the workspace assistant."""
+        body = {"model": self.model, "max_tokens": 800, "temperature": 0,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]}
+        data = with_retry(lambda: self.post(body), on_error=self._note)
+        return data["choices"][0]["message"].get("content") or ""
 
 
 class ScriptedLLM:

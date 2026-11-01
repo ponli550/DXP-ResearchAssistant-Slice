@@ -1,23 +1,42 @@
 """A small web demo over the same pipeline.
 
-Pick a user, ask a question, and watch the answer built on a canvas: the question, the sources found, the quote
-check on every drafted claim, the answer, and a human-gated next step. The login is a demo picker, not
-authentication. Access is still enforced in retrieval and on the page route.
+Pick a user, tick the reports to search, ask a question and watch the real work happen: the search, the draft, the
+quote check. The answer appears beside the page that proves it, with a human-gated next step. The login is a demo
+picker, not authentication. Access is still enforced in retrieval and on the page route.
 """
 import json
 import os
+import queue
 import re
 import threading
 import time
+import uuid
+from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .answer import ask
-from .retrieve import find
+from .retrieve import find, find_query
 from .baselines import Extractive
 from .db import connect
+from .uploads import MAX_UPLOAD_BYTES, PRIVATE_PREFIX, UploadRefused, add_upload, delete_upload, is_private
+from .assistant import reply as assistant_reply
+from .workspace import add_to_latest, board_view, clean_board, create_board, list_boards, save_board, topic_pages, user_activity
+
+STATIC = Path(__file__).parent / "static"
+
+
+class RevalidatedFiles(StaticFiles):
+    """The stylesheet and script are the app too: the browser may keep them, but must ask whether they changed."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 def default_llm():
@@ -49,6 +68,7 @@ def model_source(llm, name):
 class AskBody(BaseModel):
     user: str
     question: str
+    doc_ids: list[int] | None = None  # the reports a person ticked; None searches everything they may see
 
 
 class FeedbackBody(BaseModel):
@@ -91,6 +111,24 @@ class AnalysisBody(BaseModel):
     doc_ids: list[int]
 
 
+class BoardBody(BaseModel):
+    user: str
+    kind: str = "dashboard"
+    title: str = ""
+    blocks: list = []
+
+
+class AssistantBody(BaseModel):
+    user: str
+    message: str
+    history: list = []
+
+
+class QuestionBody(BaseModel):
+    user: str
+    question: str
+
+
 def _hash_key(key):
     import hashlib
 
@@ -124,16 +162,16 @@ def _bar(n, top, width=8):
 
 
 def _libraries(con):
-    """Library rows, coverage and the per-library table. Everything that comes from documents and pages."""
+    """Library rows, coverage and the per-library table. Everything that comes from documents and pages. Private uploads are left out."""
     libs = con.execute(
         "SELECT l.id, l.name, "
         "(SELECT COUNT(*) FROM documents d WHERE d.library_id = l.id) AS documents, "
         "(SELECT COALESCE(SUM(d.pages),0) FROM documents d WHERE d.library_id = l.id) AS pages, "
         "(SELECT COALESCE(SUM(d.needs_ocr),0) FROM documents d WHERE d.library_id = l.id) AS needs_ocr, "
         "(SELECT COUNT(*) FROM grants g WHERE g.library_id = l.id) AS users "
-        "FROM libraries l ORDER BY l.name").fetchall()
+        "FROM libraries l WHERE l.id NOT LIKE ? ORDER BY l.name", (PRIVATE_PREFIX + "%",)).fetchall()
     low = {r["library_id"]: r["n"] for r in con.execute(
-        "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id WHERE p.low_text = 1 GROUP BY d.library_id")}
+        "SELECT d.library_id, COUNT(*) AS n FROM pages p JOIN documents d ON d.id = p.doc_id WHERE p.low_text = 1 AND d.library_id NOT LIKE ? GROUP BY d.library_id", (PRIVATE_PREFIX + "%",))}
     top_pages = max([r["pages"] for r in libs] or [0])
     total_pages = sum(r["pages"] for r in libs)
     flagged_pages = sum(low.values())
@@ -201,7 +239,8 @@ def _graph(con, libs, rows, users):
     # Relationships: libraries, documents in edition order and users, joined by grants and by the citations users' answers made.
     # Issuer, sector and instrument nodes arrive with MARC's tables; today the real edges are membership, grant and citation.
     from .retrieve import EDITION_RE, MONTHS
-    docs = con.execute("SELECT d.id, d.title, d.library_id, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id").fetchall()
+    docs = con.execute("SELECT d.id, d.title, d.library_id, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id WHERE l.id NOT LIKE ?", (PRIVATE_PREFIX + "%",)).fetchall()
+    shared = {d["id"] for d in docs}
     def edition_key(title):
         m = EDITION_RE.search(title)
         return (int(m.group(2)), MONTHS.index(m.group(1).lower()) + 1) if m else (0, 0)
@@ -210,7 +249,8 @@ def _graph(con, libs, rows, users):
         for c in r["cited"].split(","):
             if c:
                 did = int(c.split(":")[0])
-                cites[(did, r["user"])] = cites.get((did, r["user"]), 0) + 1
+                if did in shared:
+                    cites[(did, r["user"])] = cites.get((did, r["user"]), 0) + 1
     nodes = [{"id": f"L{r['id']}", "kind": "library", "label": r["name"]} for r in libs]
     by_lib = {}
     for d in sorted(docs, key=lambda d: (d["library"], edition_key(d["title"]))):
@@ -221,7 +261,7 @@ def _graph(con, libs, rows, users):
     for u in users:
         nodes.append({"id": f"U{u['user']}", "kind": "user", "label": u["user"], "asked": u["asked"]})
     edges = [{"a": f"L{d['library_id']}", "b": f"D{d['id']}", "kind": "member", "w": 1} for d in docs]
-    edges += [{"a": f"U{r['user']}", "b": f"L{r['library_id']}", "kind": "grant", "w": 1} for r in con.execute("SELECT user, library_id FROM grants")]
+    edges += [{"a": f"U{r['user']}", "b": f"L{r['library_id']}", "kind": "grant", "w": 1} for r in con.execute("SELECT user, library_id FROM grants WHERE library_id NOT LIKE ?", (PRIVATE_PREFIX + "%",))]
     edges += [{"a": f"D{did}", "b": f"U{u}", "kind": "cited", "w": w} for (did, u), w in cites.items()]
     for ids in by_lib.values():
         ordered = sorted(ids, key=lambda i: edition_key(next(d["title"] for d in docs if d["id"] == i)))
@@ -398,7 +438,7 @@ def todo_detail(con, kind, results_dir):
         rows = con.execute("SELECT r.id, r.at, r.user, r.note, r.audit_id, a.question FROM reviews r JOIN audit a ON a.id = r.audit_id WHERE r.status='open' ORDER BY r.id DESC").fetchall()
         return {"kind": kind, "rows": [dict(r) for r in rows], "why": "someone pressed Create review request; mark it done once a person has read the answer"}
     if kind == "ocr":
-        rows = con.execute("SELECT p.doc_id, p.page FROM pages p WHERE p.low_text = 1 ORDER BY p.doc_id, p.page").fetchall()
+        rows = con.execute("SELECT p.doc_id, p.page FROM pages p JOIN documents d ON d.id = p.doc_id WHERE p.low_text = 1 AND d.library_id NOT LIKE ? ORDER BY p.doc_id, p.page", (PRIVATE_PREFIX + "%",)).fetchall()
         by_doc = {}
         for r in rows:
             by_doc.setdefault(r["doc_id"], []).append(r["page"])
@@ -448,7 +488,7 @@ WIDGETS = {
     "users": {"title": "Users", "span": 4},
     "people": {"title": "People", "span": 8},
 }
-# The user catalogue: four widgets, each something MARC Online does not show. Same document shape, same rules.
+# The user catalogue, for a portal that builds its own board from /api/me/layout. The activity page draws from user_activity instead.
 USER_WIDGETS = {
     "library": {"title": "Your library", "span": 12},
     "analyses": {"title": "Your analyses", "span": 12},
@@ -535,15 +575,16 @@ def user_board(con, user, model_name, parts=None):
                     cited[did] = cited.get(did, 0) + 1
         low = {r["doc_id"]: r["n"] for r in con.execute("SELECT doc_id, COUNT(*) AS n FROM pages WHERE low_text = 1 GROUP BY doc_id")}
         docs = con.execute(
-            "SELECT d.id, d.title, d.pages, d.source, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id "
+            "SELECT d.id, d.title, d.pages, d.source, d.library_id, l.name AS library FROM documents d JOIN libraries l ON l.id = d.library_id "
             "JOIN grants g ON g.library_id = d.library_id AND g.user = ? ORDER BY l.name, d.title", (user,)).fetchall()
         def edition(title):
             m = EDITION_RE.search(title)
             return [int(m.group(2)), MONTHS.index(m.group(1).lower()) + 1, m.group(1).title() + " " + m.group(2)] if m else [0, 0, ""]
         items = [{"id": d["id"], "title": d["title"], "library": d["library"], "pages": d["pages"], "low_text_pages": low.get(d["id"], 0),
-                  "cited": cited.get(d["id"], 0), "edition": edition(d["title"]), "pdf": f"/files/{d['id']}?user={user}" if d["source"] else None}
+                  "cited": cited.get(d["id"], 0), "edition": edition(d["title"]), "private": is_private(d["library_id"]),
+                  "pdf": f"/files/{d['id']}?user={user}" if d["source"] and os.path.exists(d["source"]) else None}
                  for d in docs]
-        items.sort(key=lambda x: (x["library"], -x["edition"][0], -x["edition"][1], x["title"]))
+        items.sort(key=lambda x: (x["private"], x["library"], -x["edition"][0], -x["edition"][1], x["title"]))
         out["library"] = items
     if need("analyses"):
         out["analyses"] = [{"id": r["id"], "name": r["name"], "status": r["status"], "created_at": r["created_at"]}
@@ -570,6 +611,29 @@ def user_board(con, user, model_name, parts=None):
         if want is not None and k not in want:
             out.pop(k, None)
     return out
+
+
+def question_history(con, user):
+    """Each question a person asked, once, newest first. A repeat shows its newest stored answer, if one was kept.
+
+    Analysis cells stay under their analysis. Answers were not always stored, so `saved` says whether this one can reopen.
+    """
+    rows = con.execute(
+        "SELECT a.id, a.at, a.question, a.status, COALESCE(a.answer, '') != '' AS saved, "
+        "(SELECT rating FROM feedback f WHERE f.audit_id = a.id ORDER BY f.id DESC LIMIT 1) AS rating, "
+        "(SELECT status FROM reviews r WHERE r.audit_id = a.id ORDER BY r.id DESC LIMIT 1) AS review "
+        "FROM audit a WHERE a.user = ? AND a.id NOT IN (SELECT audit_id FROM analysis_cells WHERE audit_id IS NOT NULL) "
+        "ORDER BY a.id DESC", (user,)).fetchall()
+    out = {}
+    for r in rows:
+        entry = out.get(r["question"])
+        if entry is None:
+            out[r["question"]] = dict(r) | {"saved": bool(r["saved"]), "asked": 1}
+            continue
+        entry["asked"] += 1
+        if r["saved"] and not entry["saved"]:
+            entry.update(id=r["id"], at=r["at"], status=r["status"], saved=True)
+    return list(out.values())
 
 
 def put_layout(con, owner, doc):
@@ -627,11 +691,11 @@ def analysis_view(con, user, analysis_id):
         return (m.group(1).title()[:3] + " " + m.group(2)) if m else title[:18]
     cells = {}
     for c in con.execute("SELECT c.qi, c.doc_id, c.audit_id, c.status, a.answer FROM analysis_cells c LEFT JOIN audit a ON a.id = c.audit_id WHERE c.analysis_id=?", (analysis_id,)):
-        cell = {"status": c["status"], "audit_id": c["audit_id"], "claim": None, "page": None, "claims": 0}
+        cell = {"status": c["status"], "audit_id": c["audit_id"], "claim": None, "page": None, "quote": None, "claims": 0}
         if c["answer"]:
             ans = json.loads(c["answer"])
             if ans.get("claims"):
-                cell.update(claim=ans["claims"][0]["text"], page=ans["claims"][0]["page"], claims=len(ans["claims"]))
+                cell.update(claim=ans["claims"][0]["text"], page=ans["claims"][0]["page"], quote=ans["claims"][0]["quote"], claims=len(ans["claims"]))
         cells[f"{c['qi']}:{c['doc_id']}"] = cell
     total = len(questions) * len(doc_ids)
     done = sum(1 for c in cells.values() if c["status"] in ("answered", "not_found", "error"))
@@ -687,6 +751,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
 
     # The pages are the app; a browser that keeps a stale copy shows yesterday's board over today's code.
     NO_CACHE = {"Cache-Control": "no-store"}
+    app.mount("/static", RevalidatedFiles(directory=STATIC), name="static")
 
     @app.get("/", response_class=HTMLResponse)
     def index():
@@ -707,12 +772,13 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         ).fetchall()
         return {"documents": [dict(r) for r in rows]}
 
-    @app.post("/api/ask")
-    def ask_route(body: AskBody, x_api_key: str = Header(default="")):
+    def checked_question(con, body, x_api_key):
+        """The question to ask, after deciding who is asking and refusing what cannot be asked."""
         question = body.question.strip()
         if not question or len(question) > 500:
             raise HTTPException(400, "Ask a question of up to 500 characters.")
-        con = db()
+        if body.doc_ids == []:
+            raise HTTPException(400, "Tick at least one report to search.")
         if x_api_key:
             # An integration asks with a key, not a user name. The key decides the user; the body's user is ignored.
             user = user_for_key(con, x_api_key)
@@ -721,12 +787,49 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
             body.user = user
         if not allowed_libraries(con, body.user):
             raise HTTPException(403, "This user has no library access.")
-        res = ask(con, llm, body.user, question)
+        return question
+
+    def answer_and_keep(con, body, question, on_step=None):
+        only = set(body.doc_ids) if body.doc_ids is not None else None
+        res = ask(con, llm, body.user, question, only=only, on_step=on_step)
         out = answer_json(con, res, model_name)
         # The checked answer is kept with its audit row, so history replays it without a model call.
         con.execute("UPDATE audit SET answer=? WHERE id=?", (json.dumps(out, separators=(",", ":")), res.audit_id))
         con.commit()
         return out
+
+    @app.post("/api/ask")
+    def ask_route(body: AskBody, x_api_key: str = Header(default="")):
+        con = db()
+        return answer_and_keep(con, body, checked_question(con, body, x_api_key))
+
+    @app.post("/api/ask/stream")
+    def ask_stream(body: AskBody, x_api_key: str = Header(default="")):
+        """The same pipeline, sending each step as server-sent events while it runs, then the checked answer last.
+
+        The work runs on its own thread, so a person who stops reading does not stop it: a model call already started
+        finishes and its answer is stored as usual. Drafts never appear here, only what the steps did.
+        """
+        question = checked_question(db(), body, x_api_key)
+        events = queue.SimpleQueue()
+
+        def work():
+            con = connect(db_path)
+            try:
+                events.put({"kind": "answer", "answer": answer_and_keep(con, body, question, events.put)})
+            except Exception as e:
+                events.put({"kind": "error", "detail": f"{type(e).__name__}: {e}"[:200]})
+            finally:
+                con.close()
+                events.put(None)
+
+        threading.Thread(target=work, daemon=True).start()
+
+        def lines():
+            while (event := events.get()) is not None:
+                yield f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
+
+        return StreamingResponse(lines(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
     @app.get("/api/answer/{audit_id}")
     def replay(audit_id: int, user: str):
@@ -768,18 +871,19 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         ).fetchone()
         if not row:
             raise HTTPException(403, "No access to this page, or it does not exist.")
-        has_file = bool(con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"])
+        source = con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"]
+        has_file = bool(source) and os.path.exists(source)
         return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None,
                 "pdf": f"/files/{doc_id}?user={user}#page={p}" if has_file else None}
 
     @app.get("/api/find")
-    def find_route(user: str, q: str, limit: int = 20):
+    def find_route(user: str, q: str, limit: int = 20, doc_id: int | None = None):
         """Find pages by their words: phrases in quotes, AND by default, OR, NOT. Plain full-text search, no model call."""
         con = db()
         if not allowed_libraries(con, user):
             raise HTTPException(403, "This user has no library access.")
         t = time.perf_counter()
-        query, hits = find(con, user, q.strip()[:300], max(1, min(limit, 50)))
+        query, hits = find(con, user, q.strip()[:300], max(1, min(limit, 200)), doc_id)
         return {"query": query, "hits": hits, "ms": round((time.perf_counter() - t) * 1000, 1), "model_called": False,
                 "editions": _titles_for(con, user, q)}
 
@@ -806,8 +910,8 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
 
 
     @app.get("/dashboard", response_class=HTMLResponse)
-    def dashboard_page():
-        return HTMLResponse(DASHBOARD_HTML, headers=NO_CACHE)
+    def dashboard_page(user: str = ""):
+        return HTMLResponse(ACTIVITY_HTML if user else DASHBOARD_HTML, headers=NO_CACHE)
 
     def admin(x_token):
         if not x_token or x_token != admin_token:
@@ -870,6 +974,146 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
             raise HTTPException(404, f"No widget called {kind!r}; known: {', '.join(USER_WIDGET_PARTS)}")
         return user_board(con, user, model_name, USER_WIDGET_PARTS[kind])
 
+    @app.get("/api/me/activity")
+    def me_activity(user: str):
+        con = db()
+        return user_activity(con, known(con, user), _now(), model_name)
+
+    @app.get("/api/me/topic")
+    def me_topic(user: str, q: str):
+        """A topic the person typed: the pages of each report that match it."""
+        con = db()
+        user = known(con, user)
+        query = q.strip()[:80]
+        if find_query(query) is None:
+            raise HTTPException(400, "Type a word or a phrase to look for.")
+        return {"term": query.strip('"'), "query": query, "group": "mine", "doc": None, "counts": topic_pages(con, user, query)}
+
+    @app.get("/api/me/boards")
+    def boards(user: str):
+        con = db()
+        return {"boards": list_boards(con, known(con, user))}
+
+    def board_or_404(con, user, board_id):
+        view = board_view(con, user, board_id)
+        if not view:
+            raise HTTPException(404, "No such dashboard or report for this user.")
+        return view
+
+    def cleaned(kind, title, blocks):
+        title, blocks, problems = clean_board(kind, title, blocks)
+        if problems:
+            raise HTTPException(400, "; ".join(problems))
+        return title, blocks
+
+    @app.post("/api/me/boards")
+    def new_board(body: BoardBody):
+        con = db()
+        user = known(con, body.user)
+        title, blocks = cleaned(body.kind, body.title, body.blocks)
+        return board_or_404(con, user, create_board(con, user, body.kind, title, blocks))
+
+    @app.post("/api/me/boards/add")
+    def add_to_board(body: BoardBody):
+        con = db()
+        user = known(con, body.user)
+        _, blocks, problems = clean_board(body.kind, "add", body.blocks)
+        if problems or not blocks:
+            raise HTTPException(400, "; ".join(problems) or "Nothing to add.")
+        return board_or_404(con, user, add_to_latest(con, user, body.kind, blocks))
+
+    @app.get("/api/me/boards/{board_id}")
+    def read_board(board_id: int, user: str):
+        con = db()
+        return board_or_404(con, known(con, user), board_id)
+
+    @app.put("/api/me/boards/{board_id}")
+    def write_board(board_id: int, body: BoardBody):
+        con = db()
+        user = known(con, body.user)
+        kind = board_or_404(con, user, board_id)["kind"]
+        title, blocks = cleaned(kind, body.title, body.blocks)
+        save_board(con, user, board_id, title, blocks)
+        return board_or_404(con, user, board_id)
+
+    @app.delete("/api/me/boards/{board_id}")
+    def delete_board(board_id: int, user: str):
+        con = db()
+        user = known(con, user)
+        board_or_404(con, user, board_id)
+        con.execute("DELETE FROM boards WHERE id=? AND user=?", (board_id, user))
+        con.commit()
+        return {"deleted": board_id}
+
+    @app.post("/api/me/assistant")
+    def assistant(body: AssistantBody):
+        con = db()
+        user = known(con, body.user)
+        message = body.message.strip()
+        if not message or len(message) > 500:
+            raise HTTPException(400, "Say something, up to 500 characters.")
+        history = [{"role": str(t.get("role"))[:12], "text": str(t.get("text"))[:500]} for t in body.history[-6:] if isinstance(t, dict)]
+        reports = [dict(r) for r in con.execute(
+            "SELECT d.id, d.title, d.pages FROM documents d JOIN grants g ON g.library_id = d.library_id AND g.user = ? ORDER BY d.id", (user,))]
+        return assistant_reply(llm, message, history, user_activity(con, user, _now(), model_name), reports)
+
+    def read_upload(user, filename, path):
+        con = db()
+        try:
+            return add_upload(con, user, filename, path)
+        finally:
+            con.close()
+
+    @app.post("/api/me/uploads")
+    async def upload_report(request: Request, user: str, name: str = "report.pdf"):
+        """Add a PDF to the person's private library. The body is the file. Its stored name is random, never the one they chose."""
+        con = db()
+        user = known(con, user)
+        con.close()
+        too_big = HTTPException(413, f"This file is over the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
+        if int(request.headers.get("content-length") or 0) > MAX_UPLOAD_BYTES:
+            raise too_big
+        folder = Path(db_path).resolve().parent / "uploads"
+        folder.mkdir(exist_ok=True)
+        path = folder / f"{uuid.uuid4().hex}.pdf"
+        try:
+            size, start = 0, b""
+            with open(path, "wb") as out:
+                async for chunk in request.stream():
+                    size += len(chunk)
+                    if size > MAX_UPLOAD_BYTES:
+                        raise too_big
+                    start = start or chunk[:8]
+                    out.write(chunk)
+            if not start.startswith(b"%PDF-"):
+                raise HTTPException(400, "This is not a PDF. Only PDF files can be added.")
+            report = await run_in_threadpool(read_upload, user, name, path)
+        except UploadRefused as e:
+            path.unlink(missing_ok=True)
+            raise HTTPException(400, str(e)) from e
+        except FileNotFoundError as e:
+            path.unlink(missing_ok=True)
+            raise HTTPException(503, "This server cannot read PDFs yet: pdftotext is not installed.") from e
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        return {"doc_id": report["doc_id"], "title": report["title"], "pages": report["pages"], "low_text_pages": len(report["low_text_pages"])}
+
+    @app.delete("/api/me/uploads/{doc_id}")
+    def delete_report(doc_id: int, user: str):
+        con = db()
+        user = known(con, user)
+        if con.execute("SELECT 1 FROM analyses WHERE user=? AND status='running'", (user,)).fetchone():
+            raise HTTPException(409, "A table is still running. Delete this once it has finished.")
+        if not delete_upload(con, user, doc_id):
+            raise HTTPException(404, "No upload of yours with that id.")
+        return {"deleted": doc_id}
+
+    @app.get("/api/me/history")
+    def me_history(user: str):
+        con = db()
+        return {"questions": question_history(con, known(con, user))}
+
     @app.get("/api/me/analyses")
     def list_analyses(user: str):
         con = db()
@@ -907,6 +1151,24 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
     def read_analysis(analysis_id: int, user: str):
         con = db()
         return analysis_view(con, known(con, user), analysis_id)
+
+    @app.post("/api/me/analyses/{analysis_id}/questions")
+    def add_analysis_question(analysis_id: int, body: QuestionBody):
+        """Add a row to a table. Only its new cells are pending, so the next run asks those and nothing else."""
+        con = db()
+        user = known(con, body.user)
+        row = _analysis_row(con, user, analysis_id)
+        if row["status"] == "running":
+            raise HTTPException(409, "This analysis is already running.")
+        question, questions, doc_ids = body.question.strip(), json.loads(row["questions"]), json.loads(row["doc_ids"])
+        if not question or len(question) > 300:
+            raise HTTPException(400, "A question of up to 300 characters.")
+        if len(questions) >= MAX_ANALYSIS_QUESTIONS or (len(questions) + 1) * len(doc_ids) > MAX_ANALYSIS_CELLS:
+            raise HTTPException(400, f"A table holds up to {MAX_ANALYSIS_QUESTIONS} questions and {MAX_ANALYSIS_CELLS} answers.")
+        con.execute("UPDATE analyses SET questions=?, status='new' WHERE id=?", (json.dumps(questions + [question]), analysis_id))
+        con.executemany("INSERT INTO analysis_cells(analysis_id, qi, doc_id) VALUES (?,?,?)", [(analysis_id, len(questions), d) for d in doc_ids])
+        con.commit()
+        return analysis_view(con, user, analysis_id)
 
     @app.post("/api/me/analyses/{analysis_id}/run")
     def start_analysis(analysis_id: int, user: str):
@@ -979,7 +1241,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
     @app.get("/api/admin/libraries")
     def admin_libraries(x_token: str = Header(default="")):
         admin(x_token)
-        return {"libraries": [dict(r) for r in db().execute("SELECT id, name FROM libraries ORDER BY name")]}
+        return {"libraries": [dict(r) for r in db().execute("SELECT id, name FROM libraries WHERE id NOT LIKE ? ORDER BY name", (PRIVATE_PREFIX + "%",))]}
 
     @app.post("/api/admin/users")
     def add_user(body: UserBody, x_token: str = Header(default="")):
@@ -989,7 +1251,7 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
         user = body.user.strip()
         if not user or len(user) > 60 or not re.fullmatch(r"[A-Za-z0-9._@-]+", user):
             raise HTTPException(400, "A user name is 1 to 60 letters, digits, dots, dashes, underscores or @.")
-        known_libs = {r["id"] for r in con.execute("SELECT id FROM libraries")}
+        known_libs = {r["id"] for r in con.execute("SELECT id FROM libraries WHERE id NOT LIKE ?", (PRIVATE_PREFIX + "%",))}  # a private library can never be granted
         libs = [l for l in body.libraries if l in known_libs]
         if not libs:
             raise HTTPException(400, "Pick at least one library that exists: " + ", ".join(sorted(known_libs)))
@@ -1039,236 +1301,21 @@ def create_app(db_path, llm_factory=default_llm, results_dir="evals/results", ad
     return app
 
 
-INDEX_HTML = r"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Research assistant</title>
-<style>
-:root{color-scheme:light dark;--bg:#f6f4ef;--fg:#1d1b17;--muted:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--accent2:#f6e7dc;--ok:#2f7d4f;--okbg:#e8f1ea;--bad:#9b2c2c;--badbg:#f7e6e4;--warn:#a8741a;--warnbg:#f7efdc;--mark:#ffe9a8;--grid:#e8e3d8;--answer:#fbf4ea;--answerline:#b4531f;
- --mono:ui-monospace,Menlo,Consolas,monospace;--serif:Charter,"Iowan Old Style",Georgia,serif;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px}
-@media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8dd;--muted:#9a9486;--card:#1d1b16;--line:#2e2b23;--accent:#e08a52;--accent2:#3a2416;--ok:#6cc38b;--okbg:#1b2d22;--bad:#ff9d9d;--badbg:#3a1b1b;--warn:#e0b45a;--warnbg:#3a2a12;--mark:#6b5b00;--grid:#1f1d18;--answer:#241f18;--answerline:#e08a52}}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,sans-serif;display:flex;flex-direction:column}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.top{padding:.7rem 16px;display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
-h1{font-size:1rem;margin:0;font-weight:650}.sub{color:var(--muted);margin:0;font-size:.8rem}
-.nav{display:flex;gap:.2rem}.nav a{color:var(--muted);text-decoration:none;padding:4px 12px;border:1px solid transparent;border-radius:6px;font-size:.85rem;transition:background .15s ease-out}.nav a:hover{background:var(--card)}.nav a[aria-current=page]{color:var(--fg);border-color:var(--line);background:var(--card)}
-.banner{background:var(--warnbg);color:var(--warn);padding:.45rem 16px;font-size:.85rem}
-.askbar{display:flex;gap:.5rem;padding:.6rem 16px;border-bottom:1px solid var(--line);align-items:flex-start}
-textarea,select,button{font:inherit;color:inherit;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:.45rem .65rem;transition:background .15s ease-out,border-color .15s ease-out}
-textarea{flex:1;min-width:0;height:2.7rem;resize:vertical}label{font-size:.75rem;color:var(--muted);display:block}
-button{cursor:pointer}button:hover{border-color:var(--accent)}button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}button:disabled{opacity:.6;cursor:progress}
-#status{font-size:.8rem;color:var(--muted);align-self:center}#status.busy::before{content:"";display:inline-block;width:.55rem;height:.55rem;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;margin-right:.4rem;vertical-align:-1px;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-#stage{position:relative;flex:1;min-height:420px;overflow:hidden;touch-action:none;cursor:grab;background-color:var(--bg);background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:22px 22px}
-#stage.drag{cursor:grabbing}
-#canvas{position:absolute;left:0;top:0;width:min(700px,calc(100% - 24px));transform-origin:0 0;display:flex;flex-direction:column;gap:84px;padding:12px 0 60px}
-#canvas.moving{transition:transform .75s cubic-bezier(.22,1,.36,1)}
-.node{position:relative;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:var(--s3) var(--s4) var(--s4);opacity:0;transform:translateY(14px);transition:opacity .5s ease,transform .5s ease}
-.node.in{opacity:1;transform:none}
-.node:not(:last-child)::after{content:"";position:absolute;left:50%;top:100%;width:2px;height:84px;background:var(--line)}
-.tag{display:inline-block;font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--accent);margin-bottom:.3rem}
-.node h2{font-size:1rem;margin:.1rem 0 .5rem;font-weight:650}.node.answer{background:var(--answer);border-color:var(--answerline)}.node.answer ol li{font:1.05rem/1.45 var(--serif)}.node.answer ol li .chip,.node.answer ol li details{font-family:system-ui,-apple-system,sans-serif}
-.muted{color:var(--muted);font-size:.85rem}
-.src{border:1px solid var(--line);border-radius:6px;padding:.5rem .65rem;margin:.4rem 0;background:var(--card);cursor:pointer;transition:border-color .15s ease-out,box-shadow .15s ease-out}
-.src:hover,.src:focus-visible,.src.open{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent2);outline:none}
-.src .more{max-height:0;overflow:hidden;transition:max-height .4s ease}.src:hover .more,.src:focus-visible .more,.src.open .more{max-height:420px}
-.src .more p{margin:.5rem 0;font-size:.85rem;white-space:pre-wrap}
-.snip{color:var(--muted);font-size:.85rem}
-.row{display:flex;gap:.6rem;align-items:flex-start;margin:.5rem 0}.badge{flex:none;font-size:.72rem;font-weight:600;padding:.1rem .45rem;border-radius:4px;font-family:var(--mono)}
-.badge.ok{background:var(--okbg);color:var(--ok)}.badge.bad{background:var(--badbg);color:var(--bad)}
-.chip{border:1px solid var(--line);color:var(--fg);background:var(--card);border-radius:4px;padding:.05rem .5rem;font-size:.8rem;font-family:var(--mono);font-variant-numeric:tabular-nums}.chip:hover{border-color:var(--accent);color:var(--accent)}
-details summary{cursor:pointer;color:var(--accent);font-size:.85rem}blockquote{margin:.4rem 0;padding:.3rem .7rem;border-left:3px solid var(--accent);color:var(--muted);font-size:.88rem}
-ol{padding-left:1.2rem;margin:.4rem 0}li{margin:.6rem 0}
-.fb{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-top:.7rem}.fb input{flex:1;min-width:8rem;font:inherit;color:inherit;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:.35rem .6rem}
-#spy{position:absolute;left:12px;top:12px;display:flex;flex-direction:column;gap:2px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px;z-index:3;touch-action:auto}
-#spy button{border:0;background:transparent;text-align:left;padding:.3rem .6rem;font-size:.82rem;color:var(--muted);border-radius:7px}
-#spy button[aria-current=true]{background:var(--accent2);color:var(--accent);font-weight:600}
-#zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:4px;z-index:3;touch-action:auto}#zoom button{width:2.2rem;padding:.3rem 0;text-align:center}
-#pane{position:fixed;top:0;right:0;height:100%;width:min(520px,100%);background:var(--card);border-left:1px solid var(--line);z-index:10;transform:translateX(102%);transition:transform .5s cubic-bezier(.22,1,.36,1);display:flex;flex-direction:column;padding:.8rem 1rem}
-#pane.open{transform:none}#pane header{display:flex;justify-content:space-between;gap:.5rem;align-items:center;margin-bottom:.5rem}
-a.pdf{font-size:.82rem;color:var(--accent);margin-right:.5rem}#pnote{margin:.5rem 0 0}
-pre{position:relative;white-space:pre-wrap;word-break:break-word;font:.85rem/1.5 ui-monospace,monospace;margin:0;overflow:auto;flex:1}mark{background:var(--mark);color:inherit;border-radius:3px}
-#tabs{display:flex;gap:.25rem;padding:.35rem 16px 0;border-bottom:1px solid var(--line)}
-#find{flex:1;overflow:auto}.findwrap{max-width:900px;margin:0 auto;padding:1rem 16px 3rem}#findList{padding-left:1.2rem;margin:.6rem 0}.hit{margin:.7rem 0}.hittop{display:flex;gap:.6rem;align-items:center}.hit .snip{margin:.3rem 0 0;color:var(--fg);font-size:.9rem;line-height:1.5}#findBtn{border-color:var(--line)}
-#tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:.35rem .8rem;color:var(--muted)}
-#tabs button[aria-selected=true]{color:var(--fg);border-color:var(--accent);font-weight:600}
-#steps{flex:1;overflow:auto;position:relative}
-#steps .grid{max-width:900px;margin:0 auto;padding:1rem 16px 3rem;display:grid;grid-template-columns:120px minmax(0,1fr);gap:0 1rem}
-#rail{position:sticky;top:1rem;align-self:start;display:flex;flex-direction:column;gap:.1rem;border-left:2px solid var(--line);padding-left:.7rem}
-#rail button{border:0;background:transparent;text-align:left;color:var(--muted);font-size:.8rem;padding:.15rem 0;position:relative}
-#rail button::before{content:"";position:absolute;left:calc(-.7rem - 5px);top:.45rem;width:8px;height:8px;border-radius:50%;background:var(--line)}
-#rail button[aria-current=true]{color:var(--accent);font-weight:600}#rail button[aria-current=true]::before{background:var(--accent)}
-.step{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:.8rem 1rem;margin:.7rem 0}
-.stephead{display:flex;justify-content:space-between;align-items:center;font-weight:600}
-.stepline{width:100%;display:flex;justify-content:space-between;gap:.6rem;text-align:left;margin-top:.5rem;background:var(--bg)}
-.stepbody{margin-top:.5rem}.stepbody ul{margin:.3rem 0;padding-left:1.1rem}.stepbody li{margin:.2rem 0}
-.foot{display:flex;justify-content:space-between;gap:.5rem;color:var(--muted);font-size:.78rem;margin-top:.6rem}
-.kind{font-weight:600;color:var(--accent)}.toggle{display:block;margin:.4rem auto;background:transparent;color:var(--muted);border-style:dashed}
-.flash{animation:flash 1.8s ease}@keyframes flash{0%,60%{background:var(--accent2)}100%{background:var(--card)}}
-@media (max-width:700px){#rail{display:none}#steps .grid{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:700px){#spy{flex-direction:row;flex-wrap:wrap;right:56px}}
-@media (prefers-reduced-motion:reduce){#canvas.moving,.node,#pane,.src .more{transition:none}.flash{animation:none}}
-</style></head><body>
-<div class="top"><div><h1>Research assistant</h1><p class="sub">Every claim is checked against the page it cites.</p></div>
-<div style="display:flex;gap:1rem;align-items:center"><nav class="nav" aria-label="Pages"><a href="/" aria-current="page">Chat</a><a id="melink" href="/dashboard?user=alice">Your board</a><a id="dashlink" href="/dashboard">Admin</a></nav><div><label for="user">Demo user (not a real login)</label><select id="user"></select></div></div></div>
-<div id="banner" class="banner" hidden></div>
-<div class="askbar"><textarea id="q" maxlength="500" aria-label="Your question" placeholder="Ask a question, for example: What GDP growth is projected for Malaysia in 2026?"></textarea><button id="go" class="primary">Ask</button><button id="findBtn" type="button" title="Find pages by their words. No model call: quotes for a phrase, OR, NOT, -word">Find</button><span id="status" class="muted" role="status"></span></div>
-<div id="tabs" role="tablist"><button id="tab-canvas" role="tab" aria-selected="true">Canvas</button><button id="tab-steps" role="tab" aria-selected="false">Investigation steps</button><button id="tab-find" role="tab" aria-selected="false">Find</button></div>
-<div id="stage" aria-label="Answer canvas">
-<nav id="spy" aria-label="Sections"></nav>
-<div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">&minus;</button><button id="zfit" aria-label="Show everything" title="Show everything">&#9633;</button></div>
-<div id="canvas"></div></div>
-<div id="find" hidden aria-label="Find results"><div class="findwrap"><p class="muted" id="findHead">Type words from a report and press Find. Pages that contain them, with the words marked, in under a second and without a model call. Put a phrase in quotes; OR widens; -word excludes.</p><ol id="findList"></ol></div></div>
-<div id="steps" hidden aria-label="Investigation steps"><div class="grid"><nav id="rail" aria-label="Steps"></nav><div id="steplist"><p class="muted">Ask a question to see how the answer was found.</p></div></div></div>
-<aside id="pane" aria-label="Source page"><header><strong id="phead">Source page</strong><span><a id="ppdf" class="pdf" target="_blank" rel="noopener" hidden>Open the PDF at this page</a> <button id="pclose" aria-label="Close">Close</button></span></header><pre id="ptext"></pre><p class="muted" id="pnote">Extracted text of the page, with the quote marked. The PDF link opens the original file at the same page.</p></aside>
-<script>
-const $=id=>document.getElementById(id);
-const el=(t,p={},...k)=>{const e=document.createElement(t);for(const[a,v]of Object.entries(p)){if(a==="class")e.className=v;else if(a in e)e[a]=v;else e.setAttribute(a,v)}k.flat().forEach(x=>e.append(x));return e};
-const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches||new URLSearchParams(location.search).get("reveal")==="0";  /* ?reveal=0 skips the staged reveal */
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const stage=$("stage"),canvas=$("canvas");
-let view={x:0,y:0,s:1},nodes=[],lastAudit=null,current=null;
-async function api(path,opts){const r=await fetch(path,opts);const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||r.statusText);return j}
-const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
-/* camera */
-function apply(){canvas.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.s})`;spy()}
-function move(animate){canvas.classList.toggle("moving",animate&&!reduced);apply()}
-const fitScale=()=>Math.min(1,(stage.clientWidth-24)/canvas.offsetWidth);
-function focusNode(n){current=n;const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
-function overview(){const s=Math.min(fitScale(),(stage.clientHeight-24)/canvas.offsetHeight);view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=12;move(true)}
-function zoomAt(f,cx,cy){const ns=Math.min(2.5,Math.max(.2,view.s*f));view.x=cx-(cx-view.x)*(ns/view.s);view.y=cy-(cy-view.y)*(ns/view.s);view.s=ns;move(false)}
-function spy(){const cy=(stage.clientHeight/2-view.y)/view.s;let best=null,bd=1e9;nodes.forEach(n=>{const d=Math.abs(n.offsetTop+n.offsetHeight/2-cy);if(d<bd){bd=d;best=n}});
-  document.querySelectorAll("#spy button").forEach(b=>b.setAttribute("aria-current",String(!!best&&b.dataset.id===best.id)))}
-let drag=null;
-stage.addEventListener("pointerdown",e=>{if(e.target.closest("button,input,textarea,summary,.src,a"))return;drag={x:e.clientX,y:e.clientY};stage.classList.add("drag");stage.setPointerCapture(e.pointerId)});
-stage.addEventListener("pointermove",e=>{if(!drag)return;view.x+=e.clientX-drag.x;view.y+=e.clientY-drag.y;drag={x:e.clientX,y:e.clientY};move(false)});
-const endDrag=()=>{drag=null;stage.classList.remove("drag")};stage.addEventListener("pointerup",endDrag);stage.addEventListener("pointercancel",endDrag);
-stage.addEventListener("wheel",e=>{e.preventDefault();const r=stage.getBoundingClientRect();if(e.ctrlKey||e.metaKey)zoomAt(e.deltaY<0?1.1:.9,e.clientX-r.left,e.clientY-r.top);else{view.x-=e.deltaX;view.y-=e.deltaY;move(false)}},{passive:false});
-$("zin").onclick=()=>zoomAt(1.2,stage.clientWidth/2,stage.clientHeight/2);$("zout").onclick=()=>zoomAt(1/1.2,stage.clientWidth/2,stage.clientHeight/2);$("zfit").onclick=overview;
-addEventListener("resize",()=>nodes.length&&spy());
-/* page pane */
-async function showPage(c){try{const u=new URLSearchParams({user:$("user").value,doc_id:c.doc_id,p:c.page,quote:c.quote||""});const j=await api("/api/page?"+u);
-  $("phead").textContent=j.title+", page "+j.page;const pre=$("ptext");pre.replaceChildren();$("pane").classList.add("open");const pl=$("ppdf");pl.hidden=!j.pdf;if(j.pdf)pl.href=j.pdf;
-  if(j.span){pre.append(j.text.slice(0,j.span[0]),el("mark",{textContent:j.text.slice(j.span[0],j.span[1])}),j.text.slice(j.span[1]));const m=pre.querySelector("mark");pre.scrollTop=Math.max(0,m.offsetTop-pre.clientHeight/3)}else pre.textContent=j.text}
-  catch(e){$("phead").textContent=e.message;$("ptext").textContent="";$("pane").classList.add("open")}}
-$("pclose").onclick=()=>$("pane").classList.remove("open");
-/* nodes */
-const chip=(c,label)=>el("button",{class:"chip",type:"button",textContent:label||(c.title+", p. "+c.page),onclick:e=>{e.stopPropagation();showPage(c)}});
-function node(id,tag,title,cls,...kids){return el("section",{id,class:"node "+(cls||"")},el("span",{class:"tag",textContent:tag}),el("h2",{textContent:title}),...kids)}
-function srcCard(p){const more=el("div",{class:"more"},el("p",{textContent:p.text}),chip({doc_id:p.doc_id,page:p.page,quote:""},"Open page "+p.page));
-  const c=el("div",{class:"src",tabIndex:0,role:"button","aria-expanded":"false"},el("div",{},el("strong",{textContent:p.title}),el("span",{class:"muted",textContent:"  p. "+p.page})),el("div",{class:"snip",textContent:p.text.slice(0,140)+(p.text.length>140?"…":"")}),more);
-  c.dataset.key=p.doc_id+":"+p.page;c.onclick=()=>c.setAttribute("aria-expanded",String(c.classList.toggle("open")));c.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();c.click()}};return c}
-function quoteDetails(c,found){return el("details",{},el("summary",{textContent:"Show the quote"}),el("blockquote",{textContent:c.quote}),found?el("button",{type:"button",class:"chip",textContent:"Show how it was found",onclick:()=>showHow(c)}):"")}
-function checkRow(c,reason){const ok=!reason;return el("div",{class:"row"},el("span",{class:"badge "+(ok?"ok":"bad"),textContent:ok?"Quote on page "+c.page:"Removed"}),
-  el("div",{},el("div",{textContent:c.text}),el("div",{class:"muted",textContent:ok?c.title:reason+" ("+c.title+", p. "+c.page+")"}),quoteDetails(c)))}
-function feedbackBlock(j){const box=el("div",{class:"fb"});const msg=el("span",{class:"muted"});
-  const send=async(rating,reason)=>{try{await post("/api/feedback",{user:$("user").value,audit_id:j.audit_id,rating,reason});box.replaceChildren(el("span",{class:"muted",textContent:"Thanks, your feedback was recorded."}))}catch(e){msg.textContent=e.message}};
-  const up=el("button",{type:"button","aria-label":"Helpful",textContent:"👍 Helpful",onclick:()=>send("up","")});
-  const down=el("button",{type:"button","aria-label":"Not helpful",textContent:"👎 Not helpful",onclick:()=>{const inp=el("input",{placeholder:"What was wrong? (optional)",maxLength:300});const s=el("button",{type:"button",textContent:"Send",onclick:()=>send("down",inp.value)});box.replaceChildren(inp,s,msg);inp.focus()}});
-  box.append(up,down,msg);return box}
-function reviewBlock(j){const note=el("input",{placeholder:"Why should someone look at this? (optional)",maxLength:500});const out=el("div",{class:"muted"});
-  const btn=el("button",{type:"button",class:"primary",textContent:"Create review request",onclick:async()=>{btn.disabled=true;try{const r=await post("/api/review",{user:$("user").value,audit_id:j.audit_id,note:note.value});out.textContent="Review request #"+r.id+" recorded. Nobody has been notified automatically; this is a log entry for a person to pick up."}catch(e){out.textContent=e.message;btn.disabled=false}}});
-  return [el("p",{class:"muted",textContent:"The assistant never acts on its own. This only happens if you press the button."}),el("div",{class:"fb"},note,btn),out]}
-function build(j,q){const out=[];
-  out.push(node("n-q","Question","Your question","",el("p",{textContent:q}),el("p",{class:"muted",textContent:"Searched as "+$("user").value+", only in libraries this user may see."})));
-  out.push(node("n-src","Sources","Sources found ("+j.retrieved.length+")","",
-    el("p",{class:"muted",textContent:j.retrieved.length?"Hover or tap a source to read the passage. These are candidates, not yet answers.":"Nothing in the libraries this user can search matched the question."}),...j.retrieved.slice(0,6).map(srcCard),
-    j.retrieved.length>6?el("details",{},el("summary",{textContent:"Show "+(j.retrieved.length-6)+" more sources"}),...j.retrieved.slice(6).map(srcCard)):""));
-  const kept=j.claims.length,removed=j.rejected_claims.length;
-  out.push(node("n-chk","Checks","Quote check: "+kept+" kept, "+removed+" removed","",
-    el("p",{class:"muted",textContent:"A plain string check, no model. It confirms the quote is on the cited page and that every number in the claim is in the quote."+(j.attempts>1?" A second attempt was made after the first was rejected.":"")}),
-    ...j.rejected_claims.map(c=>checkRow(c,c.reason)),...j.claims.map(c=>checkRow(c,"")),
-    kept+removed===0?el("p",{textContent:j.retrieved.length?"The model returned no claims.":"No sources, so nothing was drafted."}):""));
-  const ans=j.status==="answered"
-    ?[el("ol",{},...j.claims.map(c=>el("li",{},c.text+" ",chip(c,c.title+", p. "+c.page),quoteDetails(c,true)))),
-      el("p",{class:"muted",textContent:"Each quote was found on the page it cites. That confirms the source, not that the claim answers your question."})]
-    :[el("p",{style:"font-weight:600",textContent:"I could not find this in the selected library."}),...(j.closest.length?[el("p",{class:"muted",textContent:"Closest sources:"}),el("div",{},...j.closest.map(c=>chip(c)))]:[])];
-  out.push(node("n-ans","Answer",j.status==="answered"?"Answer":"No answer","answer",...ans,feedbackBlock(j)));
-  out.push(node("n-next","Next step","Flag this answer for review","",...reviewBlock(j)));
-  return out}
-function placeholder(){canvas.replaceChildren(node("n-start","Start","Ask a question","in",el("p",{textContent:"The answer is built here step by step: the sources found, the quote check on every drafted claim, then the answer."}),el("p",{class:"muted",textContent:"Drag to move. Pinch or hold Ctrl and scroll to zoom. Use the list on the left to jump."})));
-  nodes=[canvas.firstChild];$("spy").replaceChildren();setTimeout(()=>focusNode(nodes[0]),0)}
-function buildNav(){$("spy").replaceChildren(...nodes.map(n=>el("button",{type:"button","data-id":n.id,textContent:n.querySelector(".tag").textContent,onclick:()=>focusNode(n)})))}
-const STAGES=[[0,"Searching your libraries"],[800,"Drafting with the model, about ten seconds"],[12000,"Checking again: the first draft failed a check and is being redone"],[26000,"Still waiting on the model"]];
-let stageTimers=[];function waitStage(on){stageTimers.forEach(clearTimeout);stageTimers=[];const st=$("status");st.classList.toggle("busy",on);if(!on)return;STAGES.forEach(([ms,t])=>stageTimers.push(setTimeout(()=>{st.textContent=t+"…";},ms)));}
-async function ask(){const q=$("q").value.trim();if(!q)return;$("go").disabled=true;$("status").textContent="";waitStage(true);
-  try{const j=await post("/api/ask",{user:$("user").value,question:q});waitStage(false);lastAudit=j.audit_id;switchTab("canvas");renderSteps(j,q);nodes=build(j,q);canvas.replaceChildren(...nodes);buildNav();
-    const last=nodes[nodes.length-1],answer=nodes[nodes.length-2];
-    for(const n of nodes.slice(0,-1)){n.classList.add("in");focusNode(n);await sleep(reduced?0:900)}
-    last.classList.add("in");focusNode(answer);  /* the next step appears quietly; the camera stays on the answer */
-    $("status").textContent="Model: "+j.model}
-  catch(e){waitStage(false);$("status").textContent=e.message}finally{waitStage(false);$("go").disabled=false}}
-/* tabs and the steps view */
-function switchTab(t){$("stage").hidden=t!=="canvas";$("steps").hidden=t!=="steps";$("find").hidden=t!=="find";["canvas","steps","find"].forEach(x=>$("tab-"+x).setAttribute("aria-selected",String(t===x)));
-  if(t==="canvas"&&nodes.length)requestAnimationFrame(()=>focusNode(current||nodes[0]))}
-$("tab-canvas").onclick=()=>switchTab("canvas");$("tab-steps").onclick=()=>switchTab("steps");
-const fmtMs=ms=>ms<1000?ms+" ms":(ms/1000).toFixed(1)+" s";
-function stepLine(s){
-  if(s.kind==="search")return "Searched "+(s.libraries.join(", ")||"no libraries")+" for: "+(s.query||"no usable words");
-  if(s.kind==="draft")return s.error?"Attempt "+s.attempt+": "+s.model+" did not answer":"Attempt "+s.attempt+": "+s.model+" drafted "+s.claims+" claim"+(s.claims===1?"":"s");
-  if(s.kind==="check")return "Quote check, attempt "+s.attempt+": "+s.kept+" kept, "+s.removed+" removed";
-  return "Retried once, with the reasons the first attempt failed"}
-function stepBody(s,j){
-  if(s.kind==="search"){const items=[];
-    if(s.editions.length)items.push(el("li",{textContent:"Limited to "+s.editions.join(" and ")+", because the question names "+(s.editions.length>1?"them":"it")+"."}));
-    items.push(el("li",{textContent:s.found?"Found "+s.found+" passage"+(s.found===1?"":"s")+" in "+Object.entries(s.documents).map(([t,n])=>t+" ("+n+")").join(", ")+".":"No passage matched. Nothing was drafted."}));
-    return [el("ul",{},...items),...j.retrieved.slice(0,6).map(srcCard)]}
-  if(s.kind==="draft")return [s.error?el("p",{class:"muted",textContent:"The model endpoint failed ("+s.error+"). Nothing was drafted, so the answer is a refusal; ask again in a moment."}):el("p",{class:"muted",textContent:"The model sees only the retrieved passages. It must return an exact quote for every claim. It never sees libraries the user cannot search."})];
-  if(s.kind==="check")return [s.reasons.length?el("ul",{},...s.reasons.map(r=>el("li",{textContent:"Removed: "+r})) ):el("p",{class:"muted",textContent:"Every quote was found on its cited page, and every number in a claim was in its quote."}),el("p",{class:"muted",textContent:"Plain string check. No model is involved."})];
-  return [el("ul",{},...(s.feedback||[]).map(f=>el("li",{textContent:f})))]}
-function renderSteps(j,q){
-  const steps=j.trace.filter(s=>s.kind!=="outcome"),out=j.trace.find(s=>s.kind==="outcome");
-  const list=$("steplist"),cards=[],bodies=[];
-  const trigger=el("div",{class:"step",id:"st-trigger"},el("div",{class:"stephead"},el("span",{textContent:"Question"}),el("span",{class:"tag",textContent:"Trigger"})),el("p",{textContent:q}),el("p",{class:"muted",textContent:"Asked as "+$("user").value+"."}));
-  const toggle=el("button",{type:"button",class:"toggle",textContent:"Expand "+steps.length+" steps",onclick:()=>{const open=bodies.every(b=>!b.hidden);bodies.forEach(b=>{b.hidden=open});toggle.textContent=(open?"Expand ":"Collapse ")+steps.length+" steps"}});
-  steps.forEach((s,i)=>{const body=el("div",{class:"stepbody",hidden:true},...stepBody(s,j));bodies.push(body);
-    const line=el("button",{type:"button",class:"stepline","aria-expanded":"false",onclick:()=>{body.hidden=!body.hidden;line.setAttribute("aria-expanded",String(!body.hidden))}},el("span",{textContent:stepLine(s)}),el("span",{textContent:"▾"}));
-    const card=el("div",{class:"step",id:"st-"+i,"data-kind":s.kind},el("div",{class:"stephead"},el("span",{textContent:"Investigation step"}),el("span",{class:"tag",textContent:"Step "+(i+1)})),line,body,
-      el("div",{class:"foot"},el("span",{class:"kind",textContent:s.tag}),el("span",{textContent:s.ms!=null?"Duration "+fmtMs(s.ms):""})));cards.push(card)});
-  const status=j.status==="answered"?"Answered with "+out.claims+" claim"+(out.claims===1?"":"s")+" that passed the quote check":(out.found?"No answer: nothing survived the quote check":"No answer: no passage matched");
-  const concl=el("div",{class:"step",id:"st-end"},el("span",{class:"tag",textContent:"Conclusion"}),el("h2",{style:"font-size:1.02rem;margin:.2rem 0",textContent:status}),
-    el("p",{class:"muted",textContent:"The quote check proves each quote is on its cited page. It does not prove the claim answers the question."}));
-  list.replaceChildren(trigger,toggle,...cards,concl);
-  const rail=$("rail");rail.replaceChildren(...[["Question",trigger],...cards.map((c,i)=>["Step "+(i+1),c]),["Conclusion",concl]].map(([t,target])=>el("button",{type:"button","data-t":target.id,textContent:t,onclick:()=>target.scrollIntoView({behavior:reduced?"auto":"smooth",block:"start"})})));
-  if(stepsIO)stepsIO.disconnect();
-  stepsIO=new IntersectionObserver(es=>{es.forEach(e=>{if(e.isIntersecting)rail.querySelectorAll("button").forEach(b=>b.setAttribute("aria-current",String(b.dataset.t===e.target.id)))})},{root:$("steps"),rootMargin:"-30% 0px -55% 0px"});
-  [trigger,...cards,concl].forEach(c=>stepsIO.observe(c))}
-function showHow(c){switchTab("steps");const first=$("st-0");if(!first)return;const body=first.querySelector(".stepbody"),line=first.querySelector(".stepline");body.hidden=false;line.setAttribute("aria-expanded","true");
-  const card=[...first.querySelectorAll(".src")].find(x=>x.dataset.key===c.doc_id+":"+c.page);
-  const target=card||first;if(card)card.classList.add("open");target.classList.remove("flash");void target.offsetWidth;target.classList.add("flash");target.scrollIntoView({behavior:reduced?"auto":"smooth",block:"center"})}
-let stepsIO=null;
-/* page setup */
-async function loadUsers(){const j=await api("/api/users");j.users.forEach(u=>$("user").append(el("option",{value:u,textContent:u})));
-  if(j.model.startsWith("extractive")){$("banner").hidden=false;$("banner").textContent="No model key is set, so answers come from an extractive baseline that quotes the best-matching sentence. It is often irrelevant. This is not the real assistant."}}
-$("go").onclick=ask;$("findBtn").onclick=findPages;$("tab-find").onclick=()=>switchTab("find");
-async function findPages(){const q=$("q").value.trim();if(!q)return;const list=$("findList"),head=$("findHead");switchTab("find");list.replaceChildren();head.textContent="Finding…";
-  try{const j=await api("/api/find?"+new URLSearchParams({user:$("user").value,q}));
-    head.textContent=(j.hits.length?j.hits.length+" page"+(j.hits.length===1?"":"s")+" for ":"No page for ")+(j.query||"nothing searchable")+(j.editions.length?" in "+j.editions.join(", "):"")+" · "+j.ms+" ms · no model call";
-    if(!j.hits.length){list.appendChild(el("li",{class:"muted",textContent:"No page contains all of those words. Try fewer words, OR between alternatives, or a phrase in quotes."}));return;}
-    j.hits.forEach(h=>{const li=el("li",{class:"hit"});const top=el("div",{class:"hittop"});const t=el("button",{type:"button",class:"chip",textContent:h.title+", p. "+h.page,onclick:()=>showPage({doc_id:h.doc_id,page:h.page,quote:""})});top.appendChild(t);
-      const pdf=el("a",{class:"pdf",href:"/files/"+h.doc_id+"?user="+encodeURIComponent($("user").value)+"#page="+h.page,target:"_blank",rel:"noopener",textContent:"PDF"});top.appendChild(pdf);li.appendChild(top);
-      const sn=el("p",{class:"snip"});h.snippet.forEach(([t,m])=>sn.appendChild(m?el("mark",{textContent:t}):document.createTextNode(t)));li.appendChild(sn);list.appendChild(li);});}
-  catch(e){head.textContent=e.message}};$("q").addEventListener("keydown",e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))ask()});
-function meLink(){$("melink").href="/dashboard?user="+encodeURIComponent($("user").value);}
-$("user").addEventListener("change",meLink);
-async function replay(id){$("go").disabled=true;try{const j=await api("/api/answer/"+id+"?user="+encodeURIComponent($("user").value));lastAudit=j.audit_id;$("q").value=j.question;switchTab("canvas");renderSteps(j,j.question);nodes=build(j,j.question);canvas.replaceChildren(...nodes);buildNav();
-    nodes.forEach(n=>n.classList.add("in"));focusNode(nodes[nodes.length-2]);$("status").textContent="Stored answer from "+j.at.replace("T"," ").slice(0,16)+" UTC · model "+j.model+" · no model call";if(new URLSearchParams(location.search).get("tab")==="steps")switchTab("steps")}
-  catch(e){$("status").textContent=e.message}finally{$("go").disabled=false}}
-loadUsers().then(()=>{const u=new URLSearchParams(location.search);if([...$("user").options].some(o=>o.value===u.get("user")))$("user").value=u.get("user");meLink();if(u.get("q")){$("q").value=u.get("q");}
-  if(u.get("q")){$("q").value=u.get("q").slice(0,500);$("q").focus();$("q").setSelectionRange($("q").value.length,$("q").value.length);}placeholder();if(u.get("a"))replay(u.get("a"));else if(u.get("find")==="1")findPages();else if(u.get("run")==="1")ask().then(()=>{if(u.get("tab")==="steps")switchTab("steps");if(u.get("expand")==="1"){const t=document.querySelector("#steplist .toggle");if(t&&t.textContent.startsWith("Expand"))t.click()}})});
-</script></body></html>
-"""
-
-
+INDEX_HTML = (STATIC / "desk.html").read_text(encoding="utf-8")
+ACTIVITY_HTML = (STATIC / "activity.html").read_text(encoding="utf-8")
 
 
 DASHBOARD_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title>Research assistant · admin</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<script>document.documentElement.dataset.theme=localStorage.getItem("ra-theme")||"light"</script>
+<link rel="stylesheet" href="/static/tokens.css">
 <style>
 /* One screen, dense, like the home board: counts and names in fixed panels, text bars, tabular figures, no prose where a number will do. */
-:root{--bg:#f6f4ef;--fg:#1d1b17;--dim:#6b665c;--card:#fffdf8;--line:#e3ded2;--accent:#b4531f;--ok:#2f7d4f;--warn:#a8741a;
- --mono:ui-monospace,Menlo,Consolas,monospace;--serif:Charter,'Iowan Old Style',Georgia,serif;--s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px}
-@media (prefers-color-scheme:dark){:root{--bg:#14130f;--fg:#ece8dd;--dim:#9a9486;--card:#1d1b16;--line:#2e2b23;--accent:#e08a52;--ok:#6cc38b;--warn:#e0b45a}}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 system-ui,-apple-system,sans-serif}
+:root{--bg:var(--desk);--fg:var(--text);--dim:var(--text-muted);--card:var(--panel);--accent:var(--action);
+ --mono:var(--font-data);--serif:var(--font-read);--s1:var(--space-1);--s2:var(--space-2);--s3:var(--space-3);--s4:var(--space-4);--s5:var(--space-6)}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 var(--font-ui)}
 main{max-width:1200px;margin:0 auto;padding:var(--s3) var(--s4) var(--s5)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -1291,22 +1338,15 @@ h1{font-size:1rem;margin:0;font-weight:650}.top .meta{flex:1}
 h2 .exp{background:none;border:1px solid transparent;border-radius:4px;color:var(--dim);font:inherit;letter-spacing:0;text-transform:none;padding:0 var(--s1);cursor:pointer;margin-left:auto}h2 .exp:hover{border-color:var(--line)}h2 .exp[aria-pressed=true]{color:var(--accent)}
 .panel.open table{width:auto;min-width:60%}.panel.open table:has(td.wrap){width:100%}td.wrap{white-space:normal}
 .panel td a{color:var(--accent);text-decoration:none}.panel td a:hover{text-decoration:underline}
-.ana{display:grid;grid-template-columns:minmax(16rem,1fr) 2fr;gap:var(--s4)}@media(max-width:900px){.ana{grid-template-columns:1fr}}
-.anaform{display:grid;gap:var(--s2);margin-top:var(--s2)}.anaform input,.anaform textarea{font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);width:100%}.anaform .docs{display:grid;gap:2px;font-size:.8rem;max-height:9rem;overflow:auto}.anaform .row2{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
-details summary{cursor:pointer;color:var(--accent);font-size:.85rem;margin-top:var(--s2)}
-.anahead{display:flex;gap:var(--s2);align-items:baseline;margin-bottom:var(--s2);flex-wrap:wrap}
-table.matrix td,table.matrix th{white-space:normal;vertical-align:top;border-bottom:1px solid var(--line);padding:.3rem .4rem}table.matrix td.qq{font:1rem/1.35 var(--serif);min-width:12rem}table.matrix td.cell{font-size:.8rem;min-width:7rem}table.matrix td.cell.answered a{color:var(--fg)}table.matrix td.cell.not_found{color:var(--dim)}table.matrix td.cell.pending{color:var(--dim)}
 .todo tr{cursor:pointer}.todo tr[aria-current=true] td{background:color-mix(in srgb,var(--accent) 12%,transparent)}.todo tr:focus-visible{outline:2px solid var(--accent)}
 .panel.focus{box-shadow:none}.panel.focus .tododetail{columns:1}
 .tododetail{margin-top:var(--s2);border-top:1px solid var(--line);padding-top:var(--s2);font-size:.8rem}.tododetail table{margin-bottom:var(--s1)}.tododetail td{white-space:normal}.tododetail p.meta{margin:var(--s1) 0 0}
-.filter{width:100%;max-width:28rem;margin:0 0 var(--s2);font:inherit;padding:var(--s1) var(--s2);border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg)}
 .layoutnote{font-size:.75rem;color:var(--dim);margin:var(--s2) 0 0;display:flex;gap:var(--s3);align-items:baseline}
 h2{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin:0 0 var(--s2);display:flex;justify-content:space-between;gap:var(--s2)}
 h2 b{color:var(--fg);letter-spacing:0;text-transform:none;font-weight:600}
 table{border-collapse:collapse;width:100%}td,th{padding:.18rem .3rem;vertical-align:baseline;text-align:left;white-space:nowrap}
 th{font-size:.7rem;color:var(--dim);font-weight:500;border-bottom:1px solid var(--line)}
 td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}td.q{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;width:100%}
-td.q.w{width:60%}
 td.t{font-family:var(--mono);color:var(--dim);font-size:.78rem}tr:hover td{background:color-mix(in srgb,var(--line) 40%,transparent)}
 .bar{font-family:var(--mono);color:var(--dim);letter-spacing:-.08em;font-size:.72rem}
 .big{font-size:1.45rem;font-weight:600;color:var(--fg);font-family:var(--mono);line-height:1}
@@ -1314,20 +1354,20 @@ td.t{font-family:var(--mono);color:var(--dim);font-size:.78rem}tr:hover td{backg
 .ok{color:var(--ok)}.bad{color:var(--warn)}.dim{color:var(--dim)}
 .ring{width:3rem;height:3rem;transform:rotate(-90deg);flex:none}.ring circle{fill:none;stroke-width:3.6}.ring .track{stroke:var(--line)}.ring .fill{stroke:var(--fg);stroke-linecap:round}
 .cover{display:flex;gap:.7rem;align-items:center;margin-bottom:.4rem}
-.tl{width:100%;display:block}.tl text{font:11px system-ui,-apple-system,sans-serif;fill:var(--fg)}.tl text.dim{fill:var(--dim);font-size:10px}.tl .lane{stroke:var(--line);stroke-width:1}.tl .chain{stroke:var(--dim);stroke-dasharray:2 3}.tl .dot{fill:var(--card);stroke:var(--fg);stroke-width:1.3}.tl .seg{stroke:none}.tl .lab{fill:var(--dim);font-size:10px;letter-spacing:.06em}
+.tl{width:100%;display:block}.tl text{font:11px var(--font-ui);fill:var(--fg)}.tl text.dim{fill:var(--dim);font-size:10px}.tl .lane{stroke:var(--line);stroke-width:1}.tl .chain{stroke:var(--dim);stroke-dasharray:2 3}.tl .dot{fill:var(--card);stroke:var(--fg);stroke-width:1.3}.tl .seg{stroke:none}.tl .lab{fill:var(--dim);font-size:10px;letter-spacing:.06em}
 .legend{display:flex;gap:.9rem;font-size:.75rem;color:var(--dim);margin-top:.3rem}.legend i{display:inline-block;width:.6rem;height:.6rem;border-radius:2px;vertical-align:-1px;margin-right:.3rem}
 .foot{margin-top:.8rem;display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;font-size:.78rem;color:var(--dim)}.foot b{color:var(--fg);font-weight:600}@media(max-width:900px){.foot{grid-template-columns:1fr}}
 .empty{color:var(--dim);padding:.3rem 0}
 form.inline{display:grid;grid-template-columns:auto 1fr auto;gap:.4rem;align-items:center}form.inline.keys{grid-template-columns:1fr auto auto}
 input,select,button.go{font:inherit;padding:.4rem .6rem;border-radius:.4rem;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
-button.go{background:var(--accent);border-color:var(--accent);color:#fff;cursor:pointer}button.go:disabled{opacity:.6;cursor:progress}button.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
+button.go{background:var(--accent);border-color:var(--accent);color:var(--on-action);cursor:pointer}button.go:disabled{opacity:.6;cursor:progress}button.link{background:none;border:0;color:var(--dim);text-decoration:underline;padding:0;font:inherit;cursor:pointer}
 .out{margin-top:.5rem;font-size:.85rem}.keyval{font-family:var(--mono);user-select:all}
 #login{margin:4rem auto;max-width:22rem;display:grid;gap:.5rem}#login label{font-size:.85rem;color:var(--dim)}
 #help{margin:.4rem 0 0;padding:.5rem .7rem;border-left:2px solid var(--accent);font-size:.85rem;color:var(--dim)}
 [hidden]{display:none!important}
 </style></head><body><main>
 <div class="top"><h1 id="h1">Research assistant · admin</h1><span class="meta" id="model"></span>
-<nav class="nav" aria-label="Pages"><a href="/" id="navChat">Chat</a><a id="navMe" href="/dashboard" hidden>Your board</a><a href="/dashboard" id="navAdmin" aria-current="page">Admin</a></nav>
+<nav class="nav" aria-label="Pages"><a href="/" id="navChat">Research desk</a><a href="/dashboard" id="navAdmin" aria-current="page">Admin</a></nav>
 <div class="tabs" role="tablist"><button role="tab" aria-selected="true" data-v="board">Board</button><button role="tab" aria-selected="false" data-v="tools">Try a question · keys</button></div>
 <button class="link" id="helpBtn" type="button">what is this?</button><button class="link" id="forget" type="button">forget token</button></div>
 <div id="msg" class="meta bad"></div>
@@ -1365,7 +1405,7 @@ function hm(iso){return iso.replace("T"," ").slice(5,16);}
 function fillT(id,rows,head,emptyText){const t=$(id);if(!t)return;t.textContent="";if(head){const h=el("tr");head.forEach(x=>{const c=el("th",x.startsWith(">")?"n":"",x.replace(/^>/,""));h.appendChild(c);});t.appendChild(h);}
  if(!rows.length){const r=el("tr");const c=el("td","empty",emptyText);c.colSpan=(head||[1]).length;r.appendChild(c);t.appendChild(r);return;}rows.forEach(r=>t.appendChild(r));}
 function show(name,msg){["login","view"].forEach(n=>$(n).hidden=n!==name);$("msg").textContent=msg||"";}
-const USERC=["#b4531f","#6b665c","#2f7d4f","#a8741a","#3f6fa8"];
+const USERC=["var(--series-1)","var(--series-2)","var(--series-3)","var(--series-4)","var(--series-5)"];
 function timeline(g){const svg=$("tl");svg.textContent="";const ns="http://www.w3.org/2000/svg",mk=(t,a)=>{const e=document.createElementNS(ns,t);for(const k in a)e.setAttribute(k,a[k]);return e;};
  const libs=g.nodes.filter(n=>n.kind==="library"),docs=g.nodes.filter(n=>n.kind==="document"),users=g.nodes.filter(n=>n.kind==="user").map(u=>u.label);
  const W=800,laneH=58,padL=90,padR=70,H=laneH*libs.length+22;svg.setAttribute("viewBox","0 0 "+W+" "+H);
@@ -1380,7 +1420,7 @@ function timeline(g){const svg=$("tl");svg.textContent="";const ns="http://www.w
   mine.forEach((d,j)=>{const cx=x(d),r=3+8*Math.sqrt(d.citations/maxC);if(j>0){const p=mine[j-1];svg.appendChild(mk("line",{x1:x(p),y1:y,x2:cx,y2:y,class:"chain"}));}
    const c=mk("circle",{cx,cy:y,r,class:"dot"});const tt=mk("title",{});tt.textContent=d.label+" · "+d.citations+" citation"+(d.citations===1?"":"s");c.appendChild(tt);svg.appendChild(c);
    const lbl=mk("text",{x:cx,y:y-r-5,"text-anchor":"middle"});lbl.textContent=d.edition[0]?MON[d.edition[1]]+" "+d.edition[0]:d.label.replace(/ \(synthetic\)$/,"").slice(0,16);svg.appendChild(lbl);
-   const split=by["D"+d.id.slice(1)]||{};const tot=Object.values(split).reduce((a,b)=>a+b,0);if(tot){let sx=cx-14;const bw=28;users.forEach((u,ui)=>{const w=bw*(split[u]||0)/tot;if(w){const rct=mk("rect",{x:sx,y:y+r+5,width:w,height:4,class:"seg",fill:USERC[ui%USERC.length]});const t2=mk("title",{});t2.textContent=u+" "+split[u];rct.appendChild(t2);svg.appendChild(rct);sx+=w;}});
+   const split=by["D"+d.id.slice(1)]||{};const tot=Object.values(split).reduce((a,b)=>a+b,0);if(tot){let sx=cx-14;const bw=28;users.forEach((u,ui)=>{const w=bw*(split[u]||0)/tot;if(w){const rct=mk("rect",{x:sx,y:y+r+5,width:w,height:4,class:"seg",style:"fill:"+USERC[ui%USERC.length]});const t2=mk("title",{});t2.textContent=u+" "+split[u];rct.appendChild(t2);svg.appendChild(rct);sx+=w;}});
     const n=mk("text",{x:cx,y:y+r+19,"text-anchor":"middle",class:"dim"});n.textContent=tot;svg.appendChild(n);}});});
  if(docs.some(d=>!d.edition[0])){const t=mk("text",{x:W-padR+30,y:H-2,"text-anchor":"middle",class:"dim"});t.textContent="undated";svg.appendChild(t);}
  $("legend").textContent="";users.forEach((u,i)=>{const s=el("span");const sw=el("i");sw.style.background=USERC[i%USERC.length];s.appendChild(sw);s.appendChild(document.createTextNode(u));$("legend").appendChild(s);});
@@ -1393,18 +1433,9 @@ const T={
  recent:{title:"Recent",sub:'<span id="recentN"></span>',body:'<table id="recent"></table>'},
  runs:{title:"Runs",sub:'<span>wrong and confident</span>',body:'<table id="runs"></table>'},
  users:{title:"Users",sub:'<span id="usersN"></span>',body:'<table id="users"></table>'},
- people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'},
- library:{title:"Your library",sub:'<span id="libN"></span>',body:'<input id="libFilter" class="filter" placeholder="Filter by title or year" aria-label="Filter reports"><table id="library"></table>'},
- analyses:{title:"Your analyses",sub:'<span id="anaN"></span>',body:'<div class="ana"><div><table id="analyses"></table><details id="anaNew"><summary>New analysis</summary><form id="anaForm" class="anaform"><input id="anaName" maxlength="80" placeholder="Name, for example: Growth outlook by edition" required><textarea id="anaQs" rows="4" placeholder="One question per line, written to fit any edition: What GDP growth is projected for the coming year?"></textarea><div id="anaDocs" class="docs"></div><div class="row2"><span class="meta" id="anaCost"></span><button class="go">Create and run</button></div></form></details></div><div id="anaView" class="meta">Pick an analysis to see its table, or make one. Each cell is one question asked inside one report: a checked claim with its page, or a refusal.</div></div>'},
- answers:{title:"Your recent answers",sub:'<span id="ansN"></span>',body:'<table id="answers"></table>'},
- usage:{title:"Your usage",sub:'<span id="useN"></span>',body:'<table id="myuse"></table><p class="meta" id="mylibs"></p>'},
- ratings:{title:"Your ratings",sub:'<span id="ratN"></span>',body:'<table id="ratings"></table>'},
- reviews:{title:"Your review requests",sub:'<span id="revN"></span>',body:'<table id="reviews"></table>'}};
-const ME=new URLSearchParams(location.search).get("user")||"";
-let LAYOUT=null,CAT={},OWNER=ME?"user:"+ME:"admin";
-// In user mode every call goes to /api/me with the user in the query and no admin token.
-function api(path){if(!ME)return path;return path.replace("/api/admin/","/api/me/")+(path.includes("?")?"&":"?")+"user="+encodeURIComponent(ME);}
-function hdr(extra){return Object.assign(ME?{}:{"X-Token":tok()},extra||{});}
+ people:{title:"People",sub:'<span id="peopleN"></span>',body:'<table id="people"></table>'}};
+let LAYOUT=null,CAT={},OWNER="admin";
+function hdr(extra){return Object.assign({"X-Token":tok()},extra||{});}
 function buildGrid(){const g=$("grid");g.textContent="";
  LAYOUT.layout.widgets.forEach((w,i)=>{const t=T[w.type];if(!t)return;const home=CAT[w.type]?CAT[w.type].span:4;const open=w.span===12&&home!==12;const p=el("div","panel"+(w.span===12?" w12":""));p.style.setProperty("--span",w.span);
   if(w.x!==null&&w.x!==undefined){p.dataset.x=w.x;p.style.setProperty("--x",w.x);}
@@ -1414,10 +1445,10 @@ function buildGrid(){const g=$("grid");g.textContent="";
  let n=$("layoutnote");if(!n){n=el("p","layoutnote");n.id="layoutnote";g.after(n);}n.textContent="";
  n.appendChild(document.createTextNode("Layout: "+LAYOUT.layout.widgets.length+" widgets, "+(LAYOUT.saved?"saved "+hm(LAYOUT.updated_at):"catalogue default")+" · a JSON document per owner ("+OWNER+") · expand writes a width back · Esc shrinks all"));
  if(LAYOUT.saved){const r=el("button","link","reset to default");r.type="button";r.onclick=resetLayout;n.appendChild(r);}}
-async function saveLayout(){const r=await fetch(api("/api/admin/layout"),{method:"PUT",headers:hdr({"content-type":"application/json"}),body:JSON.stringify(ME?{user:ME,layout:LAYOUT.layout}:{owner:OWNER,layout:LAYOUT.layout})});
+async function saveLayout(){const r=await fetch("/api/admin/layout",{method:"PUT",headers:hdr({"content-type":"application/json"}),body:JSON.stringify({owner:OWNER,layout:LAYOUT.layout})});
  if(r.ok){LAYOUT=await r.json();}else{$("msg").textContent="Layout not saved ("+r.status+").";}}
 async function toggle(i){const w=LAYOUT.layout.widgets[i];w.span=w.span===12?(CAT[w.type]?CAT[w.type].span:4):12;buildGrid();await saveLayout();buildGrid();}
-async function resetLayout(){const r=await fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{method:"DELETE",headers:hdr()});if(r.ok){LAYOUT=await r.json();buildGrid();}}
+async function resetLayout(){const r=await fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{method:"DELETE",headers:hdr()});if(r.ok){LAYOUT=await r.json();buildGrid();}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&LAYOUT&&LAYOUT.layout.widgets.some(w=>w.span===12)){LAYOUT.layout.widgets.forEach(w=>{if(w.span===12)w.span=CAT[w.type]?CAT[w.type].span:4;});buildGrid();saveLayout();}});
 function setT(id,t){const e=$(id);if(e)e.textContent=t;}
 let TODO_OPEN=null;
@@ -1432,43 +1463,11 @@ async function loadTodo(kind,row){const box=$("todoDetail");if(!box)return;if(TO
  else if(kind==="wrong"){if(j.run)box.appendChild(el("p","meta","Run "+j.run.name+" · "+j.run.date));const t=el("table");j.rows.forEach(x=>{const row=tr([td("mono dim",x.id),td("q",x.question,x.question),td(x.answerable?"dim":"bad",x.answerable?"answerable":"should refuse")]);t.appendChild(row);x.claims.forEach(c=>{const sub=tr([td("",""),td("q dim",c.text,c.text),td("t",c.short+", p. "+c.page,c.title)]);t.appendChild(sub);});});box.appendChild(t);if(!j.rows.length)box.appendChild(el("p","empty","Nothing wrong in the latest run."));}
  else {box.appendChild(el("p","meta",j.run?("Latest run "+j.run.name+" on "+j.run.date):"No saved run."));}
  box.appendChild(el("p","meta",j.why));}
-let ANA_DOCS=null,ANA_TIMER=null;
-async function anaFormInit(){const f=$("anaForm");if(!f||f.dataset.wired)return;f.dataset.wired="1";
- const r=await fetch(api("/api/me/analyses"),{headers:hdr()});if(!r.ok)return;const j=await r.json();ANA_DOCS=j.docs;const box=$("anaDocs");box.textContent="";
- j.docs.forEach(d=>{const lab=el("label");const c=el("input");c.type="checkbox";c.value=d.id;c.checked=true;lab.appendChild(c);lab.appendChild(document.createTextNode(" "+d.title));box.appendChild(lab);});
- const cost=()=>{const q=$("anaQs").value.split("\n").filter(x=>x.trim()).length,n=box.querySelectorAll("input:checked").length;$("anaCost").textContent=q&&n?q+" question"+(q===1?"":"s")+" × "+n+" report"+(n===1?"":"s")+" = "+(q*n)+" model calls, about "+Math.round(q*n*10/60)+" min on "+j.model+(q*n>j.limits.cells?" · over the limit of "+j.limits.cells:""):"";};
- $("anaQs").addEventListener("input",cost);box.addEventListener("change",cost);cost();
- f.onsubmit=async e=>{e.preventDefault();const btn=f.querySelector("button");btn.disabled=true;btn.textContent="Creating…";
-  const body={user:ME,name:$("anaName").value,questions:$("anaQs").value.split("\n").filter(x=>x.trim()),doc_ids:[...box.querySelectorAll("input:checked")].map(c=>+c.value)};
-  try{const r=await fetch("/api/me/analyses",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});const j=await r.json();
-   if(!r.ok){$("anaView").textContent=j.detail||("Could not create ("+r.status+")");return;}
-   const run=await fetch("/api/me/analyses/"+j.id+"/run?user="+encodeURIComponent(ME),{method:"POST"});if(!run.ok){const e2=await run.json();$("anaView").textContent=e2.detail||"Could not start";}
-   $("anaNew").open=false;delete DATA.analyses;loadWidget("analyses");openAnalysis(j.id);}
-  finally{btn.disabled=false;btn.textContent="Create and run";}};}
-async function openAnalysis(id){clearTimeout(ANA_TIMER);const v=$("anaView");if(!v)return;const r=await fetch("/api/me/analyses/"+id+"?user="+encodeURIComponent(ME));if(!r.ok){v.textContent="Could not load that analysis ("+r.status+").";return;}
- const a=await r.json();v.textContent="";v.className="ana-view";
- const head=el("div","anahead");head.appendChild(el("b","",a.name));head.appendChild(el("span","meta"," · "+a.status+" · "+a.done+" of "+a.total+" cells, "+a.answered+" answered"+(a.finished_at?" · finished "+hm(a.finished_at):"")));
- if(a.status==="done"||a.status==="failed"){const del=el("button","link","delete");del.type="button";del.onclick=async()=>{if(!confirm("Delete this analysis? Its answers stay in your history."))return;await fetch("/api/me/analyses/"+id+"?user="+encodeURIComponent(ME),{method:"DELETE"});delete DATA.analyses;loadWidget("analyses");v.className="meta";v.textContent="Deleted.";};head.appendChild(del);}
- v.appendChild(head);
- const t=el("table","matrix");const hr=el("tr");hr.appendChild(el("th","","question"));a.docs.forEach(d=>{const th=el("th","n",d.short);th.title=d.title;hr.appendChild(th);});t.appendChild(hr);
- a.questions.forEach((q,qi)=>{const row=el("tr");row.appendChild(td("qq",q,q));a.docs.forEach(d=>{const c=a.cells[qi+":"+d.id]||{status:"pending"};const cell=el("td","cell "+c.status);
-  if(c.status==="answered"){const l=el("a","",c.claim);l.href="/?user="+encodeURIComponent(ME)+"&a="+c.audit_id;l.title="p. "+c.page+(c.claims>1?" · "+c.claims+" claims":"")+" · opens the stored answer";cell.appendChild(l);cell.appendChild(el("span","meta"," p."+c.page));}
-  else if(c.status==="not_found"){const l=el("a","dim","not found");l.href="/?user="+encodeURIComponent(ME)+"&a="+c.audit_id;cell.appendChild(l);}
-  else cell.textContent=c.status==="pending"?(a.status==="running"?"…":"not run"):c.status;
-  row.appendChild(cell);});t.appendChild(row);});
- v.appendChild(t);
- if(a.status==="running"||a.status==="new")ANA_TIMER=setTimeout(()=>openAnalysis(id),3000);}
 function isOpen(type){return !!(LAYOUT&&LAYOUT.layout.widgets.some(w=>w.type===type&&w.span===12));}
 // The head loads first and once: brief, key figures, sources. Each widget then fetches only its own slice when it
 // scrolls into view, and keeps it, so expanding or shrinking re-fills from memory without another request.
 const DATA={};
 function renderHead(d){
- if(ME){document.title="Research assistant · "+ME;$("h1").textContent="Research assistant · "+ME;$("model").textContent=ME+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
-  const b=$("brief");b.textContent=d.brief||"";
-  const kr=$("keyrow");kr.textContent="";const share=d.usage.asked?Math.round(100*d.usage.answered/d.usage.asked):0;
-  [[String(d.usage.asked),"questions asked",""],[share+"%","answered with checked citations",""],[d.ratings.up+" / "+d.ratings.down,"rated up / down",d.ratings.down?"bad":""],[String(d.reviews.open),"review requests open",d.reviews.open?"bad":""],[String(d.usage.libraries.length),"libraries you can search",""]]
-   .forEach(([v,k,c])=>{const x=el("div");x.appendChild(el("span","v "+c,v));x.appendChild(el("span","k",k));kr.appendChild(x);});
-  $("built").textContent="Board built "+d.now.replace("T"," ")+" UTC · your rows from the audit log, your ratings and review requests · nobody else's.";return;}
  $("model").textContent="model "+d.usage.model+" · "+d.usage.asked+" asked, "+d.usage.answered+" answered, "+d.usage.not_found+" not found";
  const b=$("brief");b.textContent="";if(d.brief){b.appendChild(document.createTextNode(d.brief+" "));const w=el("span","why","why?");w.title=d.brief_why+". Silent when nothing happened.";b.appendChild(w);}else{b.appendChild(el("span","meta","Nothing new since this device last looked ("+d.brief_why+")."));}
  let seen=false;try{seen=localStorage.getItem("ra.explained")==="1";}catch(e){}$("help").hidden=seen;
@@ -1485,23 +1484,10 @@ const FILL={
  runs(d){ if(isOpen("runs"))fillT("runs",d.runs.map(r=>tr([td("",r.name),td("t",r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n",r.correct+"/"+r.answerable),td("n dim",r.timid),td("n dim",r.correct_refusal+"/"+(r.questions-r.answerable)),td("n dim",r.retrieval==null?"":r.retrieval.toFixed(2))])),["run","saved",">wrong",">correct",">timid",">refused right",">retrieval"],"No saved run."); else fillT("runs",d.runs.map(r=>tr([td("",r.name,r.date),td(r.wrong_and_confident?"n bad":"n ok",r.wrong_and_confident),td("n dim",r.correct+"/"+r.answerable,"correct of answerable · timid "+r.timid+" · refused right "+r.correct_refusal)])),["run",">wrong",">correct"],"No saved run."); },
  users(d){ setT("usersN",d.usage.users.length); fillT("users",d.usage.users.map(u=>tr([td("",u.user),el("td","bar",u.bar),td("n",u.asked),td("n ok",u.answered),td("n bad",u.not_found)])),["user","",">asked",">ok",">not found"],"No questions yet."); },
  people(d){ const ppl=d.people;setT("peopleN",ppl.up+" up · "+ppl.down+" down · "+ppl.reviews_open.length+" review"+(ppl.reviews_open.length===1?"":"s")+" open"); const prow=[];ppl.reviews_open.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("","review"),td("q",r.question+(r.note?" · "+r.note:""),r.question)])));ppl.down_reasons.forEach(r=>prow.push(tr([td("t",hm(r.at)),td("",r.user),td("bad","down"),td("q",r.reason,r.reason)]))); fillT("people",prow,null,"No open review requests and no thumbs-down reasons."); },
- library(d){ setT("libN",d.library.length+" report"+(d.library.length===1?"":"s")+" you may search");
-  const draw=()=>{const f=($("libFilter")?$("libFilter").value:"").trim().toLowerCase();const rows=d.library.filter(r=>!f||(r.title+" "+r.library+" "+r.edition[2]).toLowerCase().includes(f));
-   fillT("library",rows.map(r=>{const row=tr([td("t mono",r.edition[2]||"undated"),td("q",r.title,r.title),td("dim",r.library),td("n",r.pages),td("n dim",r.low_text_pages?r.low_text_pages+" ocr":"","pages flagged for OCR"),td("n dim",r.cited?r.cited+" cited":"","times your answers cited it")]);
-    const c=el("td");if(r.pdf){const a=el("a","dim","PDF");a.href=r.pdf;a.target="_blank";a.rel="noopener";c.appendChild(a);c.appendChild(document.createTextNode(" "));}
-    const ask=el("a","","ask");ask.href="/?user="+encodeURIComponent(ME)+"&q="+encodeURIComponent("What does the "+(r.edition[2]?r.edition[2]+" edition":r.title)+" say about ");ask.title="Open the chat with this report named, so the search stays inside it";c.appendChild(ask);row.appendChild(c);return row;}),
-    isOpen("library")?["edition","title","library",">pages","",">cited",""]:null,f?"No report matches that filter.":"No library grants yet; ask the admin.");};
-  draw();const inp=$("libFilter");if(inp&&!inp.dataset.wired){inp.dataset.wired="1";inp.addEventListener("input",draw);} },
- analyses(d){ setT("anaN",d.analyses.length+" saved"); fillT("analyses",d.analyses.map(a=>{const row=tr([td("",a.name),td(a.status==="done"?"ok":(a.status==="failed"?"bad":"dim"),a.status),td("t",hm(a.created_at))]);const c=el("td");const o=el("a","","open");o.href="#analysis="+a.id;o.onclick=e=>{e.preventDefault();openAnalysis(a.id);};c.appendChild(o);row.appendChild(c);return row;}),null,"No analyses yet. Make one below: your questions, run across the reports you choose.");
-  anaFormInit();const h=location.hash.match(/analysis=(\d+)/);if(h)openAnalysis(+h[1]); },
- answers(d){ setT("ansN","last "+d.answers.length); fillT("answers",d.answers.map(r=>{const row=tr([td("t",hm(r.at)),td(isOpen("answers")?"wrap":"q",r.question,r.question),td(r.status==="answered"?"ok":"bad",r.status==="answered"?"answered":"not found"),td("n dim",r.citations,"citations")]);const a=el("a","dim","open");a.href="/?user="+encodeURIComponent(ME)+"&a="+r.audit_id;a.title="Shows the stored answer; no model call";const c=el("td");c.appendChild(a);row.appendChild(c);return row;}),isOpen("answers")?["at","question","outcome",">cited",""]:null,"You have not asked anything yet."); },
- usage(d){ const u=d.usage;setT("useN",u.asked+" asked"); fillT("myuse",[tr([td("","answered with checked citations"),td("n ok",u.answered)]),tr([td("","not found in your libraries"),td("n bad",u.not_found)]),tr([td("","of which, cells of your analyses"),td("n dim",u.from_analyses)]),tr([td("","first question"),td("t",u.first_at?hm(u.first_at):"—")]),tr([td("","last question"),td("t",u.last_at?hm(u.last_at):"—")])],null,""); setT("mylibs","Libraries you can search: "+(u.libraries.join(", ")||"none")+" · model "+u.model); },
- ratings(d){ setT("ratN",d.ratings.up+" up · "+d.ratings.down+" down"); fillT("ratings",d.ratings.recent.map(r=>tr([td("t",hm(r.at)),td(r.rating==="up"?"ok":"bad",r.rating),td("q",r.question,r.question),td("q w dim",r.reason||"",r.reason||"")])),null,"No ratings yet. Thumbs on an answer land here."); },
- reviews(d){ setT("revN",d.reviews.open+" open"); fillT("reviews",d.reviews.recent.map(r=>tr([td("t",hm(r.at)),td(r.status==="open"?"bad":"ok",r.status),td("q",r.question,r.question),td("q w dim",r.note||"",r.note||"")])),null,"No review requests. Ask for one when an answer needs a person."); },
  timeline(d){ if($("tl"))timeline(d.graph); }};
 function fillWidget(type){const d=DATA[type];if(!d||!FILL[type])return;FILL[type](d);document.querySelectorAll('.panel[data-type="'+type+'"]').forEach(p=>p.classList.remove("skel"));}
 async function loadWidget(type){if(DATA[type]){fillWidget(type);return;}
- const r=await fetch(api("/api/admin/widget/"+encodeURIComponent(type)),{headers:hdr()});
+ const r=await fetch("/api/admin/widget/"+encodeURIComponent(type),{headers:hdr()});
  if(!r.ok){document.querySelectorAll('.panel[data-type="'+type+'"] .pbody').forEach(b=>{b.textContent="Could not load ("+r.status+").";b.className="pbody meta";});return;}
  DATA[type]=await r.json();fillWidget(type);}
 const SEEN=("IntersectionObserver" in window)?new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){SEEN.unobserve(e.target);loadWidget(e.target.dataset.type);}}),{rootMargin:"200px"}):null;
@@ -1509,11 +1495,11 @@ function watch(p){if(SEEN)SEEN.observe(p);else loadWidget(p.dataset.type);}
 function render(d){renderHead(d);}
 function tok(){try{return sessionStorage.getItem("ra.token")||"";}catch(e){return "";}}
 async function load(t){let since="";try{since=localStorage.getItem("ra.lastlook")||"";}catch(e){}
- const [r,lr]=await Promise.all([fetch(api("/api/admin/board?parts=head&since="+encodeURIComponent(since)),{headers:hdr()}),fetch(api("/api/admin/layout?owner="+encodeURIComponent(OWNER)),{headers:hdr()})]);
+ const [r,lr]=await Promise.all([fetch("/api/admin/board?parts=head&since="+encodeURIComponent(since),{headers:hdr()}),fetch("/api/admin/layout?owner="+encodeURIComponent(OWNER),{headers:hdr()})]);
  if(lr.ok){LAYOUT=await lr.json();CAT=LAYOUT.catalogue||{};buildGrid();}
  if(r.status===401){try{sessionStorage.removeItem("ra.token");}catch(e){}show("login","That token was not accepted.");return;}
- if(!r.ok){show("login",ME?"No board for "+ME+": unknown user, or no library grant ("+r.status+").":"The board could not be loaded ("+r.status+").");return;}
- const d=await r.json();render(d);if(!ME){loadKeys();loadLibs();}show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
+ if(!r.ok){show("login","The board could not be loaded ("+r.status+").");return;}
+ const d=await r.json();render(d);loadKeys();loadLibs();show("view");try{localStorage.setItem("ra.lastlook",d.now);}catch(e){}}
 async function loadKeys(){const r=await fetch("/api/admin/keys",{headers:{"X-Token":tok()}});if(!r.ok)return;const j=await r.json();
  fillT("keys",j.keys.map(k=>{const row=tr([td("",k.name),td("",k.user),td("mono dim",k.prefix+"…"),td("t",hm(k.created_at)),td("dim",k.last_used?hm(k.last_used):"never used"),td(k.revoked_at?"bad":"ok",k.revoked_at?"revoked":"active")]);
   const c=el("td");if(!k.revoked_at){const b=el("button","link","revoke");b.onclick=async()=>{if(!confirm("Revoke “"+k.name+"”? Anything using it stops now."))return;await fetch("/api/admin/keys/"+k.id,{method:"DELETE",headers:{"X-Token":tok()}});loadKeys();};c.appendChild(b);}row.appendChild(c);return row;}),["name","user","key","created","last used","",""],"No API keys. The chat works without one; a key is for another system asking on a user’s behalf.");}
@@ -1540,7 +1526,6 @@ $("newkey").onsubmit=async e=>{e.preventDefault();const name=$("keyName").value.
  const r=await fetch("/api/admin/keys",{method:"POST",headers:{"content-type":"application/json","X-Token":tok()},body:JSON.stringify({name,user})});const j=await r.json();const out=$("keyOut");out.textContent="";
  if(!r.ok){out.textContent=j.detail||("Could not create the key ("+r.status+")");return;}
  out.appendChild(document.createTextNode("Key for “"+j.name+"” as "+j.user+", shown once: "));out.appendChild(el("span","keyval",j.key));out.appendChild(document.createTextNode(" · copy it now."));$("keyName").value="";loadKeys();};
-(()=>{if(ME){["helpBtn","forget","help"].forEach(id=>$(id).hidden=true);document.querySelector(".tabs").hidden=true;$("login").hidden=true;$("navChat").href="/?user="+encodeURIComponent(ME);$("navMe").hidden=false;$("navMe").href="/dashboard?user="+encodeURIComponent(ME);$("navMe").setAttribute("aria-current","page");$("navAdmin").remove();document.querySelector(".nav").style.cssText="border-right:0;padding-right:0";load("");return;}
- let t="";const hp=new URLSearchParams(location.hash.slice(1));if(hp.get("token")){t=hp.get("token");try{sessionStorage.setItem("ra.token",t);}catch(e){}hp.delete("token");try{history.replaceState(null,"",location.pathname+(hp.toString()?"#"+hp.toString():""));}catch(e){}}
+(()=>{let t="";const hp=new URLSearchParams(location.hash.slice(1));if(hp.get("token")){t=hp.get("token");try{sessionStorage.setItem("ra.token",t);}catch(e){}hp.delete("token");try{history.replaceState(null,"",location.pathname+(hp.toString()?"#"+hp.toString():""));}catch(e){}}
  if(!t)t=tok();if(t)load(t);else show("login");})();
 </script></body></html>"""

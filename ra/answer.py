@@ -53,21 +53,29 @@ def _titles(con, ids):
     return [r["title"] for r in con.execute(f"SELECT title FROM documents WHERE id IN ({marks}) ORDER BY title", ids)]
 
 
-def ask(con, llm, user, question, k=12, only=None):
+def ask(con, llm, user, question, k=12, only=None, on_step=None):
     """Retrieve, draft, check every claim, retry once on failures, otherwise say not found.
 
     Every step is recorded in result.trace with what it did and how long it took, including the steps that
-    found nothing. The trace only names libraries the user holds a grant for.
+    found nothing. The trace only names libraries the user holds a grant for. `on_step` hears each step as it
+    happens, plus "drafting" and "checking" when one starts, so a page can show the real work while it runs.
+    No claim reaches `on_step`: a draft is not shown to anyone until it has passed the check.
     """
     trace = []
+    tell = on_step or (lambda event: None)
+
+    def record(step, **extra):
+        trace.append(step)
+        tell({**step, **extra})
+
     t = time.perf_counter()
     passages = retrieve(con, user, question, k, only)
-    trace.append({
+    record({
         "kind": "search", "tag": "Plain code", "query": (fts_query(search_terms(question, named_documents(con, user, question))) or "").replace('"', ""),
         "libraries": _libraries(con, user), "editions": _titles(con, named_documents(con, user, question)),
         "limit": k, "found": len(passages), "documents": dict(Counter(p.title for p in passages)), "ms": _ms(t),
         **({"only": sorted(only)} if only is not None else {}),
-    })
+    }, passages=[{"doc_id": p.doc_id, "title": p.title, "page": p.page} for p in passages])
     allowed = {(p.doc_id, p.page) for p in passages}
     result = Result(status="not_found", closest=passages, trace=trace)
     if passages:
@@ -76,6 +84,8 @@ def ask(con, llm, user, question, k=12, only=None):
             result.attempts = attempt
             if attempt == 2:
                 trace.append({"kind": "retry", "tag": "Plain code", "feedback": feedback})
+                tell({"kind": "retry", "tag": "Plain code"})  # the feedback quotes the rejected draft, so it stays out of the live events
+            tell({"kind": "drafting", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__)})
             t = time.perf_counter()
             try:
                 drafted = llm.draft(question, passages, feedback)
@@ -85,13 +95,14 @@ def ask(con, llm, user, question, k=12, only=None):
             step = {"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)}
             if error:
                 step["error"] = error
-            trace.append(step)
+            record(step)
+            tell({"kind": "checking", "attempt": attempt, "claims": len(drafted)})
             t = time.perf_counter()
             ok, bad = _verify(con, drafted, allowed)
             if ok and asks_for_figure(question) and not states_a_figure(ok):
                 bad += [(c, NO_FIGURE) for c in ok]
                 ok = []
-            trace.append({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
+            record({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
             result.rejected.extend(bad)
             if ok:
                 result.status, result.claims = "answered", ok
@@ -99,7 +110,7 @@ def ask(con, llm, user, question, k=12, only=None):
             if error:
                 break  # do not retry a model that is down; the trace says why
             feedback = [f"'{c.text}' was rejected: {why}" for c, why in bad] or ["no claims were returned"]
-    trace.append({"kind": "outcome", "status": result.status, "claims": len(result.claims), "found": len(passages)})
+    record({"kind": "outcome", "status": result.status, "claims": len(result.claims), "found": len(passages)})
     cur = con.execute(
         "INSERT INTO audit(user, question, status, cited) VALUES (?,?,?,?)",
         (user, question, result.status, ";".join(f"{c.doc_id}:{c.page}" for c in result.claims)),

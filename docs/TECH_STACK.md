@@ -12,7 +12,7 @@ What runs today, why it was chosen, how it differs from what the proposal said, 
 | Store and search | SQLite with FTS5 (BM25), standard library `sqlite3` | 3.53 | One file, no server, full-text ranking built in, access rule can live in the SQL | PostgreSQL with vector and full-text search |
 | Core runtime dependencies | none | | The whole pipeline is standard library | |
 | Web API | FastAPI with uvicorn | 0.143 and 0.54 (pydantic 2.14) | Typed request bodies, easy to test, matches the proposal | FastAPI |
-| Front end | One HTML page, plain JavaScript, CSS variables, no build step, no CDN | | Nothing to install or bundle, and it can be read in one sitting | React |
+| Front end | One HTML page in `ra/static/`, plain JavaScript, design tokens as CSS variables, three self-hosted variable fonts, no build step, no CDN | | Nothing to install or bundle, and it can be read in one sitting | React |
 | Model | The `anthropic` SDK, optional, behind a small `LLM` protocol | default model id `claude-sonnet-5-5` | The pipeline never imports a vendor outside `ra/llm.py` | LLM behind a thin interface |
 | Tests | pytest, httpx for the API, a hand-written PDF writer | pytest 9.1, httpx 0.28 | No fixtures to commit, and two-column pages can be built on purpose | A graded question set |
 | Browser checks | Chrome headless, and jsdom under Node | Chrome 148, Node 24 | Playwright would not install here | not stated |
@@ -83,7 +83,7 @@ _SQL = """
 
 ### 3. The answer loop: draft, check, retry once, otherwise refuse
 
-If nothing survives the gate, the second attempt gets the reasons the first failed. One check looks at the set rather than each claim: when the question asks for a figure (growth, share, how many, a rate) and no surviving claim states one, the whole set is removed with that reason, so a true sentence that avoids the number cannot stand in for it. If that also fails, the answer is "not found". Every step is appended to the trace that the Investigation steps view shows.
+If nothing survives the gate, the second attempt gets the reasons the first failed. One check looks at the set rather than each claim: when the question asks for a figure (growth, share, how many, a rate) and no surviving claim states one, the whole set is removed with that reason, so a true sentence that avoids the number cannot stand in for it. If that also fails, the answer is "not found". Every step is appended to the trace, and sent to the page as it happens, without the draft's words: nothing is shown until it has passed the check.
 
 <!-- source: ra/answer.py -->
 ```python
@@ -93,6 +93,8 @@ If nothing survives the gate, the second attempt gets the reasons the first fail
             result.attempts = attempt
             if attempt == 2:
                 trace.append({"kind": "retry", "tag": "Plain code", "feedback": feedback})
+                tell({"kind": "retry", "tag": "Plain code"})  # the feedback quotes the rejected draft, so it stays out of the live events
+            tell({"kind": "drafting", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__)})
             t = time.perf_counter()
             try:
                 drafted = llm.draft(question, passages, feedback)
@@ -102,13 +104,14 @@ If nothing survives the gate, the second attempt gets the reasons the first fail
             step = {"kind": "draft", "tag": "Model call", "attempt": attempt, "model": getattr(llm, "name", type(llm).__name__), "claims": len(drafted), "ms": _ms(t)}
             if error:
                 step["error"] = error
-            trace.append(step)
+            record(step)
+            tell({"kind": "checking", "attempt": attempt, "claims": len(drafted)})
             t = time.perf_counter()
             ok, bad = _verify(con, drafted, allowed)
             if ok and asks_for_figure(question) and not states_a_figure(ok):
                 bad += [(c, NO_FIGURE) for c in ok]
                 ok = []
-            trace.append({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
+            record({"kind": "check", "tag": "Plain code", "attempt": attempt, "kept": len(ok), "removed": len(bad), "reasons": sorted({why for _, why in bad}), "ms": _ms(t)})
             result.rejected.extend(bad)
             if ok:
                 result.status, result.claims = "answered", ok
@@ -162,7 +165,8 @@ Defence in depth: even if a page id is guessed, the join on grants returns nothi
         ).fetchone()
         if not row:
             raise HTTPException(403, "No access to this page, or it does not exist.")
-        has_file = bool(con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"])
+        source = con.execute("SELECT source FROM documents WHERE id=?", (doc_id,)).fetchone()["source"]
+        has_file = bool(source) and os.path.exists(source)
         return {"title": row["title"], "page": p, "text": row["text"], "span": quote_span(row["text"], quote) if quote else None,
                 "pdf": f"/files/{doc_id}?user={user}#page={p}" if has_file else None}
 ```
@@ -225,25 +229,44 @@ def make_pdf(path, pages):
         kids.append(f"{pid} 0 R")
 ```
 
-### 9. The camera on the canvas
+### 9. The proof line
 
-One transform on one element. This function works out where to put the canvas so a node is centred at a readable scale, and the CSS line is what makes the move ease.
+The line from a claim to the highlighted words on its page is one SVG path. It shows for a moment when a citation is selected and again when either end is hovered, and scrolling dismisses it. It bends only in the gap between the panels and ends in the page's margin, so it never crosses text, and with an end out of view it is not drawn at all.
 
-<!-- source: ra/web.py -->
+<!-- source: ra/static/desk.js -->
 ```javascript
-function focusNode(n){current=n;const s=fitScale(),top=n.offsetTop,h=n.offsetHeight,sh=stage.clientHeight,pad=stage.clientWidth<700?$("spy").offsetHeight+24:24;view.s=s;view.x=(stage.clientWidth-canvas.offsetWidth*s)/2;view.y=h*s<sh-pad-24?(sh+pad)/2-(top+h/2)*s:pad-top*s;move(true)}
+function drawProof() {
+  const p = state.proof;
+  if (!p || !p.from.isConnected || !p.to.isConnected) return false;
+  const a = p.from.getBoundingClientRect();
+  const m = p.to.getClientRects()[0];
+  if (!m) return false;
+  const thread = $("thread").getBoundingClientRect();
+  const sheet = $("sheetWrap").getBoundingClientRect();
+  const y1 = a.top + a.height / 2, y2 = m.top + m.height / 2;
+  // With an end out of view there is nothing to connect, so there is no line.
+  if (y1 < thread.top || y1 > thread.bottom || a.right > thread.right || y2 < sheet.top || y2 > sheet.bottom) return false;
+  // Straight to the panel's edge, then it bends only in the gap between the panels, ending in the page's margin: it never crosses text.
+  const x1 = a.right + 3, edge = thread.right, x2 = Math.max($("ptext").getBoundingClientRect().left - 8, sheet.left);
+  const bend = Math.max(12, (x2 - edge) * 0.5);
+  $("proofPath").setAttribute("d", `M${x1} ${y1} L${edge} ${y1} C${edge + bend} ${y1} ${x2 - bend} ${y2} ${x2} ${y2}`);
+  $("proofA").setAttribute("cx", x1); $("proofA").setAttribute("cy", y1);
+  $("proofB").setAttribute("cx", x2); $("proofB").setAttribute("cy", y2);
+  return true;
+}
 ```
 
+The path is given a length of 1 in the page, so this one line draws it from the claim to the page, whatever its real length.
 
-<!-- source: ra/web.py -->
+<!-- source: ra/static/desk.css -->
 ```css
-#canvas.moving{transition:transform .75s cubic-bezier(.22,1,.36,1)}
+@keyframes draw { from { stroke-dashoffset: 1; } }
 ```
 
 ## Running it
 
 ```sh
-# tests (needs poppler for pdftotext and pdfinfo)
+# tests (needs poppler for pdftotext)
 uv run --python 3.14 pytest -q
 
 # ingest a report into a library, grant a user, serve the demo
