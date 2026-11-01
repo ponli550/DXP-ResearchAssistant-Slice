@@ -15,6 +15,7 @@ import serve  # noqa: E402
 
 class Upstream(BaseHTTPRequestHandler):
     seen = []
+    more = threading.Event()
 
     def log_message(self, *a):
         pass
@@ -35,6 +36,17 @@ class Upstream(BaseHTTPRequestHandler):
             return self._reply(200, b"<html><body>no closing", "text/html")
         if self.path == "/pdf":
             return self._reply(200, b"%PDF-1.4" + b"x" * 200000, "application/pdf")
+        if self.path == "/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(b"data: first\n\n")
+            self.wfile.flush()
+            Upstream.more.wait(5)
+            self.wfile.write(b"data: second\n\n")
+            self.close_connection = True
+            return None
         return self._reply(200, b"<!doctype html><html><body><h1>app</h1></body></html>", "text/html; charset=utf-8")
 
     def do_POST(self):
@@ -63,7 +75,7 @@ def get(url):
 
 def test_the_app_never_mentions_the_helper():
     for name in ("ra/web.py", "ra/answer.py", "ra/ground.py", "ra/retrieve.py", "ra/llm.py"):
-        text = open(os.path.join(ROOT, name)).read()
+        text = open(os.path.join(ROOT, name), encoding="utf-8").read()
         assert "__helper" not in text and "helper.js" not in text, f"{name} must not know about the helper"
 
 
@@ -89,6 +101,15 @@ def test_json_and_files_pass_through_untouched_and_posts_are_forwarded(proxy):
     assert Upstream.seen[-1][0] == "POST" and json.loads(Upstream.seen[-1][2]) == {"q": "hi"}
 
 
+def test_live_progress_is_not_held_back_by_the_proxy(proxy):
+    base, _ = proxy
+    Upstream.more.clear()
+    with urllib.request.urlopen(base + "/events", timeout=3) as r:
+        assert r.readline() == b"data: first\n"  # arrives while the app is still working
+        Upstream.more.set()
+        assert b"data: second" in r.read()
+
+
 def test_helper_assets_are_served_by_the_proxy_not_the_app(proxy):
     base, _ = proxy
     _, h, js = get(base + "/__helper/helper.js")
@@ -111,7 +132,7 @@ def test_a_dead_app_is_a_clear_502():
 
 
 def test_the_overlay_builds_no_html_from_strings_and_degrades_when_ids_are_missing():
-    js = open(os.path.join(ROOT, "helper", "helper.js")).read()
+    js = open(os.path.join(ROOT, "helper", "helper.js"), encoding="utf-8").read()
     import re
 
     assert "innerHTML" not in js and "document.write" not in js and not re.search(r"\beval\(", js)
