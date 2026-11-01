@@ -1,0 +1,161 @@
+/* The one place raw values live. Every page reads these names; tests/test_tokens.py fails on a raw colour or font anywhere else. */
+
+@font-face {
+  font-family: "Geist";
+  src: url("/static/fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/static/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("/static/fonts/SourceSerif4-Variable.woff2") format("woff2");
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light;
+
+  /* Raw colour: ink for the shell and actions, cool neutrals for the desk, highlighter for proof. */
+  --ink-950: #0b1426;
+  --ink-900: #14213d;
+  --ink-800: #1e2e50;
+  --ink-700: #2d3f66;
+  --ink-300: #a8b4cb;
+  --ink-200: #c9d1e0;
+  --ink-100: #e6eaf2;
+  --neutral-0: #ffffff;
+  --neutral-50: #f7f8fa;
+  --neutral-100: #eef0f4;
+  --neutral-200: #e0e3ea;
+  --neutral-300: #c9ced8;
+  --neutral-400: #99a1b0;
+  --neutral-600: #586173;
+  --neutral-800: #2a303c;
+  --neutral-850: #20252f;
+  --neutral-900: #181c24;
+  --neutral-950: #11141a;
+  --neutral-text: #151a24;
+  --neutral-text-dark: #e8ebf1;
+  --marker-400: #ffe14d;
+  --marker-200: #fff3b0;
+  --marker-800: #94700a;
+  --marker-500: #e2bd2e;
+  --green-700: #17693f;
+  --green-300: #74d6a0;
+  --amber-700: #84560a;
+  --amber-300: #f2c76f;
+  --amber-100: #fbf0d7;
+  --amber-900: #33270f;
+  --red-700: #a92c20;
+  --red-300: #ff9e92;
+  --series-1: #14213d;
+  --series-2: #94700a;
+  --series-3: #17693f;
+  --series-4: #586173;
+  --series-5: #3f6fa8;
+
+  /* Type */
+  --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-read: "Source Serif 4", Georgia, serif;
+  --font-data: "Geist Mono", ui-monospace, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --leading-tight: 1.25;
+  --leading-ui: 1.45;
+  --leading-read: 1.6;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-strong: 600;
+
+  /* Space and size, on a 4 pixel grid */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --control: 2rem;
+  --bar: 2.75rem;
+  --strip: 3rem;
+  --radius-s: 0.25rem;
+  --radius-m: 0.5rem;
+  --radius-l: 0.75rem;
+  --radius-full: 999px;
+  --hairline: 1px solid var(--line);
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* What things are */
+  --desk: light-dark(var(--neutral-100), var(--neutral-950));
+  --panel: light-dark(var(--neutral-0), var(--neutral-900));
+  --panel-2: light-dark(var(--neutral-50), var(--neutral-850));
+  --sheet: light-dark(var(--neutral-0), var(--neutral-850));
+  --hover: light-dark(var(--neutral-100), var(--neutral-850));
+  --selected: light-dark(var(--ink-100), var(--ink-800));
+  --line: light-dark(var(--neutral-200), var(--neutral-800));
+  --line-strong: light-dark(var(--neutral-300), var(--neutral-600));
+  --text: light-dark(var(--neutral-text), var(--neutral-text-dark));
+  --text-muted: light-dark(var(--neutral-600), var(--neutral-400));
+  --action: light-dark(var(--ink-900), var(--marker-400));
+  --on-action: light-dark(var(--neutral-0), var(--ink-950));
+  --action-hover: light-dark(var(--ink-700), var(--marker-500));
+  --link: light-dark(var(--ink-700), var(--ink-200));
+  --focus: light-dark(var(--ink-700), var(--marker-400));
+  --ok: light-dark(var(--green-700), var(--green-300));
+  --warn: light-dark(var(--amber-700), var(--amber-300));
+  --warn-surface: light-dark(var(--amber-100), var(--amber-900));
+  --bad: light-dark(var(--red-700), var(--red-300));
+  --on-bad: light-dark(var(--neutral-0), var(--ink-950));
+  --scrim: rgb(11 20 38 / 0.45);
+  --mark: var(--marker-400);
+  --mark-soft: light-dark(var(--marker-200), var(--ink-700));
+  --mark-text: var(--ink-950);
+  --proof-line: light-dark(var(--marker-800), var(--marker-400));
+  --pop-shadow: 0 0.5rem 1.5rem light-dark(rgb(20 33 61 / 0.16), rgb(0 0 0 / 0.5));
+  --sheet-shadow: 0 0.0625rem 0.25rem light-dark(rgb(20 33 61 / 0.14), rgb(0 0 0 / 0.5));
+
+  /* Charts. The pair passed the dataviz palette checks against --panel in both themes: colour blindness, contrast, lightness. */
+  --data-answered: light-dark(#2f6fc0, #4d8ae0);
+  --data-none: light-dark(#c07a2c, #c47f2e);
+  --heat: light-dark(#174a8c, #8fb8ee);
+  --on-heat: light-dark(var(--neutral-0), var(--ink-950));
+  --heat-1: color-mix(in srgb, var(--heat) 12%, var(--panel));
+  --heat-2: color-mix(in srgb, var(--heat) 28%, var(--panel));
+  --heat-3: color-mix(in srgb, var(--heat) 48%, var(--panel));
+  --heat-4: color-mix(in srgb, var(--heat) 80%, var(--panel));
+  --heat-5: var(--heat);
+  /* The investigation flow: who did each step. Never the only signal: every node also carries a label and an icon. */
+  --flow-model: light-dark(#6d48c9, #b39df0);
+  --flow-source: light-dark(#2f6fc0, #7fb0ee);
+  --flow-code: light-dark(var(--neutral-600), var(--neutral-400));
+
+  /* The rail stays ink in both themes */
+  --rail: var(--ink-900);
+  --rail-2: var(--ink-800);
+  --rail-text: var(--neutral-0);
+  --rail-muted: var(--ink-300);
+  --rail-line: var(--ink-700);
+  --rail-accent: var(--marker-400);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
