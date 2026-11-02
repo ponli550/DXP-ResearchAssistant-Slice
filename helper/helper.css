@@ -11,6 +11,10 @@
 
 .rah-launch { position: fixed; left: 16px; bottom: 16px; z-index: 2147483000; padding: 8px 16px; background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; font-weight: 600; cursor: pointer; }
 .rah-launch:hover { background: var(--rah-tint); }
+/* Docked in the page's own bar: take the bar's colours, so it reads as one of its buttons. */
+.rah-launch.rah-docked { position: static; z-index: auto; flex: none; height: 28px; padding: 0 12px; font: inherit; font-weight: 400; color: inherit; background: none;
+  border-color: color-mix(in srgb, currentColor 30%, transparent); }
+.rah-launch.rah-docked:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
 .rah-launch:focus-visible, .rah-go:focus-visible, .rah-btn2:focus-visible, .rah-link:focus-visible, .rah-ex1:focus-visible { outline: 2px solid var(--rah-accent); outline-offset: 2px; }
 
 .rah-panel { position: fixed; top: 0; right: 0; height: 100%; width: min(420px, 100%); z-index: 2147483001; background: var(--rah-bg); border-left: 1px solid var(--rah-line);
@@ -49,6 +53,7 @@
 .rah-nav { display: flex; gap: 8px; align-items: center; }
 .rah-nav .rah-link { margin-left: auto; }
 
-.rah-toast { position: fixed; left: 16px; bottom: 64px; z-index: 2147483000; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; max-width: 360px; background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; padding: 10px 14px; }
+.rah-launch:not(.rah-docked) ~ .rah-toast { bottom: 64px; }
+.rah-toast { position: fixed; left: 16px; bottom: 16px; z-index: 2147483000; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; max-width: 360px; background: var(--rah-bg); border: 1px solid var(--rah-teal); border-radius: 4px; padding: 10px 14px; }
 .rah-flash { outline: 2px solid var(--rah-accent, #D9482B) !important; outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .rah-panel, .rah-spot { transition: none; } }

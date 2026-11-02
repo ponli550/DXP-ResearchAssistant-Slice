@@ -590,10 +590,10 @@ function draw() {
 function showWorkspace() {
   document.title = "Workspace · Research assistant";
   $("view").replaceChildren(el("div", { class: "workspace" },
+    el("div", { class: "filters", id: "filters", role: "group", "aria-label": "Filter everything below" }),
     el("section", { class: "sources", id: "sources", "aria-label": "Your sources" },
       el("header", { class: "sources-head" }, el("h1", {}, "Your sources"), el("p", { id: "sourcesLine" }), el("button", { type: "button", class: "add-source", onclick: openAddDialog }, icon("plus"), "Add a report")),
       el("div", { class: "source-cells", id: "sourceCells" })),
-    el("div", { class: "filters", id: "filters", role: "group", "aria-label": "Filter everything below" }),
     el("section", { class: "panel next", id: "next", "data-type": "next", "aria-labelledby": "nextHead" },
       el("header", { class: "panel-head" }, el("h2", { id: "nextHead" }, "What to do next")),
       el("div", { class: "next-list", id: "nextList" })),

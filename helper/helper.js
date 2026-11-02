@@ -232,9 +232,15 @@
   }
 
   function boot() {
-    launcher = el("button", "rah-launch", "Help"); launcher.type = "button"; launcher.setAttribute("aria-label", "Help and tour");
-    launcher.onclick = function () { panel && panel.classList.contains("open") ? closePanel() : openPanel(launcher); };
-    document.body.appendChild(launcher);
+    // One Help per page: a page with its own guide keeps it (? still opens this panel). Otherwise sit at the end of the
+    // page's top bar, and float only where there is no bar, so the button never covers the page.
+    var nav = $(".nav");
+    if (!$("#helpPop")) {
+      launcher = el("button", "rah-launch", "Help"); launcher.type = "button"; launcher.setAttribute("aria-label", "Help and tour");
+      launcher.onclick = function () { panel && panel.classList.contains("open") ? closePanel() : openPanel(launcher); };
+      if (nav && nav.parentElement !== document.body) { launcher.classList.add("rah-docked"); nav.parentElement.appendChild(launcher); }
+      else document.body.appendChild(launcher);
+    }
     document.addEventListener("keydown", function (e) {
       var t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       if (e.key === "Escape") { if (tour) endTour(); else closePanel(); }
