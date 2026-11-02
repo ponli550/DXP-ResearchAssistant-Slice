@@ -194,6 +194,7 @@ $("railOpen").onclick = () => { setRail(true); $("railClose").focus(); };
 $("railClose").onclick = () => { setRail(false); $("railOpen").focus(); };
 $("stripHistory").onclick = () => openSaved("history");
 $("stripTables").onclick = () => openSaved("tables");
+$("stripUser").onclick = () => { setRail(true); $("user").focus(); };
 
 /* The small menus in the question box open beside their button, above it when the box sits at the foot of the page. */
 function placeMenu(button, menu) {
@@ -1171,9 +1172,7 @@ async function loadLibrary() {
 }
 async function loadUser(user) {
   state.user = user;
-  for (const a of document.querySelectorAll("[data-view]")) {
-    a.href = "/dashboard?" + new URLSearchParams(a.dataset.view ? { user, view: a.dataset.view } : { user });
-  }
+  $("melink").href = "/dashboard?user=" + encodeURIComponent(user);
   $("reports").replaceChildren(...Array.from({ length: 5 }, () => el("li", { class: "skeleton-row" })));
   const library = await loadLibrary();
   $("plusUploadNote").textContent = `PDF, up to ${MAX_UPLOAD_MB} MB. Only ${user} can see it`;
@@ -1184,6 +1183,7 @@ async function loadUser(user) {
   renderReports();
   renderScope();
   renderSuggestions();
+  $("stripUser").textContent = user.slice(0, 1).toUpperCase();
   await Promise.all([loadHistory(), loadTables()]);
   renderSaved();
 }

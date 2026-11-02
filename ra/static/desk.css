@@ -3,8 +3,6 @@
 *, *::before, *::after { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
-  display: flex;
-  flex-direction: column;
   background: var(--desk);
   color: var(--text);
   font: var(--weight-regular) var(--text-sm) / var(--leading-ui) var(--font-ui);
@@ -30,25 +28,8 @@ textarea, input { caret-color: var(--action); }
   --rail-col: var(--rail-w);
   display: grid;
   grid-template-columns: var(--rail-col) 0 minmax(26rem, 1fr) 0 var(--pane-w);
-  flex: 1;
-  min-height: 0;
+  height: 100dvh;
 }
-
-/* The page bar: the same place and order as the workspace's, so moving between pages never moves the nav. */
-.topbar { flex: none; display: flex; align-items: center; gap: var(--space-5); height: var(--bar); padding: 0 var(--space-4); background: var(--rail); color: var(--rail-text); border-bottom: 1px solid var(--rail-line); }
-.topbar :focus-visible { outline-color: var(--rail-accent); }
-.brand { display: flex; align-items: center; gap: var(--space-2); color: inherit; text-decoration: none; font-weight: var(--weight-strong); white-space: nowrap; }
-.brand-mark { color: var(--rail-accent); display: flex; }
-.brand-mark .icon { width: 1.25rem; height: 1.25rem; }
-.nav { display: flex; gap: var(--space-1); }
-.nav a { color: var(--rail-muted); text-decoration: none; padding: var(--space-1) var(--space-3); border-radius: var(--radius-m); white-space: nowrap; transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
-.nav a:hover { background: var(--rail-2); color: var(--rail-text); }
-.nav a[aria-current="page"] { background: var(--rail-2); color: var(--rail-text); font-weight: var(--weight-medium); }
-.topbar-end { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
-.bar-btn { display: flex; align-items: center; height: 1.75rem; padding: 0 var(--space-3); border-radius: var(--radius-m); border: 1px solid var(--rail-line); color: var(--rail-text); white-space: nowrap; transition: background var(--motion-fast) var(--ease-out); }
-.bar-btn:hover { background: var(--rail-2); }
-.who { display: flex; align-items: center; gap: var(--space-2); margin-left: var(--space-2); color: var(--rail-muted); font-size: var(--text-xs); white-space: nowrap; }
-.who select { height: 1.75rem; padding: 0 var(--space-2); background: var(--rail-2); color: var(--rail-text); border: 1px solid var(--rail-line); border-radius: var(--radius-s); font-size: var(--text-sm); text-transform: capitalize; }
 /* Each panel names its column, so hiding one never moves the others into its place. */
 .rail { grid-column: 1; }
 .split-rail { grid-column: 2; }
@@ -73,10 +54,14 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .strip { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); flex: 1; padding: var(--space-2) 0; }
 .strip-btn { display: grid; place-items: center; width: var(--control); height: var(--control); border-radius: var(--radius-m); color: var(--rail-muted); flex: none; font-weight: var(--weight-strong); font-size: var(--text-xs); transition: background var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .strip-btn:hover { background: var(--rail-2); color: var(--rail-text); }
+.strip-user { margin-top: auto; background: var(--rail-2); color: var(--rail-text); border-radius: var(--radius-full); }
+.brand-row { display: flex; align-items: center; height: var(--bar); padding-right: var(--space-2); border-bottom: 1px solid var(--rail-line); flex: none; }
 .rail :focus-visible { outline-color: var(--rail-accent); }
+.brand { display: flex; align-items: center; gap: var(--space-2); flex: 1; min-width: 0; padding: 0 var(--space-3); color: inherit; text-decoration: none; font-weight: var(--weight-strong); white-space: nowrap; }
+.brand-mark { color: var(--rail-accent); display: flex; }
+.brand-mark .icon { width: 1.25rem; height: 1.25rem; }
 .rail-section { padding: var(--space-2) var(--space-3) var(--space-3); border-bottom: 1px solid var(--rail-line); flex: none; }
-.rail-head { display: flex; gap: var(--space-2); height: var(--control); align-items: center; }
-.rail-head .strip-btn { margin-right: calc(var(--space-2) * -1); }
+.rail-head { display: flex; align-items: baseline; gap: var(--space-2); height: var(--control); align-items: center; }
 .rail-head h2 { font-size: var(--text-sm); font-weight: var(--weight-strong); }
 .rail-count { color: var(--rail-muted); font: var(--text-xs) var(--font-data); }
 .rail-link { margin-left: auto; color: var(--rail-muted); font-size: var(--text-xs); text-decoration: underline; text-underline-offset: 0.2em; }
@@ -117,6 +102,14 @@ body.is-resizing { cursor: col-resize; user-select: none; }
 .saved-sub { grid-column: 2 / 4; color: var(--rail-muted); font-size: var(--text-xs); margin-top: 0.125rem; }
 .saved-empty { color: var(--rail-muted); font-size: var(--text-xs); padding: var(--space-2) var(--space-1); }
 .skeleton-row { height: var(--control); border-radius: var(--radius-s); background: var(--rail-2); margin-bottom: var(--space-1); }
+
+.rail-foot { flex: none; padding: var(--space-2) var(--space-3) var(--space-3); display: grid; gap: var(--space-2); }
+.rail-user { display: grid; gap: var(--space-1); }
+.rail-user label { color: var(--rail-muted); font-size: var(--text-xs); }
+.rail-user select { height: var(--control); background: var(--rail-2); color: var(--rail-text); border: 1px solid var(--rail-line); border-radius: var(--radius-s); padding: 0 var(--space-1); text-transform: capitalize; }
+.nav { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.nav a, .nav button { color: var(--rail-muted); font-size: var(--text-xs); text-decoration: none; }
+.nav a:hover, .nav button:hover { color: var(--rail-text); text-decoration: underline; text-underline-offset: 0.2em; }
 
 /* Shared controls */
 .bar { display: flex; align-items: center; gap: var(--space-3); height: var(--bar); padding: 0 var(--space-4); border-bottom: var(--hairline); background: var(--panel); flex: none; min-width: 0; }
@@ -368,14 +361,10 @@ button.cell:hover { background: var(--mark-soft); }
   .desk.pane-up .pane { transform: none; }
   .desk.no-pane .pane { display: flex; }
   .proof { display: none; }
-  .topbar { flex-wrap: wrap; gap: var(--space-1) var(--space-2); height: auto; padding: var(--space-1) var(--space-3); }
-  .brand span:last-child, .who span { display: none; }
-  .nav { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .nav a { padding: var(--space-1) var(--space-2); font-size: var(--text-xs); }
 }
 
 @media (pointer: coarse) {
-  .primary, .ghost, .icon-btn, .report, .report-open, .rail-tabs button, .bar-btn, .who select { min-height: 2.75rem; }
+  .primary, .ghost, .icon-btn, .report, .report-open, .rail-tabs button { min-height: 2.75rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

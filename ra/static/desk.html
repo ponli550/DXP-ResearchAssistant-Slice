@@ -10,36 +10,25 @@
 <link rel="stylesheet" href="/static/desk.css">
 </head>
 <body>
-<header class="topbar">
-  <a class="brand" href="/" aria-label="Research assistant, start again"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
-  <nav class="nav" aria-label="Pages">
-    <a href="/" aria-current="page">Research desk</a>
-    <a id="melink" data-view="" href="/dashboard">Workspace</a>
-    <a data-view="dashboards" href="/dashboard">Dashboards</a>
-    <a data-view="reports" href="/dashboard">Reports</a>
-    <a id="dashlink" href="/dashboard">Manage</a>
-  </nav>
-  <div class="topbar-end">
-    <button type="button" class="bar-btn" id="helpBtn" popovertarget="helpPop">Help</button>
-    <button type="button" class="bar-btn" id="themeBtn"></button>
-    <label class="who"><span>Demo user</span><select id="user"></select></label>
-  </div>
-</header>
-
 <div class="desk no-pane rail-closed" id="desk">
   <aside class="rail" id="rail" aria-label="Reports and saved work">
     <nav class="strip" aria-label="Open a panel">
       <button type="button" class="strip-btn" id="railOpen" aria-label="Open the side panel" title="Open the side panel"></button>
       <button type="button" class="strip-btn" id="stripHistory" aria-label="Past questions" title="Past questions"></button>
       <button type="button" class="strip-btn" id="stripTables" aria-label="Saved tables" title="Saved tables"></button>
+      <button type="button" class="strip-btn strip-user" id="stripUser" aria-label="Account and settings" title="Account and settings"></button>
     </nav>
     <div class="rail-full">
+    <div class="brand-row">
+      <a class="brand" href="/" aria-label="Research assistant, start again"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
+      <button type="button" class="strip-btn" id="railClose" aria-label="Close the side panel" title="Close the side panel"></button>
+    </div>
+
     <section class="rail-section" aria-labelledby="reportsHead">
       <header class="rail-head">
         <h2 id="reportsHead">Reports</h2>
         <span class="rail-count" id="scopeCount"></span>
         <button type="button" class="rail-link" id="scopeAll"></button>
-        <button type="button" class="strip-btn" id="railClose" aria-label="Close the side panel" title="Close the side panel"></button>
       </header>
       <ol class="timeline" id="reports" aria-label="Tick the reports to search. Select a name to read it."></ol>
     </section>
@@ -52,6 +41,20 @@
       <input class="rail-filter" id="savedFilter" type="search" placeholder="Filter" aria-label="Filter saved work">
       <div class="saved-list" id="savedList" role="tabpanel"></div>
     </section>
+
+    <footer class="rail-foot">
+      <div class="rail-user">
+        <label for="user">Demo user, not a real login</label>
+        <select id="user"></select>
+      </div>
+      <nav class="nav" aria-label="Pages">
+        <a href="/" aria-current="page" hidden>Research desk</a>
+        <a id="melink" href="/dashboard">Workspace</a>
+        <a id="dashlink" href="/dashboard">Manage</a>
+        <button type="button" id="helpBtn" popovertarget="helpPop">Help</button>
+        <button type="button" id="themeBtn"></button>
+      </nav>
+    </footer>
     </div>
   </aside>
 
