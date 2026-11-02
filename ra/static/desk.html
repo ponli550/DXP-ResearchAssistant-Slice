@@ -10,25 +10,36 @@
 <link rel="stylesheet" href="/static/desk.css">
 </head>
 <body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Research assistant, start again"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
+  <nav class="nav" aria-label="Pages">
+    <a href="/" aria-current="page">Research desk</a>
+    <a id="melink" data-view="" href="/dashboard">Workspace</a>
+    <a data-view="dashboards" href="/dashboard">Dashboards</a>
+    <a data-view="reports" href="/dashboard">Reports</a>
+    <a id="dashlink" href="/dashboard">Manage</a>
+  </nav>
+  <div class="topbar-end">
+    <button type="button" class="bar-btn" id="helpBtn" popovertarget="helpPop">Help</button>
+    <button type="button" class="bar-btn" id="themeBtn"></button>
+    <label class="who"><span>Demo user</span><select id="user"></select></label>
+  </div>
+</header>
+
 <div class="desk no-pane rail-closed" id="desk">
   <aside class="rail" id="rail" aria-label="Reports and saved work">
     <nav class="strip" aria-label="Open a panel">
       <button type="button" class="strip-btn" id="railOpen" aria-label="Open the side panel" title="Open the side panel"></button>
       <button type="button" class="strip-btn" id="stripHistory" aria-label="Past questions" title="Past questions"></button>
       <button type="button" class="strip-btn" id="stripTables" aria-label="Saved tables" title="Saved tables"></button>
-      <button type="button" class="strip-btn strip-user" id="stripUser" aria-label="Account and settings" title="Account and settings"></button>
     </nav>
     <div class="rail-full">
-    <div class="brand-row">
-      <a class="brand" href="/" aria-label="Research assistant, start again"><span class="brand-mark" id="brandMark"></span><span>Research assistant</span></a>
-      <button type="button" class="strip-btn" id="railClose" aria-label="Close the side panel" title="Close the side panel"></button>
-    </div>
-
     <section class="rail-section" aria-labelledby="reportsHead">
       <header class="rail-head">
         <h2 id="reportsHead">Reports</h2>
         <span class="rail-count" id="scopeCount"></span>
         <button type="button" class="rail-link" id="scopeAll"></button>
+        <button type="button" class="strip-btn" id="railClose" aria-label="Close the side panel" title="Close the side panel"></button>
       </header>
       <ol class="timeline" id="reports" aria-label="Tick the reports to search. Select a name to read it."></ol>
     </section>
@@ -41,20 +52,6 @@
       <input class="rail-filter" id="savedFilter" type="search" placeholder="Filter" aria-label="Filter saved work">
       <div class="saved-list" id="savedList" role="tabpanel"></div>
     </section>
-
-    <footer class="rail-foot">
-      <div class="rail-user">
-        <label for="user">Demo user, not a real login</label>
-        <select id="user"></select>
-      </div>
-      <nav class="nav" aria-label="Pages">
-        <a href="/" aria-current="page" hidden>Research desk</a>
-        <a id="melink" href="/dashboard">Workspace</a>
-        <a id="dashlink" href="/dashboard">Manage</a>
-        <button type="button" id="helpBtn" popovertarget="helpPop">Help</button>
-        <button type="button" id="themeBtn"></button>
-      </nav>
-    </footer>
     </div>
   </aside>
 
@@ -155,20 +152,26 @@
   <button type="button" class="menu-item" id="findBtn" aria-pressed="false"><span class="menu-title">Exact words</span><span class="menu-note">Pages containing your words. No AI used</span></button>
 </div>
 
-<div id="helpPop" class="help" popover>
-  <h2>Using the desk</h2>
-  <dl>
-    <dt>Reports</dt><dd>Choose what to search from the question box. Open the side panel to browse and read them.</dd>
-    <dt>Ask</dt><dd>Type a question. You see the real work as it happens, then an answer with its page, or a plain "no answer".</dd>
-    <dt>Citations</dt><dd>Hover to preview the quote. Select to open the page with the quote highlighted. A line links them for a moment; hover either end to see it again.</dd>
-    <dt>Uploads</dt><dd>Add a PDF from the + menu, or drop it on the page. It is searchable only by the user who added it, and deleting it removes its text and the answers that used it.</dd>
-    <dt>Tables</dt><dd>Choose "Table across reports" in the question box to run one question in every report and see how a figure moved.</dd>
-  </dl>
-  <h2>Keys</h2>
-  <dl class="keys">
-    <dt><kbd>/</kbd></dt><dd>Go to the question box</dd>
-    <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>Previous or next page</dd>
-    <dt><kbd>Esc</kbd></dt><dd>Clear the proof line, or close this</dd>
+<div id="helpPop" class="help" popover aria-labelledby="helpTitle">
+  <header class="help-head">
+    <div>
+      <h2 id="helpTitle">How the desk works</h2>
+      <p>From a question to the page that proves it.</p>
+    </div>
+    <button type="button" class="ghost" popovertarget="helpPop" popovertargetaction="hide">Close</button>
+  </header>
+  <ol class="help-steps">
+    <li><b>Pick your reports</b><span>Use the reports button under the question box, or tick them in the side panel.</span></li>
+    <li><b>Ask in plain words</b><span>You see each step as it runs, then an answer with its page, or a plain "no answer".</span></li>
+    <li><b>Check the source</b><span>Hover a page tag to preview the quote. Select it to open the page with the quote marked.</span></li>
+    <li><b>Compare editions</b><span>Choose "Table across reports" to run one question in every report and see how a figure moved.</span></li>
+    <li><b>Add your own PDF</b><span>Use the + button, or drop a file on the page. Only you can search it, and deleting it removes the answers that used it.</span></li>
+  </ol>
+  <h3>Shortcuts</h3>
+  <dl class="help-keys">
+    <div><dt>Go to the question box</dt><dd><kbd>/</kbd></dd></div>
+    <div><dt>Previous or next page</dt><dd><kbd>[</kbd> <kbd>]</kbd></dd></div>
+    <div><dt>Close this, or clear the proof line</dt><dd><kbd>Esc</kbd></dd></div>
   </dl>
 </div>
 

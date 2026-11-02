@@ -5,7 +5,7 @@ and a test (`tests/test_helper.py`) fails if it ever does.
 
 ## What it does
 
-- A **Help** button on every page, and `?` as a shortcut, opens a panel: examples to try, then what you may want to do, each with a button that does it.
+- A **Help** button, and `?` as a shortcut, opens a panel: examples to try, then what you may want to do, each with a button that does it. The button sits at the end of the page's top bar (the bar holding `.nav`), floats bottom-left only on a page without one, and is left out where the page has its own guide (`#helpPop`, the desk), so there is one Help per page; `?` still opens the panel there.
 - **Try one** comes from the person's own history and library, so the examples work for them: questions they have already had answered (opens the stored answer, no model call) and "finish the sentence" stubs for the newest editions.
 - **Show me around** is a six-stop tour that dims the page and highlights one element at a time. It is offered once, on first visit, and remembered in the browser.
 - It adapts to the page: the research desk, a user's activity, the admin board.
